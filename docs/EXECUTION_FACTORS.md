@@ -113,5 +113,11 @@ records rather than in-memory counters:
   strategy intent.
 
 The report covers the account's stored intents and survives process restarts.
+Each calculation uses three database queries: grouped audit records, effective
+fills with account-scoped commissions, and raw intents. It reuses the loaded
+plans and does not cache metrics, so late commissions and corrections remain
+visible on the next refresh. This reduces query overhead without changing the
+pretransmission risk checks. The report still reads the account's full history;
+large histories may need a separate paginated reporting workflow.
 Synthetic fills remain synthetic evidence; this report does not establish live
 fill quality or demonstrate that a routing policy improves contest scores.

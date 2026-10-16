@@ -242,3 +242,60 @@ def test_package_metrics_count_legs_and_do_not_double_charge_net_report(store, m
         assert abs(row["arrival_slippage_usd"] - Decimal(1)) <= Decimal("0.000001")
     assert rows[101]["known_fees_usd"] == 1 and rows[101]["fees_complete"]
     assert rows[104]["known_fees_usd"] == 0 and not rows[104]["fees_complete"]
+
+
+def test_quality_batches_queries_and_keeps_accounts_and_late_fees_separate(store, manifest, now):
+    from sqlalchemy import event
+
+    for account, identifier in [(manifest.account, "ours"), ("OTHER", "theirs")]:
+        store.create_intent(
+            OrderRequest(
+                intent_id=identifier,
+                con_id=10,
+                signed_quantity=10,
+                limit_price=Decimal(100),
+                account=account,
+                snapshot_id="snapshot",
+                decision_id=identifier + "-decision",
+            )
+        )
+        store.record("execution_plan", account, {"intent_id": identifier, "arrival_mid": 100})
+        store.transition(identifier, "VALIDATED")
+        store.transition(identifier, "SUBMITTING")
+        store.execution(
+            Execution(
+                exec_id="shared.01",
+                order_id=1,
+                order_ref="hedge:" + identifier,
+                account=account,
+                con_id=10,
+                signed_quantity=10,
+                price=Decimal(101),
+                at=now,
+            )
+        )
+    store.fee("OTHER", "shared.01", 999, "EUR")
+    # Even colliding payload identifiers in another account must not affect our report.
+    store.record("execution_plan", "OTHER", {"intent_id": "ours", "package_id": "foreign"})
+    store.record("cancel_request", "OTHER", {"intent_ids": ["ours"]})
+    queries = []
+
+    def track(connection, cursor, statement, parameters, context, executemany):
+        queries.append(statement)
+
+    event.listen(store.engine, "before_cursor_execute", track)
+    try:
+        rows = execution_quality(store, manifest.account, manifest.contract_map)
+    finally:
+        event.remove(store.engine, "before_cursor_execute", track)
+    assert len(queries) == 3
+    assert len(rows) == 1
+    assert rows[0]["intent_id"] == "ours" and rows[0]["package_id"] is None
+    assert rows[0]["cancel_attempts"] == 0
+    assert rows[0]["filled_quantity"] == 10
+    assert not rows[0]["fees_complete"] and rows[0]["known_fees_usd"] == 0
+    store.fee(manifest.account, "shared.01", Decimal("0.5"))
+    row = execution_quality(store, manifest.account, manifest.contract_map)[0]
+    assert row["fees_complete"] and row["known_fees_usd"] == Decimal("0.5")
+    assert store.fills("OTHER")[0]["commission"] == 999
+    assert store.fills(manifest.account)[0]["commission_currency"] == "USD"

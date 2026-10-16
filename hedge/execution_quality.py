@@ -20,29 +20,40 @@ def slippage(mid, executions, contract, valid_direction):
 
 
 def execution_quality(store, account, contracts):
-    plans = {r["intent_id"]: r for r in store.records("execution_plan", account, None)}
-    decisions = {r["id"]: r for r in store.records("decision", account, None)}
+    records = store.grouped_records(
+        (
+            "execution_plan",
+            "decision",
+            "order_transition",
+            "price_amendment",
+            "package_amendment",
+            "cancel_request",
+        ),
+        account,
+    )
+    plans = {r["intent_id"]: r for r in records["execution_plan"]}
+    decisions = {r["id"]: r for r in records["decision"]}
     transitions, amendments, cancels = defaultdict(list), defaultdict(int), defaultdict(int)
     package_amendments = defaultdict(int)
-    for row in store.records("order_transition", account, None):
+    for row in records["order_transition"]:
         transitions[row["intent_id"]].append(row)
-    for row in store.records("price_amendment", account, None):
+    for row in records["price_amendment"]:
         amendments[row["intent_id"]] += 1
-    for row in store.records("package_amendment", account, None):
+    for row in records["package_amendment"]:
         package_amendments[row["package_id"]] += 1
-    for row in store.records("cancel_request", account, None):
+    for row in records["cancel_request"]:
         for identifier in row.get("intent_ids", []):
             cancels[identifier] += 1
     fills = defaultdict(list)
     for fill in store.effective_fills(account):
         fills[(fill["order_ref"], fill["con_id"])].append(fill)
     result = []
-    for order in store.intents(account):
+    for order in store.intents(account, include_metadata=False):
         identifier, con_id = order["id"], order["con_id"]
-        package = order.get("package_id")
+        plan = plans.get(identifier, {})
+        package = plan.get("package_id")
         reference = "hedge-package:" + package if package else "hedge:" + identifier
         executions = fills[(reference, con_id)]
-        plan = plans.get(identifier, {})
         decision = decisions.get(order["decision_id"], {})
         decision_mid = decision.get("reference_midpoints", {}).get(str(con_id))
         arrival_mid = plan.get("arrival_mid")

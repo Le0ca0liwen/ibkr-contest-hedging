@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from contextlib import contextmanager
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -145,6 +146,19 @@ class Store:
     def snapshot(self, snap: PortfolioSnapshot):
         self.record("snapshot", snap.account, snap, snap.version)
 
+    def grouped_records(self, categories, account):
+        """Read related audit categories without one round trip per category."""
+        grouped = defaultdict(list)
+        with self.sessions() as session:
+            rows = session.scalars(
+                select(Record)
+                .where(Record.category.in_(categories), Record.account == account)
+                .order_by(Record.at.desc())
+            ).all()
+            for row in rows:
+                grouped[row.category].append({"id": row.id, "at": row.at.isoformat(), **row.payload})
+        return grouped
+
     def create_intent(self, request):
         with self.transaction() as session:
             if session.get(Intent, request.intent_id):
@@ -193,12 +207,14 @@ class Store:
                 )
             )
 
-    def intents(self, account, pending_only=False):
+    def intents(self, account, pending_only=False, *, include_metadata=True):
         with self.sessions() as session:
             query = select(Intent).where(Intent.account == account).order_by(Intent.created_at.desc())
             if pending_only:
                 query = query.where(Intent.state.not_in(TERMINAL))
             rows = session.scalars(query).all()
+            if not include_metadata:
+                return [{c.name: getattr(r, c.name) for c in Intent.__table__.columns} for r in rows]
             plans = session.scalars(
                 select(Record).where(Record.category == "execution_plan", Record.account == account)
             ).all()
@@ -407,15 +423,19 @@ class Store:
 
     def fills(self, account):
         with self.sessions() as session:
-            rows = session.scalars(select(Fill).where(Fill.account == account).order_by(Fill.at.desc())).all()
-            fees = {f.id: f for f in session.scalars(select(Fee)).all()}
+            rows = session.execute(
+                select(Fill, Fee)
+                .outerjoin(Fee, Fee.id == Fill.id)
+                .where(Fill.account == account)
+                .order_by(Fill.at.desc())
+            ).all()
             return [
                 {
                     **{c.name: getattr(r, c.name) for c in Fill.__table__.columns},
-                    "commission": fees[r.id].amount if r.id in fees else None,
-                    "commission_currency": fees[r.id].currency if r.id in fees else None,
+                    "commission": fee.amount if fee else None,
+                    "commission_currency": fee.currency if fee else None,
                 }
-                for r in rows
+                for r, fee in rows
             ]
 
     def effective_fills(self, account):
