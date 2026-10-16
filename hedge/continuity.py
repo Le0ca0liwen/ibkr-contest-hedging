@@ -10,6 +10,8 @@ DATA_REASONS = (
     "Stale/future quote:",
     "Missing/stale option Greeks:",
     "Stale account value",
+    "Future account value",
+    "Future option Greeks:",
     "Stale/future portfolio snapshot",
     "Broker disconnected or unreconciled",
 )

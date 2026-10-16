@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import timedelta
+from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -21,6 +21,19 @@ class ScenarioSet:
     calendar_days: float
     source: str
     identifier: str
+    betas: dict[str, float] = field(default_factory=dict)
+    rhos: dict[int, float] = field(default_factory=dict)
+    beta_source: str = "Unavailable: no validated benchmark history"
+    built_at: datetime | None = None
+    valuation_inputs: dict[int, tuple[float, float | None]] = field(default_factory=dict)
+
+    def is_current(self, quotes, now, max_age):
+        return (
+            self.built_at is not None
+            and 0 <= (now - self.built_at).total_seconds() <= max_age
+            and set(self.ids).issubset(quotes)
+            and self.valuation_inputs == {i: (quotes[i].spot, quotes[i].iv) for i in self.ids}
+        )
 
     def __post_init__(self):
         if self.changes.shape[1] != len(self.ids) or self.changes.shape[0] != len(self.weights):
@@ -40,6 +53,7 @@ class ScenarioEngine:
             pd.read_csv(manifest.daily_stock_history) if manifest.daily_stock_history else None
         )
         self.daily_cache = {}
+        self.beta_cache = {}
 
     def build(self, snapshot, quotes, now, ids=None):
         ids = tuple(sorted(ids or quotes.keys()))
@@ -110,6 +124,27 @@ class ScenarioEngine:
                     float(iv_shocks[c.symbol][s]),
                 )
         stress = self.stress_matrix(ids, quotes, now, max(end, now + timedelta(days=1)))
+        betas, beta_source = self.market_betas(now, symbols)
+        if all(symbol in betas for symbol in symbols):
+            market_stress = [
+                [
+                    self.manifest.contract_map[i].multiplier
+                    * self.valuation.scenario_change(
+                        self.manifest.contract_map[i],
+                        quotes[i],
+                        now,
+                        max(end, now + timedelta(days=1)),
+                        float(np.clip(betas[self.manifest.contract_map[i].symbol] * move, -0.8, 2)),
+                    )
+                    for i in ids
+                ]
+                for move in (-0.05, 0.05)
+            ]
+            stress = np.vstack([stress, market_stress])
+        rhos = {
+            i: self.valuation.rho(self.manifest.contract_map[i], quotes[i].spot, quotes[i].iv, now)
+            for i in ids
+        }
         following = next(
             (
                 self.manifest.session_close(d)
@@ -145,9 +180,68 @@ class ScenarioEngine:
                 "end": end,
                 "source": source,
                 "config": self.manifest.config_hash,
+                "betas": betas,
+                "rhos": rhos,
             }
         )
-        return ScenarioSet(ids, changes, weights, stress, next_changes, days, source, identifier)
+        return ScenarioSet(
+            ids,
+            changes,
+            weights,
+            stress,
+            next_changes,
+            days,
+            source,
+            identifier,
+            betas,
+            rhos,
+            beta_source,
+            now,
+            {i: (quotes[i].spot, quotes[i].iv) for i in ids},
+        )
+
+    def market_betas(self, now, symbols):
+        """OLS beta from aligned completed sessions; missing data is never beta=1."""
+        benchmark = self.manifest.beta_benchmark
+        key = (now.astimezone(NY).date(), tuple(symbols))
+        if key in self.beta_cache:
+            return self.beta_cache[key]
+        unavailable = ({}, f"Unavailable: need valid aligned history including {benchmark}")
+        if self.daily_history is None:
+            return unavailable
+        frame = self.daily_history.copy()
+        frame["date"] = pd.to_datetime(frame["date"]).dt.date
+        frame = frame[frame.date < key[0]]
+        required = sorted(set(symbols) | {benchmark})
+        frame = frame[frame.symbol.isin(required)]
+        if frame.duplicated(["date", "symbol"]).any():
+            return unavailable
+        prices = frame.pivot(index="date", columns="symbol", values="close").sort_index()
+        if not set(required).issubset(prices.columns):
+            return unavailable
+        prices = prices[required].dropna().tail(self.manifest.policy.history_sessions + 1)
+        if (
+            len(prices) < 21
+            or (key[0] - prices.index[-1]).days > 7
+            or not np.isfinite(prices.to_numpy()).all()
+            or (prices <= 0).any().any()
+        ):
+            return unavailable
+        returns = prices.pct_change(fill_method=None).dropna()
+        if not np.isfinite(returns.to_numpy()).all():
+            return unavailable
+        variance = float(returns[benchmark].var())
+        if not np.isfinite(variance) or variance <= 1e-12:
+            return unavailable
+        betas = {s: float(returns[s].cov(returns[benchmark]) / variance) for s in symbols}
+        if not all(np.isfinite(value) for value in betas.values()):
+            return unavailable
+        result = (
+            betas,
+            f"{benchmark} OLS beta; {len(returns)} completed aligned returns through {prices.index[-1]}",
+        )
+        self.beta_cache[key] = result
+        return result
 
     def daily_covariance(self, now, symbols):
         """Aligned completed sessions only; no drift or future daily closes."""
@@ -198,6 +292,18 @@ class ScenarioEngine:
                         )
                     row.append(repriced[key])
                 rows.append(row)
+        # Parallel rate shocks supplement spot/IV/skew/time stress, with full
+        # American-option repricing rather than a linear rho approximation.
+        for rate_shift in (-self.manifest.risk.rate_stress_shift, self.manifest.risk.rate_stress_shift):
+            rows.append(
+                [
+                    self.manifest.contract_map[i].multiplier
+                    * self.valuation.scenario_change(
+                        self.manifest.contract_map[i], quotes[i], now, end, 0, rate_shift=rate_shift
+                    )
+                    for i in ids
+                ]
+            )
         return np.array(rows)
 
     def _remaining_paths(self, now, end, symbols):

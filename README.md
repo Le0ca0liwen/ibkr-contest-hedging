@@ -181,6 +181,10 @@ There is one execution writer per account (local lock plus PostgreSQL advisory l
 
 ## Tests and remaining external acceptance gates
 
+See [Market factors and timely execution](docs/EXECUTION_FACTORS.md) for SPY beta
+data requirements, modeled rho and rate stresses, Greek units, and bounded
+limit/market routing. Missing beta history is displayed as unavailable.
+
 ```sh
 .venv/bin/python -m pytest -q
 .venv/bin/ruff check hedge tests

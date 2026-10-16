@@ -73,6 +73,7 @@ class Quote(Frozen):
     gamma: float = 0
     vega: float = 0  # dollars per share per 1.0 volatility change
     theta: float = 0  # dollars per share per calendar day
+    rho: float | None = None  # modeled dollars per share per 1.0 interest-rate change
     greek_at: datetime | None = None
     model_price: float | None = None
     shortable_shares: int | None = Field(default=None, ge=0)

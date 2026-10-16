@@ -174,6 +174,44 @@ async def test_ibkr_boundary_rejects_live_and_mandatory_orders(manifest, snapsho
         await broker.submit(request(manifest, snapshot), 1)
 
 
+async def test_recovery_rechecked_before_transmission(store, manifest, quotes, now, monkeypatch):
+    broker = SimBroker(manifest, asyncio.Queue(), now)
+    await broker.connect()
+    broker.readonly = False
+    broker.update_quotes({i: q.model_copy(update={"data_type": "synthetic"}) for i, q in quotes.items()}, now)
+    snap = broker.snapshot()
+    sc = ScenarioEngine(manifest).build(snap, broker.quotes(), now)
+    manager = ExecutionManager(manifest, store, broker, RiskGate(manifest, demo=True))
+    manager.paused = False
+    target = Target(
+        quantities={**snap.quantities(), 10: -10},
+        expected_score=1,
+        current_score=100,
+        uncertainty=0,
+        status="OPTIMAL",
+        snapshot_id=snap.version,
+        scenario_id=sc.identifier,
+        config_hash=manifest.config_hash,
+    )
+    expired = False
+    original_snapshot = broker.snapshot
+
+    def refresh():
+        nonlocal expired
+        expired = True
+        return original_snapshot()
+
+    manager.recovery_checks = lambda *_: ["Recovery approval expired"] if expired else []
+    assert manager.feasible_slices(target, snap, broker.quotes(), sc, now)
+    monkeypatch.setattr(broker, "snapshot", refresh)
+    result = await manager.submit_slice(target, "decision", snap, broker.quotes(), sc, now)
+    assert not result["submitted"]
+    assert "Recovery approval expired" in result["reason"]
+    assert not broker.orders
+    rows = store.intents(manifest.account)
+    assert len(rows) == 1 and rows[0]["state"] == "REJECTED"
+
+
 async def test_own_position_update_preserves_plan_but_manual_change_invalidates(store, manifest, snapshot):
     service = TradingService(manifest, store, demo=True)
     service.last_snapshot = snapshot

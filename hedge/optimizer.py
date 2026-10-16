@@ -544,13 +544,25 @@ class HedgeOptimizer:
         elif strategy == "greek":
             rows = []
             for symbol in symbols:
-                for greek, scale in [("delta", 1), ("gamma", 0.05), ("vega", 0.01)]:
+                # Dollar sensitivities to 1% spot/IV/rate changes and one day
+                # of decay; the main score objective already fully reprices options.
+                for greek, scale in [
+                    ("delta", 0.01),
+                    ("gamma", 0.00005),
+                    ("vega", 0.01),
+                    ("theta", 1),
+                    ("rho", 0.01),
+                ]:
                     vector = np.array(
                         [
-                            getattr(quotes[i], greek)
+                            (
+                                scenarios.rhos.get(i, quotes[i].rho or 0)
+                                if greek == "rho"
+                                else getattr(quotes[i], greek)
+                            )
                             * m.contract_map[i].multiplier
                             * (
-                                quotes[i].spot
+                                quotes[i].spot * scale
                                 if greek == "delta"
                                 else (quotes[i].spot ** 2 * scale if greek == "gamma" else scale)
                             )
@@ -561,6 +573,19 @@ class HedgeOptimizer:
                     )
                     rows.append(cp.abs(vector @ total_h))
                     baseline_vectors.append(vector)
+            if all(m.contract_map[i].symbol in scenarios.betas for i in ids):
+                vector = np.array(
+                    [
+                        quotes[i].delta
+                        * quotes[i].spot
+                        * m.contract_map[i].multiplier
+                        * scenarios.betas[m.contract_map[i].symbol]
+                        * 0.01
+                        for i in ids
+                    ]
+                )
+                rows.append(cp.abs(vector @ total_h))
+                baseline_vectors.append(vector)
             baseline = cp.sum(cp.hstack(rows))
         if strategy == "min_variance":
             # QP baseline supplies a desired continuous target, then integer L1

@@ -42,6 +42,7 @@ class RiskEngine:
             )
         gross, delta, stock, names = 0.0, {}, {}, {}
         gamma, vega, theta = {}, {}, {}
+        rho, beta_delta, rho_missing = {}, 0.0, set()
         actual = snapshot.quantities()
         margin_increment, assignment_cash = 0.0, 0.0
         for i, quantity in active.items():
@@ -51,6 +52,13 @@ class RiskEngine:
             gamma[c.symbol] = gamma.get(c.symbol, 0) + quantity * c.multiplier * q.gamma
             vega[c.symbol] = vega.get(c.symbol, 0) + quantity * c.multiplier * q.vega / 100
             theta[c.symbol] = theta.get(c.symbol, 0) + quantity * c.multiplier * q.theta
+            modeled_rho = scenarios.rhos.get(i, q.rho)
+            if c.kind == "OPT" and modeled_rho is None:
+                rho_missing.add(c.symbol)
+            else:
+                rho[c.symbol] = rho.get(c.symbol, 0) + quantity * c.multiplier * (modeled_rho or 0) / 100
+            if c.symbol in scenarios.betas:
+                beta_delta += quantity * c.multiplier * q.delta * q.spot * scenarios.betas[c.symbol]
             if c.kind == "STK":
                 stock[c.symbol] = stock.get(c.symbol, 0) + abs(quantity) * q.spot
                 margin_increment += max(0, abs(quantity) - abs(actual.get(i, 0))) * q.spot * 0.5
@@ -74,6 +82,12 @@ class RiskEngine:
             "assignment_cash": assignment_cash,
             "estimated_added_margin": margin_increment,
         }
+        beta_available = all(c_map[i].symbol in scenarios.betas for i in active)
+        metrics["coverage:beta"] = float(beta_available)
+        metrics["coverage:rho"] = float(not rho_missing)
+        if beta_available:
+            metrics["beta_delta_dollars:portfolio"] = beta_delta
+            metrics["beta_nav:portfolio"] = beta_delta / budget
         forecast = np.abs(scenarios.changes @ values)
         cutoff = np.quantile(forecast, 0.95)
         metrics["absolute_pnl_cvar95"] = float(forecast[forecast >= cutoff].mean())
@@ -84,6 +98,10 @@ class RiskEngine:
         if remaining_liquidity < self.manifest.risk.liquidity_buffer * budget:
             reasons.append("Insufficient excess liquidity after conservative margin estimate")
         for symbol in sorted(delta):
+            if symbol in scenarios.betas:
+                metrics[f"beta:{symbol}"] = scenarios.betas[symbol]
+            if symbol not in rho_missing:
+                metrics[f"rho_per_point:{symbol}"] = rho.get(symbol, 0)
             metrics.update(
                 {
                     f"delta:{symbol}": delta[symbol],
@@ -123,6 +141,8 @@ class RiskGate:
             reasons.append("Stale/future portfolio snapshot")
         if now - snapshot.account_at > timedelta(seconds=self.manifest.risk.account_age):
             reasons.append("Stale account value")
+        if snapshot.account_at > now + timedelta(seconds=1):
+            reasons.append("Future account value")
         actual = snapshot.quantities()
         if not day_zero:
             reasons.extend(self.registry.check(actual))
@@ -163,6 +183,8 @@ class RiskGate:
                 or (now - q.greek_at).total_seconds() > self.manifest.risk.greek_age
             ):
                 reasons.append(f"Missing/stale option Greeks: {i}")
+            if c.kind == "OPT" and q.greek_at is not None and q.greek_at > now + timedelta(seconds=1):
+                reasons.append(f"Future option Greeks: {i}")
             if quantities.get(i, 0) != actual.get(i, 0):
                 if c.kind == "STK" and quantities.get(i, 0) < min(0, actual.get(i, 0)):
                     if q.shortable_shares is None or abs(quantities[i]) > q.shortable_shares:

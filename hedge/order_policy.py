@@ -55,18 +55,23 @@ def choose_order(manifest, broker, contract, quote, signed, now, corrective=Fals
     )
     value = executable if market or urgency in ("CORRECTIVE", "DEADLINE") else quote.mid
     tick = broker.price_tick(contract.con_id, value) if hasattr(broker, "price_tick") else 0.01
-    price = rounded_price(value, tick, signed)
-    if float(price) < quote.bid:
+    aggressive = urgency in ("CORRECTIVE", "DEADLINE")
+    # A buy rounded down from the ask (or sell rounded up from the bid) can
+    # remain passive precisely when a timely fill is needed.
+    price = rounded_price(value, tick, -signed if aggressive else signed)
+    if not aggressive and float(price) < quote.bid:
         price = rounded_price(quote.bid, tick, -1)
-    elif float(price) > quote.ask:
+    elif not aggressive and float(price) > quote.ask:
         price = rounded_price(quote.ask, tick, 1)
-    if not quote.bid <= float(price) <= quote.ask or price <= 0:
+    if (not aggressive and not quote.bid <= float(price) <= quote.ask) or price <= 0:
         raise ValueError("No valid price tick inside the executable book")
     spread = quote.ask - quote.bid
     reserve = abs(signed) * spread * (0.5 + manifest.policy.slippage_spread_fraction) * contract.multiplier
     if market:
         reserve = max(reserve, abs(signed) * quote.spot * policy.market_slippage_bps / 10000)
     cap = quote.mid + (1 if signed > 0 else -1) * spread * (0.5 + manifest.policy.slippage_spread_fraction)
+    if (float(price) - cap) * (1 if signed > 0 else -1) > 1e-9:
+        raise ValueError("Executable price tick exceeds modeled price budget")
     return {
         "order_type": "MKT" if market else "LMT",
         "urgency": urgency,
@@ -74,5 +79,12 @@ def choose_order(manifest, broker, contract, quote, signed, now, corrective=Fals
         "arrival_mid": quote.mid,
         "price_cap": cap,
         "slippage_reserve": reserve,
+        "routing_reason": (
+            "Urgent stock correction; fresh narrow deep book; market slippage is not capped"
+            if market
+            else "Marketable limit for risk correction or closing deadline"
+            if aggressive
+            else "Patient midpoint limit; bounded repricing after wait"
+        ),
         "quote": quote.model_dump(mode="json"),
     }

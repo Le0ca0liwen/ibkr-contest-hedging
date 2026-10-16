@@ -317,7 +317,8 @@ async def test_cancelled_package_accepts_late_matched_fills(manifest, store):
     assert not store.intents(manifest.account, True)
 
 
-async def test_price_amendments_are_persisted_and_capped(manifest, store, quotes, now):
+@pytest.mark.parametrize("recovery_blocked", [False, True])
+async def test_price_amendments_are_persisted_and_capped(manifest, store, quotes, now, recovery_blocked):
     import asyncio
 
     from hedge.broker import SimBroker
@@ -357,8 +358,16 @@ async def test_price_amendments_are_persisted_and_capped(manifest, store, quotes
     }
     broker.update_quotes(qs, later)
     manager.current_scenarios = ScenarioEngine(manifest).build(broker.snapshot(), qs, later)
+    if recovery_blocked:
+        manager.recovery_checks = lambda *_: ["Recovery approval expired"]
     await manager.manage(qs, later)
     row = next(r for r in store.intents(manifest.account) if r["id"] == result["intent_id"])
+    if recovery_blocked:
+        assert row["state"] == "CANCEL_PENDING"
+        assert row["limit_price"] == Decimal("190.05")
+        assert not store.records("price_amendment", manifest.account)
+        assert "Recovery approval expired" in store.records("execution_wait", manifest.account)[0]["reason"]
+        return
     assert row["limit_price"] == Decimal("190.10") and Decimal(row["initial_limit"]) == Decimal("190.05")
     assert store.records("price_amendment", manifest.account)
     newest = later + timedelta(seconds=1)

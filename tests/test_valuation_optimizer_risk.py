@@ -138,6 +138,21 @@ def test_gate_blocks_bad_broker_state(manifest, snapshot, quotes, now, alter):
     assert not RiskGate(manifest).validate(snapshot, quotes, sc, proposed, now).passed
 
 
+@pytest.mark.parametrize("field", ["account_at", "greek_at"])
+@pytest.mark.parametrize("seconds", [1, 2])
+def test_future_risk_inputs_respect_clock_tolerance(manifest, snapshot, quotes, now, field, seconds):
+    sc = ScenarioEngine(manifest).build(snapshot, quotes, now)
+    gate = RiskGate(manifest)
+    assert gate.validate(snapshot, quotes, sc, snapshot.quantities(), now).passed
+    timestamp = now + timedelta(seconds=seconds)
+    if field == "account_at":
+        snapshot = snapshot.model_copy(update={field: timestamp})
+    else:
+        quotes = {**quotes, 101: quotes[101].model_copy(update={field: timestamp})}
+    result = gate.validate(snapshot, quotes, sc, snapshot.quantities(), now)
+    assert result.passed == (seconds <= 1)
+
+
 def test_excessive_short_options_rejected(manifest, snapshot, quotes, now):
     sc = ScenarioEngine(manifest).build(snapshot, quotes, now)
     proposed = {**snapshot.quantities(), 104: -51}

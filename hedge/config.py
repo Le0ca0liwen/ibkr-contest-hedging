@@ -28,6 +28,7 @@ class RiskLimits(Frozen):
     option_quote_age: int = Field(default=60, gt=0)
     greek_age: int = Field(default=60, gt=0)
     account_age: int = Field(default=180, gt=0)
+    rate_stress_shift: float = Field(default=0.01, ge=0.005, le=0.05)
 
 
 class TradingPolicy(Frozen):
@@ -95,6 +96,7 @@ class ExecutionPolicy(Frozen):
 
 class Manifest(Frozen):
     name: str
+    beta_benchmark: str = Field(default="SPY", min_length=1)
     account: str
     environment: Literal["paper"] = "paper"
     day_zero: date

@@ -170,7 +170,7 @@ def create_app(service):
         state = service.state()
         if category == "scores":
             rows = state["scores"]["days"]
-        elif category in ("fills", "orders", "decisions"):
+        elif category in ("fills", "orders", "decisions", "execution_quality"):
             rows = state[category]
         else:
             raise HTTPException(404, "Unknown export")

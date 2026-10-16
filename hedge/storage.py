@@ -270,6 +270,7 @@ class Store:
             if row is None or row.state != "VALIDATED":
                 raise ValueError("Only an unsent validated intent may refresh its price")
             row.limit_price = request.limit_price
+            row.snapshot_id = request.snapshot_id
             plans = session.scalars(
                 select(Record).where(Record.category == "execution_plan", Record.account == request.account)
             ).all()
@@ -291,6 +292,8 @@ class Store:
                         "intent_id": request.intent_id,
                         "request": payload(request),
                         "quote": policy["quote"],
+                        "scenario_id": policy.get("scenario_id"),
+                        "scenario_at": payload(policy.get("scenario_at")),
                     },
                 )
             )

@@ -9,6 +9,7 @@ from .continuity import quote_coverage
 from .models import OrderRequest, SetupPackageRequest, Target
 from .optimizer import execution_cost
 from .order_policy import choose_order, rounded_price, spread_error, urgency_for
+from .scenarios import ScenarioEngine
 from .storage import TERMINAL
 
 
@@ -26,6 +27,51 @@ class ExecutionManager:
         self.recovery_checks = None
         self.score_context = None
         self.current_scenarios = None
+        self.scenario_builder = ScenarioEngine(manifest).build
+        self.clock = None
+
+    def execution_time(self, fallback):
+        if self.clock is not None:
+            return self.clock()
+        if self.gate.demo:
+            return fallback
+        from .models import utcnow
+
+        return utcnow()
+
+    async def refresh_scenarios(self, scenarios, now):
+        """Build off-loop, then verify inputs again; never transmit a moving frame."""
+        snapshot, quotes = self.broker.snapshot(), self.broker.quotes()
+        clock = self.execution_time(now)
+        max_age = self.manifest.policy.risk_seconds
+        if scenarios is None:
+            raise ValueError("Missing execution scenarios; replan required")
+        if not scenarios.is_current(quotes, clock, max_age):
+            # Recovery changes the forecast distribution. Rebuilding ordinary
+            # scenarios here would silently discard that strategy's forecast.
+            if self.recovery_checks or "; recovery " in scenarios.source:
+                raise ValueError("Recovery scenario inputs changed; replan required")
+            quote_coverage(quotes, scenarios.ids)
+            scenarios = await asyncio.to_thread(
+                self.scenario_builder, snapshot, dict(quotes), clock, scenarios.ids
+            )
+            snapshot, quotes = self.broker.snapshot(), self.broker.quotes()
+            clock = self.execution_time(now)
+            if not scenarios.is_current(quotes, clock, max_age):
+                raise ValueError("Market changed during scenario refresh; replan required")
+        self.current_scenarios = scenarios
+        return snapshot, quotes, clock, scenarios
+
+    async def cancel_order(self, order_id):
+        identifiers = [
+            r["id"]
+            for r in self.store.intents(self.manifest.account, True)
+            if r["broker_order_id"] == order_id
+        ]
+        self.store.record(
+            "cancel_request", self.manifest.account, {"order_id": order_id, "intent_ids": identifiers}
+        )
+        await self.broker.cancel(order_id)
 
     def economic_check(self, snapshot, quotes, scenarios, quantities, now):
         if self.score_context is None:
@@ -70,6 +116,7 @@ class ExecutionManager:
         """Read-only execution-path check, shared by activation and submission."""
         actual = snapshot.quantities()
         candidates = []
+        current_risk = None
         for i in sorted(set(target.quantities) | set(actual)):
             difference = target.quantities.get(i, 0) - actual.get(i, 0)
             if not difference:
@@ -90,7 +137,8 @@ class ExecutionManager:
             partial = dict(actual)
             partial[i] = partial.get(i, 0) + signed
             costs = execution_cost(self.manifest, quotes, [i], [signed])
-            current_risk = self.gate.engine.evaluate(snapshot, quotes, scenarios, actual)
+            if current_risk is None:
+                current_risk = self.gate.engine.evaluate(snapshot, quotes, scenarios, actual)
             if setup and i in self.manifest.mandatory:
                 continue  # Mandatory acquisitions can only use protected packages.
             if spread_error(self.manifest, c, q):
@@ -249,48 +297,14 @@ class ExecutionManager:
                         raise ValueError("Broker credit preview violates liquidity buffer")
                     if preview.warningText:
                         raise ValueError(f"Broker credit preview warning: {preview.warningText}")
-                    from .models import utcnow
-                    from .scenarios import ScenarioEngine
-
-                    fresh_snapshot = self.broker.snapshot()
-                    fresh_quotes = self.broker.quotes()
-                    fresh_now = utcnow()
-                    if fresh_snapshot.quantities() != actual or fresh_snapshot.orders:
-                        raise ValueError("Broker inventory/order state changed during credit preview")
-                    fresh_scenarios = await asyncio.to_thread(
-                        ScenarioEngine(self.manifest).build, fresh_snapshot, fresh_quotes, fresh_now
-                    )
-                    refreshed = self.gate.validate(
-                        fresh_snapshot,
-                        fresh_quotes,
-                        fresh_scenarios,
-                        partial,
-                        fresh_now,
-                        costs=2 * costs,
-                        corrective=not self.gate.engine.evaluate(
-                            fresh_snapshot, fresh_quotes, fresh_scenarios, actual
-                        ).passed,
-                        day_zero=setup,
-                    )
-                    extra = (
-                        self.recovery_checks(
-                            fresh_snapshot, fresh_quotes, fresh_scenarios, partial, 2 * costs
-                        )
-                        if self.recovery_checks
-                        else []
-                    )
-                    if not refreshed.passed or extra:
-                        raise ValueError("; ".join([*refreshed.reasons, *extra]))
                     self.preview_valid = True
                 except Exception as exc:
                     self.store.transition(request.intent_id, "REJECTED")
                     return {"submitted": False, "reason": f"Credit/risk preflight blocked: {exc}"}
             try:
-                fresh = self.broker.snapshot()
-                qs = self.broker.quotes()
+                fresh, qs, clock, scenarios = await self.refresh_scenarios(scenarios, now)
                 if self.paused or self.pause_requested or self.broker.readonly:
                     raise ValueError("Execution was paused during preflight")
-                clock = now if self.gate.demo else __import__("hedge.models", fromlist=["utcnow"]).utcnow()
                 if fresh.quantities() != actual or fresh.orders:
                     raise ValueError("Inventory/orders changed before transmission")
                 current = self.gate.engine.evaluate(fresh, qs, scenarios, actual)
@@ -306,7 +320,20 @@ class ExecutionManager:
                 )
                 if (float(chosen["price"]) - policy["price_cap"]) * (1 if signed > 0 else -1) > 1e-9:
                     raise ValueError("Fresh price exceeds original modeled budget")
-                costs = max(costs, chosen["slippage_reserve"] + self.manifest.policy.minimum_commission)
+                costs = max(
+                    costs,
+                    execution_cost(self.manifest, qs, [identifier], [signed]),
+                    chosen["slippage_reserve"]
+                    + max(
+                        self.manifest.policy.minimum_commission,
+                        abs(signed)
+                        * (
+                            self.manifest.policy.commission_option
+                            if self.manifest.contract_map[identifier].kind == "OPT"
+                            else self.manifest.policy.commission_share
+                        ),
+                    ),
+                )
                 gate = self.gate.validate(
                     fresh,
                     qs,
@@ -319,20 +346,33 @@ class ExecutionManager:
                 )
                 if not gate.passed:
                     raise ValueError("; ".join(gate.reasons))
+                if self.recovery_checks:
+                    extra = self.recovery_checks(fresh, qs, scenarios, partial, 2 * costs)
+                    if extra:
+                        raise ValueError("; ".join(extra))
                 if (
                     current.passed
                     and not setup
                     and not self.economic_check(fresh, qs, scenarios, partial, clock)
                 ):
                     raise ValueError("Slice no longer improves expected score after costs/uncertainty")
+                fresh_candidates = self.feasible_slices(
+                    target.model_copy(update={"quantities": partial}), fresh, qs, scenarios, clock, setup
+                )
+                if not any(i == identifier and size == signed for _, i, size, _ in fresh_candidates):
+                    raise ValueError("Fresh scenario/liquidity checks require a new execution slice")
                 request = request.model_copy(
                     update={
                         "order_type": chosen["order_type"],
                         "urgency": chosen["urgency"],
                         "limit_price": chosen["price"],
+                        "snapshot_id": fresh.version,
                     }
                 )
-                self.store.prepare_request(request, chosen)
+                self.store.prepare_request(
+                    request,
+                    {**chosen, "scenario_id": scenarios.identifier, "scenario_at": scenarios.built_at},
+                )
             except Exception as exc:
                 self.store.transition(request.intent_id, "REJECTED")
                 return {"submitted": False, "reason": f"Fresh execution validation: {exc}"}
@@ -349,7 +389,7 @@ class ExecutionManager:
                     else self.broker.submit(request, order_id)
                 )
                 # Local placeOrder() return is NOT broker acknowledgement.
-                self.sent_at[request.intent_id] = now
+                self.sent_at[request.intent_id] = clock
                 self.store.record(
                     "submission", snapshot.account, {"intent_id": request.intent_id, **evidence}
                 )
@@ -425,9 +465,7 @@ class ExecutionManager:
                         < Decimal(str(self.manifest.risk.liquidity_buffer * risk.metrics["budget"]))
                     ):
                         raise ValueError("Guaranteed package credit preview rejected")
-                fresh = self.broker.snapshot()
-                qs = self.broker.quotes()
-                clock = now if self.gate.demo else __import__("hedge.models", fromlist=["utcnow"]).utcnow()
+                fresh, qs, clock, scenarios = await self.refresh_scenarios(scenarios, now)
                 if self.paused or self.pause_requested or self.broker.readonly:
                     raise ValueError("Protected setup was paused during preflight")
                 if fresh.quantities() != actual or fresh.orders:
@@ -438,6 +476,7 @@ class ExecutionManager:
                 cap = mid + (a.ask - a.bid + b.ask - b.bid) * (
                     0.5 + self.manifest.policy.slippage_spread_fraction
                 )
+                costs = max(costs, execution_cost(self.manifest, qs, [buy_id, sell_id], [1, -1]))
                 if (
                     float(price) > cap
                     or not self.gate.validate(
@@ -445,6 +484,16 @@ class ExecutionManager:
                     ).passed
                 ):
                     raise ValueError("Fresh package risk/freshness validation failed")
+                self.store.record(
+                    "package_pretransmission",
+                    snapshot.account,
+                    {
+                        "package_id": request.package_id,
+                        "scenario_id": scenarios.identifier,
+                        "scenario_at": scenarios.built_at,
+                        "snapshot_id": fresh.version,
+                    },
+                )
             except Exception as exc:
                 for identifier in leg_ids:
                     self.store.transition(identifier, "REJECTED")
@@ -635,7 +684,7 @@ class ExecutionManager:
                     continue
                 requested.add(row["broker_order_id"])
                 try:
-                    await self.broker.cancel(row["broker_order_id"])
+                    await self.cancel_order(row["broker_order_id"])
                 except Exception as exc:
                     self.store.record(
                         "alert",
@@ -649,7 +698,7 @@ class ExecutionManager:
                     continue
                 requested.add(row["broker_order_id"])
                 try:
-                    await self.broker.cancel(row["broker_order_id"])
+                    await self.cancel_order(row["broker_order_id"])
                 except Exception as exc:
                     self.store.record(
                         "alert",
@@ -702,8 +751,15 @@ class ExecutionManager:
                 else p.stock_wait_seconds
             )
             try:
+                if self.paused or self.pause_requested or self.broker.readonly:
+                    raise ValueError("Execution paused; cancel working order before repricing")
                 if sent is None or (now - sent).total_seconds() >= lifetime:
                     raise ValueError("Patient order expired; reconcile and replan")
+                _, quotes, now, _ = await self.refresh_scenarios(self.current_scenarios, now)
+                if self.paused or self.pause_requested or self.broker.readonly:
+                    raise ValueError("Execution paused during scenario refresh")
+                if (now - sent).total_seconds() >= lifetime:
+                    raise ValueError("Patient order expired during scenario refresh")
                 package = (
                     self.store.get_record(package_id, self.manifest.account, "setup_package")
                     if setup
@@ -726,7 +782,15 @@ class ExecutionManager:
                     ):
                         raise ValueError("Order quote stale or spread too wide")
                 elapsed = (now - sent).total_seconds()
-                if elapsed < wait or row.get("order_type") == "MKT":
+                if not package:
+                    snapshot = self.broker.snapshot()
+                    current = self.gate.engine.evaluate(
+                        snapshot, quotes, self.current_scenarios, snapshot.quantities()
+                    )
+                    urgency = urgency_for(self.manifest, c, now, not current.passed)
+                if row.get("order_type") == "MKT" or (
+                    elapsed < wait and (package or urgency not in ("CORRECTIVE", "DEADLINE"))
+                ):
                     continue
                 if package:
                     a, b = (quotes[i] for i in ids)
@@ -764,7 +828,6 @@ class ExecutionManager:
                         raise ValueError("Order has no recoverable price budget")
                     q = quotes[row["con_id"]]
                     signed = row["signed_quantity"]
-                    snapshot = self.broker.snapshot()
                     remaining = next(
                         (
                             o.signed_remaining
@@ -779,20 +842,22 @@ class ExecutionManager:
                         **snapshot.quantities(),
                         row["con_id"]: snapshot.quantities().get(row["con_id"], 0) + remaining,
                     }
-                    current = self.gate.engine.evaluate(
-                        snapshot, quotes, self.current_scenarios, snapshot.quantities()
-                    )
-                    urgency = urgency_for(self.manifest, c, now, not current.passed)
                     fraction = (
                         0.5 if urgency in ("CORRECTIVE", "DEADLINE") else min(0.5, 0.25 * int(elapsed / wait))
                     )
-                    value = q.mid + (1 if signed > 0 else -1) * fraction * (q.ask - q.bid)
+                    value = (
+                        (q.ask if signed > 0 else q.bid)
+                        if urgency in ("CORRECTIVE", "DEADLINE")
+                        else q.mid + (1 if signed > 0 else -1) * fraction * (q.ask - q.bid)
+                    )
                     tick = (
                         self.broker.price_tick(row["con_id"], value)
                         if hasattr(self.broker, "price_tick")
                         else 0.01
                     )
-                    price = rounded_price(value, tick, signed)
+                    price = rounded_price(
+                        value, tick, -signed if urgency in ("CORRECTIVE", "DEADLINE") else signed
+                    )
                     if (float(price) - plan["price_cap"]) * (1 if signed > 0 else -1) > 1e-9:
                         raise ValueError("Order exceeds original modeled price budget")
                     costs = execution_cost(self.manifest, quotes, [row["con_id"]], [remaining])
@@ -806,6 +871,12 @@ class ExecutionManager:
                         corrective=not current.passed,
                     ).passed:
                         raise ValueError("Reprice fails fresh risk check")
+                    if self.recovery_checks:
+                        extra = self.recovery_checks(
+                            snapshot, quotes, self.current_scenarios, quantities, 2 * costs
+                        )
+                        if extra:
+                            raise ValueError("; ".join(extra))
                     if current.passed and not self.economic_check(
                         snapshot, quotes, self.current_scenarios, quantities, now
                     ):
@@ -827,7 +898,7 @@ class ExecutionManager:
                     "execution_wait", self.manifest.account, {"intent_id": row["id"], "reason": str(exc)}
                 )
                 try:
-                    await self.broker.cancel(oid)
+                    await self.cancel_order(oid)
                 except Exception:
                     self.paused = True
             except Exception as exc:

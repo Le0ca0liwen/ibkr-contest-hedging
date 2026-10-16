@@ -24,11 +24,16 @@ class ValuationEngine:
     def __init__(self, manifest: Manifest):
         self.manifest = manifest
 
-    def price(self, c: Contract, spot: float, iv: float, at: datetime, european=False) -> float:
+    def price(
+        self, c: Contract, spot: float, iv: float, at: datetime, european=False, *, risk_free_rate=None
+    ) -> float:
         if c.kind == "STK":
             return spot
         if spot <= 0 or iv <= 0 or at.tzinfo is None:
             raise ValueError("Positive spot/IV and timezone-aware valuation time required")
+        annual_rate = self.manifest.risk_free_rate if risk_free_rate is None else risk_free_rate
+        if not math.isfinite(annual_rate):
+            raise ValueError("Finite risk-free rate required")
         expiration = datetime.combine(c.expiry, time(16), NY)
         remaining = (expiration - at.astimezone(NY)).total_seconds() / (365 * 86400)
         payoff = max(spot - c.strike, 0) if c.right == "C" else max(c.strike - spot, 0)
@@ -43,9 +48,7 @@ class ValuationEngine:
             try:
                 ql.Settings.instance().evaluationDate = start
                 day_count = ql.Actual365Fixed()
-                rate = ql.YieldTermStructureHandle(
-                    ql.FlatForward(start, self.manifest.risk_free_rate * ratio, day_count)
-                )
+                rate = ql.YieldTermStructureHandle(ql.FlatForward(start, annual_rate * ratio, day_count))
                 yield_rate = self.manifest.dividend_yields.get(c.symbol, 0)
                 dividends = ql.YieldTermStructureHandle(ql.FlatForward(start, yield_rate * ratio, day_count))
                 vol = ql.BlackVolTermStructureHandle(
@@ -108,9 +111,21 @@ class ValuationEngine:
             "vega": (self.price(c, spot, iv + 0.001, at) - self.price(c, spot, max(0.001, iv - 0.001), at))
             / 0.002,
             "theta": self.price(c, spot, iv, at + timedelta(days=1)) - base,
+            "rho": self.rho(c, spot, iv, at),
         }
 
-    def scenario_change(self, c: Contract, quote: Quote, now, end, return_shift, iv_shift=0, skew=0):
+    def rho(self, c, spot, iv, at):
+        if c.kind == "STK":
+            return 0.0
+        rate, bump = self.manifest.risk_free_rate, 0.0001
+        return (
+            self.price(c, spot, iv, at, risk_free_rate=rate + bump)
+            - self.price(c, spot, iv, at, risk_free_rate=rate - bump)
+        ) / (2 * bump)
+
+    def scenario_change(
+        self, c: Contract, quote: Quote, now, end, return_shift, iv_shift=0, skew=0, rate_shift=0
+    ):
         if c.kind == "STK":
             return quote.spot * return_shift
         if quote.iv is None:
@@ -118,7 +133,11 @@ class ValuationEngine:
         current = self.price(c, quote.spot, quote.iv, now)
         moneyness = c.strike / quote.spot - 1
         future = self.price(
-            c, quote.spot * (1 + return_shift), max(0.01, quote.iv + iv_shift + skew * moneyness), end
+            c,
+            quote.spot * (1 + return_shift),
+            max(0.01, quote.iv + iv_shift + skew * moneyness),
+            end,
+            risk_free_rate=self.manifest.risk_free_rate + rate_shift,
         )
         # Anchor to observed mark; forecast incremental modeled movement, not an
         # immediate fictitious gain/loss from replacing IBKR's mark with our price.

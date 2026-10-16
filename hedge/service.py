@@ -15,6 +15,7 @@ from .continuity import DataUnavailable, data_only, quote_coverage
 from .data import QuoteRecorder
 from .demo import demo_quotes
 from .execution import ExecutionManager
+from .execution_quality import execution_quality
 from .models import digest, utcnow
 from .moomoo_data import MoomooData
 from .optimizer import HedgeOptimizer, execution_cost
@@ -50,6 +51,8 @@ class TradingService:
         self.gate = RiskGate(manifest, demo)
         self.execution = ExecutionManager(manifest, store, self.broker, self.gate)
         self.scenarios = ScenarioEngine(manifest, history)
+        self.execution.scenario_builder = self.scenarios.build
+        self.execution.clock = lambda: self.now()
         self.optimizer = HedgeOptimizer(manifest)
         self.ledger = ScoreLedger(store, manifest)
         self.recorder = QuoteRecorder()
@@ -326,7 +329,14 @@ class TradingService:
         if time.monotonic() < self.resume_next_at:
             return
         if self.last_risk and any(
-            reason.startswith(("Non-live quote:", "Stale/future quote:", "Missing/stale option Greeks:"))
+            reason.startswith(
+                (
+                    "Non-live quote:",
+                    "Stale/future quote:",
+                    "Missing/stale option Greeks:",
+                    "Future option Greeks:",
+                )
+            )
             for reason in self.last_risk.reasons
         ):
             return
@@ -486,6 +496,10 @@ class TradingService:
                     if self.mode == "WAITING_DATA":
                         self.ready = False
                     await self._resume_after_data_wait()
+                    # Service existing orders before a solver can consume its
+                    # time budget. Use the just-rebuilt risk scenarios.
+                    self.execution.current_scenarios = self.last_scenarios
+                    await self.execution.manage(self.broker.quotes(), self.now())
                     if self.mode in ("SHADOW", "PAPER"):
                         if self.optimization_due():
                             await self.optimize()
@@ -762,6 +776,7 @@ class TradingService:
             ).passed
             record = {
                 **target.model_dump(mode="json"),
+                "reference_midpoints": {str(i): q.mid for i, q in quotes.items()},
                 "risk_passed": gate.passed,
                 "risk_reasons": gate.reasons,
                 "improvement": improvement,
@@ -1214,6 +1229,7 @@ class TradingService:
                         snapshot.account,
                         {
                             **self.setup_target.model_dump(mode="json"),
+                            "reference_midpoints": {str(i): q.mid for i, q in self.last_quotes.items()},
                             "profile": "PROTECTED_DAY0",
                             "pairs": self.setup_pairs,
                             "at": self.now().isoformat(),
@@ -1381,6 +1397,11 @@ class TradingService:
                 "contest": self.manifest.name,
                 "account": self.manifest.account,
                 "demo": self.demo,
+                "risk_factors": {
+                    "beta_benchmark": self.manifest.beta_benchmark,
+                    "beta_source": self.last_scenarios.beta_source if self.last_scenarios else "Unavailable",
+                    "rho_source": "American-option model; dollars per 1 percentage-point rate change",
+                },
                 "rehearsal": self.rehearsal,
                 "day_zero": str(self.manifest.day_zero),
                 "purchase_session": str(self.manifest.purchase_session),
@@ -1444,6 +1465,9 @@ class TradingService:
                 "positions": positions,
                 "orders": self.store.intents(self.manifest.account),
                 "fills": self.store.fills(self.manifest.account),
+                "execution_quality": execution_quality(
+                    self.store, self.manifest.account, self.manifest.contract_map
+                ),
                 "package_executions": self.store.records("package_execution", self.manifest.account, 100),
                 "package_commissions": self.store.records("package_commission", self.manifest.account, 100),
                 "transitions": self.store.records("order_transition", self.manifest.account, 100),
