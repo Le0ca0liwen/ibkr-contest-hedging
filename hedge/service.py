@@ -1014,20 +1014,50 @@ class TradingService:
             else result["reason"]
         )
 
+    def _session_clock(self):
+        now = self.now()
+        day = self.manifest.active_session(now)
+        if day is None:
+            return {"session": None}
+        ages = {"STK": [], "OPT": []}
+        for i, q in self.last_quotes.items():
+            if c := self.manifest.contract_map.get(i):
+                ages[c.kind].append((now - q.observed_at).total_seconds())
+        return {
+            "session": str(day),
+            "minutes_to_close": round((self.manifest.session_close(day) - now).total_seconds() / 60, 1),
+            "accrual_days": self.manifest.accrual_days(day)
+            if day in self.manifest.scoring_sessions
+            else None,
+            "options_tradable": self.manifest.can_trade(now, "OPT"),
+            "stocks_tradable": self.manifest.can_trade(now, "STK"),
+            # The oldest leg, not the freshest, decides whether trading is blocked.
+            "oldest_stock_quote_age_s": round(max(ages["STK"]), 1) if ages["STK"] else None,
+            "oldest_option_quote_age_s": round(max(ages["OPT"]), 1) if ages["OPT"] else None,
+            "non_live_quotes": sum(q.data_type != "live" for q in self.last_quotes.values()),
+        }
+
     async def _supervisor_loop(self):
         # Independent of quotes, optimization and operating mode. Failures cannot
         # stop broker processing, enable execution, or change the strategy.
         while True:
-            if self.supervisor.enabled:
+            if self.supervisor.due():
                 await self._review()
             await asyncio.sleep(5)
 
     async def _review(self):
         try:
+            sent = self.last_snapshot
             result = await self.supervisor.review(self.state())
             if result:
                 current = self.last_snapshot
-                result["stale"] = not current or result["snapshot_id"] != current.version
+                # Snapshots are re-stamped every loop; only a change in account content makes advice stale.
+                result["stale"] = (
+                    not current
+                    or not sent
+                    or result["snapshot_id"] != sent.version
+                    or current.model_dump(exclude={"at"}) != sent.model_dump(exclude={"at"})
+                )
                 self.store.record("supervisor", self.manifest.account, result)
         except Exception as exc:
             self.alert("warning", f"AI supervisor unavailable; deterministic strategy continues: {exc}")
@@ -1520,6 +1550,8 @@ class TradingService:
                     (q.observed_at.isoformat() for q in self.last_quotes.values()), default=None
                 ),
                 "scoring_sessions": [str(d) for d in self.manifest.scoring_sessions],
+                "session_clock": self._session_clock(),
+                "open_intent_count": len(self.store.intents(self.manifest.account, True)),
                 "confirmed": self.manifest.confirmed,
             }
         )

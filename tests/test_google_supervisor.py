@@ -156,3 +156,53 @@ def test_model_selector_route_does_not_enable_trading(tmp_path, monkeypatch):
         )
         assert result.status_code == 200 and result.json()["model"] == MODELS[1]
         assert service.mode == before
+
+
+def test_prompt_and_context_follow_the_configured_scoring_rule():
+    calendar = {
+        **state(),
+        "scores": {
+            "scoring_rule": "calendar_interest_benchmark",
+            "annual_rate": "0.0344",
+            "total": "0",
+            "days": [{"date": "2026-10-22", "score": None}],
+        },
+        "nav_estimate": 1000049.81,
+        "closing_target": "1000095.56",
+        "provisional_score": 45.75,
+        "session_clock": {"minutes_to_close": 12.5, "accrual_days": 1, "oldest_option_quote_age_s": 75.0},
+        "risk": {"passed": False, "reasons": ["Stale/future quote: 101"], "metrics": {}},
+    }
+    supervisor = Supervisor()
+    prompt = supervisor.instructions(calendar)
+    assert "pending" not in prompt and "0.0344/360)^n_i" in prompt
+    assert "pending" in supervisor.instructions(state())
+    safe = Supervisor.context(calendar)
+    assert safe["official_score"] is None  # unscored, not a perfect zero
+    assert safe["closing_target"] == "1000095.56" and safe["provisional_score"] == 45.75
+    assert safe["session_clock"]["oldest_option_quote_age_s"] == 75.0
+    assert safe["risk_reasons"] == ["Stale/future quote: 101"]
+    assert "PRIVATE" not in json.dumps(safe) and "private" not in json.dumps(safe)
+
+
+@pytest.mark.asyncio
+async def test_review_is_not_stale_when_only_the_snapshot_timestamp_moves(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    service = TradingService(demo_manifest(), Store(f"sqlite:///{tmp_path}/ai.db"), demo=True)
+    await service.start()
+    try:
+        await asyncio.sleep(0.05)
+
+        async def slow_review(value):
+            # The monitor re-stamps the snapshot while the provider call is in flight.
+            service.last_snapshot = service.last_snapshot.model_copy(
+                update={"at": service.last_snapshot.at.replace(microsecond=1)}
+            )
+            return {"snapshot_id": value["snapshot_id"], "profile": "STANDARD", "explanation": "ok"}
+
+        service.supervisor.review = slow_review
+        await service._review()
+        assert service.store.records("supervisor", service.manifest.account, 1)[0]["stale"] is False
+        assert service.state()["session_clock"]
+    finally:
+        await service.stop()

@@ -2,7 +2,7 @@
 
 # Contest Hedge
 
-> **Confirmed scoring revision:** Score = sum |V_today − V_previous × (1 + r/360)|. The instructor supplied r ≈ 3.35%; the practice manifest uses 0.0335. Raw IBKR NAV includes accrued interest. Apply the benchmark once; do not subtract actual interest again. Official closes come from IBKR Custom Statement → Net Asset Value. Day 0 is October 6; scored sessions are October 7–9. Paper execution still requires fresh validated data, mandatory holdings, margin/risk checks, and the official baseline.
+> **SPCX/RKLB/SPY contest (Oct 21 – Nov 4, 2026):** Score = sum |V_i − V_(i−1) × (1 + r/360)^n_i|, r = 3.44%, n_i calendar days (`scoring_rule: calendar_interest_benchmark`, see [contest restrictions](docs/CONTEST_RESTRICTIONS.md)). The rest of this note describes the October 6 BA practice: **Practice scoring revision:** Score = sum |V_today − V_previous × (1 + r/360)|. The instructor supplied r ≈ 3.35%; the practice manifest uses 0.0335. Raw IBKR NAV includes accrued interest. Apply the benchmark once; do not subtract actual interest again. Official closes come from IBKR Custom Statement → Net Asset Value. Day 0 is October 6; scored sessions are October 7–9. Paper execution still requires fresh validated data, mandatory holdings, margin/risk checks, and the official baseline.
 
 
 A local, paper-only options hedging system and browser dashboard for the IBKR contest. The objective is **the sum of absolute differences between consecutive official closing account NAVs**. Gains and losses count equally. Day 0 establishes the baseline and is not scored separately.
@@ -171,7 +171,7 @@ Stock replay execution requires explicit underlying BBO sizes and short-availabi
 
 The trading service continuously monitors risk without an AI dependency. AI runs asynchronously, at most once per 15 minutes. It receives compact snapshots without account identifiers or credentials and produces a validated explanation/profile recommendation. It has no numerical trade, limit-editing, broker, or execution tools.
 
-Set `OPENAI_API_KEY` and `HEDGE_AI_MODEL` in the local process environment to enable API reviews; leave them unset to avoid any API calls. Reviews are **advisory-only**. Only `STANDARD` is initially validated for IBKR operation. Alternative profiles are available in the synthetic demo and research; they need contest validation before operational promotion. AI failure leaves the deterministic strategy active.
+Set `GEMINI_API_KEY` (or `GOOGLE_API_KEY`, or run `Setup Google AI.command`) and optionally `HEDGE_AI_MODEL` in the local process environment to enable API reviews; leave them unset to avoid any API calls. Reviews are **advisory-only**. Only `STANDARD` is initially validated for IBKR operation. Alternative profiles are available in the synthetic demo and research; they need contest validation before operational promotion. AI failure leaves the deterministic strategy active.
 
 ## Recovery and operation
 

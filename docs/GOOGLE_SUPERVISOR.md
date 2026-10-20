@@ -27,7 +27,12 @@ Currently STANDARD is the only approved profile. Arbitrary positions, limit
 changes, extra fields, unvalidated profiles and incomplete replies are rejected.
 Recommendations are recorded as advice only: they never apply a profile or
 enable trading. Reviews that finish after the account changes are marked stale.
-The existing deterministic strategy continues on model failures. The scoring formula is now confirmed: previous closing NAV times (1 + 0.0335/360).
+The existing deterministic strategy continues on model failures. The scoring sentence in the
+prompt is generated from the manifest's `scoring_rule` and rate; for the SPCX/RKLB/SPY contest it
+is previous closing NAV × (1 + 0.0344/360)^n_i. Reviews also receive the NAV estimate, closing
+target, provisional score, session clock (minutes to close, n_i, oldest stock/option quote age),
+risk reasons and the latest decisions' gap/threshold figures. A review is marked stale only when
+the account content changes during the call, not when the snapshot is merely re-stamped.
 Official closing inputs and executable market-data validation remain required.
 
 Model changes are local AI settings, not hedge strategy changes. Changes do not
