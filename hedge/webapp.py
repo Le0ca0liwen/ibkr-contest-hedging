@@ -109,12 +109,18 @@ def create_app(service):
                 "Score = sum of absolute changes between consecutive official closing NAVs. Day 0 is the baseline.",
                 "Interest-adjusted scoring formula pending. Preserve raw IBKR closing NAV; official scores remain unknown.",
             )
-        elif service.manifest.scoring_rule in ("interest_benchmark", "actual_daily_cash_rate"):
+        elif service.manifest.scoring_rule in (
+            "interest_benchmark",
+            "calendar_interest_benchmark",
+            "actual_daily_cash_rate",
+        ):
             page = page.replace("Today's closing target", "Raw previous close · adjusted target below")
             page = page.replace(
                 "Score = sum of absolute changes between consecutive official closing NAVs. Day 0 is the baseline.",
                 "Score = sum |NAV today − NAV previous × (1 + daily cash rate)|. Day 0 is the baseline. Actual per-day rates are required; fixed 3.35% is not used."
                 if service.manifest.scoring_rule == "actual_daily_cash_rate"
+                else "Score = sum |NAV today − NAV previous × (1 + r/360)^n|, n = calendar days since the previous session. Day 0 is the baseline."
+                if service.manifest.scoring_rule == "calendar_interest_benchmark"
                 else "Score = sum |NAV today − NAV previous × (1 + r/360)|. Day 0 is the baseline.",
             )
         return page

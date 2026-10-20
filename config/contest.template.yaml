@@ -1,25 +1,40 @@
-# Instructor contest; deliberately incomplete and non-executable.
-# Confirm conflicting dates in the handout before filling any date or contract ID.
+# Instructor contest; deliberately incomplete and non-executable until the
+# account, report source and IBKR conIds are filled in from the broker.
 name: SPCX RKLB SPY contest
 account: null
 environment: paper
-day_zero: null
-scoring_sessions: []
+# Day 0 (Wed Oct 21) sets up the portfolio and is the scoring baseline.
+day_zero: 2026-10-21
+# Days 1-10. Mon Oct 26 accrues interest for Sat/Sun (n_i = 3).
+scoring_sessions:
+  - 2026-10-22
+  - 2026-10-23
+  - 2026-10-26
+  - 2026-10-27
+  - 2026-10-28
+  - 2026-10-29
+  - 2026-10-30
+  - 2026-11-02
+  - 2026-11-03
+  - 2026-11-04
 valuation_convention: IBKR official closing account NAV
 report_source: null
 confirmed: false
 contest_rules: spcx_rklb_spy
-contest_option_expiry: null
-# The screenshot's interest formula includes calendar-day accrual.
-# Do not activate with the practice default (raw NAV) or assume the existing
-# single-day interest_benchmark mode handles weekends. Configure/verify scoring separately.
-scoring_rule: pending_interest_adjustment
+# The handout's "November 21, 2025" is last year's date; the "Nov 20" legs
+# expire Friday 2026-11-20 (third Friday). Verify against IBKR contract details.
+contest_option_expiry: 2026-11-20
+# Score = sum |V_i - (1 + r/360)^n_i * V_(i-1)|, n_i = calendar days since the
+# previous session.
+scoring_rule: calendar_interest_benchmark
+scoring_annual_rate: 0.0344
 contracts: []
-# Insert verified conIds with signed quantities:
-# SPCX calls in ascending strike order: +25, -50, +25
-# RKLB puts in ascending strike order: -25, +25
-# SPY call and put at the same strike: +25, +25
+# Insert verified conIds with signed quantities (all Nov 20 2026, multiplier 100):
+# SPCX calls 130 / 145 / 160:  +25 / -50 / +25   (call butterfly)
+# RKLB puts 45 / 55:           -25 / +25         (bear put spread)
+# SPY call and put 770:        +25 / +25         (straddle)
+# Also define SPCX, RKLB and SPY stock contracts as the option underlyings.
 mandatory: {}
 # Only verified, permitted hedge conIds. SPY stock may be defined for quotes but
-# must NOT be here. Same-expiry RKLB calls and extra SPY options are rejected.
+# must NOT be here. Nov 20 RKLB calls and extra Nov 20 SPY options are rejected.
 allowlist: []

@@ -182,6 +182,8 @@ class ScoreLedger:
             if self.manifest.scoring_rule == "actual_daily_cash_rate"
             else "Interest benchmark: previous NAV × (1 + r/360)"
             if self.manifest.scoring_rule == "interest_benchmark"
+            else "Calendar interest benchmark: previous NAV × (1 + r/360)^n"
+            if self.manifest.scoring_rule == "calendar_interest_benchmark"
             else "Raw NAV absolute changes",
             "complete": all(r["score"] is not None for r in result),
         }

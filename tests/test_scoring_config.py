@@ -229,3 +229,29 @@ def test_fast_paper_policy_retains_risk_uncertainty_and_frequency_floor():
     assert policy.option_cutoff_minutes == 15 and policy.stock_cutoff_minutes == 2
     with pytest.raises(ValidationError):
         TradingPolicy(stock_seconds=14)
+
+
+def test_calendar_interest_benchmark_compounds_weekend_days(store, manifest):
+    data = manifest.model_dump()
+    data.update(
+        day_zero=date(2026, 10, 7),
+        scoring_sessions=(date(2026, 10, 8), date(2026, 10, 9), date(2026, 10, 12)),
+        scoring_rule="calendar_interest_benchmark",
+        scoring_annual_rate=Decimal("0.0344"),
+    )
+    m = Manifest.model_validate(data)
+    assert [m.accrual_days(d) for d in m.scoring_sessions] == [1, 1, 3]
+    factor = 1 + Decimal("0.0344") / 360
+    prior = Decimal("1000000")
+    assert m.scoring_target(prior, date(2026, 10, 9)) == prior * factor
+    assert m.scoring_target(prior, date(2026, 10, 12)) == prior * factor**3
+    ledger = ScoreLedger(store, m)
+    ledger.import_close(m.day_zero, prior, "IBKR test NAV", m.account)
+    nav = prior
+    for day in m.scoring_sessions:  # an all-cash account scores zero
+        nav = m.scoring_target(nav, day)
+        ledger.import_close(day, nav, "IBKR test NAV", m.account)
+    assert abs(Decimal(ledger.summary()["total"])) < Decimal("1e-6")
+    data["scoring_annual_rate"] = None
+    with pytest.raises(ValidationError):
+        Manifest.model_validate(data)

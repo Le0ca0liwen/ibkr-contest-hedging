@@ -43,6 +43,14 @@ and all other readiness checks pass, ordinary hedge trading can use this profile
 Short mandatory legs are included in assignment-exposure reporting and
 conservative incremental-margin estimates.
 
-These changes enforce trading restrictions, not the handout's scoring formula.
-The template leaves scoring pending: calendar-day interest accrual (including
-weekends), contest dates, and the rate must be separately verified before activation.
+## Contest calendar and scoring
+
+Day 0 is Wednesday 2026-10-21 (setup and baseline). Days 1-10 are Oct 22, 23,
+26-30 and Nov 2-4; all mandated options expire Friday 2026-11-20 (the handout's
+"November 21, 2025" is a stale year).
+
+Score = sum over days 1-10 of |V_i − (1 + r/360)^n_i × V_(i−1)|, r = 3.44%.
+`scoring_rule: calendar_interest_benchmark` implements this: n_i is the number of
+calendar days since the previous contest session, so it is 3 on Mondays
+(Oct 26, Nov 2) and 1 otherwise. The template sets these dates, the expiry and
+the rate; the account, report source and verified conIds must still be filled in.

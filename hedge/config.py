@@ -105,7 +105,11 @@ class Manifest(Frozen):
     valuation_convention: str
     report_source: str
     scoring_rule: Literal[
-        "raw_nav_absolute", "pending_interest_adjustment", "interest_benchmark", "actual_daily_cash_rate"
+        "raw_nav_absolute",
+        "pending_interest_adjustment",
+        "interest_benchmark",
+        "calendar_interest_benchmark",
+        "actual_daily_cash_rate",
     ] = "raw_nav_absolute"
     scoring_annual_rate: Decimal | None = Field(default=None, ge=0, le=1)
     scoring_daily_rates: dict[date, Decimal] = Field(default_factory=dict)
@@ -148,7 +152,10 @@ class Manifest(Frozen):
             raise ValueError(
                 "Daily benchmark rates require scored sessions and finite fractional rates between 0 and 1"
             )
-        if self.scoring_rule == "interest_benchmark" and self.scoring_annual_rate is None:
+        if (
+            self.scoring_rule in ("interest_benchmark", "calendar_interest_benchmark")
+            and self.scoring_annual_rate is None
+        ):
             raise ValueError("Instructor's annual benchmark rate is required")
         if self.confirmed and self.scoring_rule == "pending_interest_adjustment":
             raise ValueError(
@@ -253,6 +260,12 @@ class Manifest(Frozen):
         )
         return self.session_open(day) <= now < self.session_close(day) - timedelta(minutes=cutoff)
 
+    def accrual_days(self, day: date) -> int:
+        days = (self.day_zero, *self.scoring_sessions)
+        if day not in self.scoring_sessions:
+            raise ValueError(f"{day} is not a scored session")
+        return (day - days[days.index(day) - 1]).days
+
     @property
     def purchase_session(self) -> date:
         return self.mandatory_purchase_session or self.day_zero
@@ -264,6 +277,11 @@ class Manifest(Frozen):
             raise ValueError("Scoring formula pending")
         if self.scoring_rule == "interest_benchmark":
             return previous_nav * (Decimal(1) + self.scoring_annual_rate / Decimal(360))
+        if self.scoring_rule == "calendar_interest_benchmark":
+            # (1 + r/360)^n_i, where n_i counts calendar days since the previous
+            # contest session (3 on a Monday after a normal weekend).
+            factor = Decimal(1) + self.scoring_annual_rate / Decimal(360)
+            return previous_nav * factor ** self.accrual_days(day)
         if self.scoring_rule == "actual_daily_cash_rate":
             rate = daily_rate if daily_rate is not None else self.scoring_daily_rates.get(day)
             if rate is None:
