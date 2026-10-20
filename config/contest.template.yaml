@@ -28,6 +28,12 @@ contest_option_expiry: 2026-11-20
 # previous session.
 scoring_rule: calendar_interest_benchmark
 scoring_annual_rate: 0.0344
+# Forecast the cash interest the account accrues (ACT/360), so the optimizer
+# expects NAV to grow toward the (1 + r/360)^n target instead of staying flat.
+policy:
+  cash_rate: 0.0344
+  cash_rate_status: modeled
+  cash_rate_source: "Contest rules: cash balance earns nominal r ~ 3.44%"
 contracts: []
 # Insert verified conIds with signed quantities (all Nov 20 2026, multiplier 100):
 # SPCX calls 130 / 145 / 160:  +25 / -50 / +25   (call butterfly)
@@ -35,6 +41,9 @@ contracts: []
 # SPY call and put 770:        +25 / +25         (straddle)
 # Also define SPCX, RKLB and SPY stock contracts as the option underlyings.
 mandatory: {}
-# Only verified, permitted hedge conIds. SPY stock may be defined for quotes but
-# must NOT be here. Nov 20 RKLB calls and extra Nov 20 SPY options are rejected.
-allowlist: []
+# open: every defined contract except the mandated legs and forbidden
+# instruments (SPY shares, Nov 20 RKLB calls, other Nov 20 SPY options) is
+# tradable. Define candidates with read-only discovery, e.g.
+#   python -m hedge.cli expand-universe --config CONFIG --symbols IVV VOO \
+#     --option-symbols SPCX RKLB SPY --expiries 2 --strikes 6 --output OUT.yaml
+universe: open

@@ -94,9 +94,13 @@ def main():
     intake.add_argument("--expiry")
     intake.add_argument("--purchase-on-day", type=int, choices=[0, 1], default=0)
     intake.add_argument("--output", default="config/local.practice.inputs.yaml")
-    expand = commands.add_parser("expand-universe", help="Read-only qualify US stocks/ETFs")
+    expand = commands.add_parser("expand-universe", help="Read-only qualify US stocks/ETFs and options")
     expand.add_argument("--config", required=True)
-    expand.add_argument("--symbols", nargs="+", required=True)
+    expand.add_argument("--symbols", nargs="*", default=[])
+    expand.add_argument("--option-symbols", nargs="*", default=[])
+    expand.add_argument("--expiries", type=int, default=2, help="Option expiries per symbol")
+    expand.add_argument("--strikes", type=int, default=6, help="Strikes nearest the reference per expiry")
+    expand.add_argument("--center", nargs="*", default=[], help="SYMBOL=PRICE strike reference")
     expand.add_argument("--output", required=True)
     rec_train = commands.add_parser("train-recovery", help="Freeze deterministic recovery forecasts")
     rec_train.add_argument("--config", required=True)
@@ -139,7 +143,17 @@ def main():
 
             from .universe_discovery import qualify_stock_universe
 
-            result = asyncio.run(qualify_stock_universe(load_manifest(args.config), args.symbols))
+            centers = {k: float(v) for k, v in (item.split("=", 1) for item in args.center)}
+            result = asyncio.run(
+                qualify_stock_universe(
+                    load_manifest(args.config),
+                    args.symbols,
+                    option_symbols=args.option_symbols,
+                    expiries=args.expiries,
+                    strikes=args.strikes,
+                    centers=centers,
+                )
+            )
             Path(args.output).write_text(yaml.safe_dump(result.model_dump(mode="json"), sort_keys=False))
             print("Qualified universe saved; enable only after joint-history and quote validation")
         elif args.command == "validate":

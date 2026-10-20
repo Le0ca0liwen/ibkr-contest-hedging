@@ -21,6 +21,16 @@ The following are forbidden for both long and short holdings:
 - RKLB calls at the confirmed contest expiry.
 - SPY options at that expiry, except the two mandatory contracts.
 
+With `universe: open` (the contest template default) there is no hand-written
+allowlist: every defined contract except the mandated legs and the forbidden
+instruments above is tradable, and the allowlist is derived on every load.
+Contracts still have to be defined (qualified conId, live quotes, history) for
+the optimizer to price them; `hedge.cli expand-universe --symbols ...
+--option-symbols SPCX RKLB SPY --expiries N --strikes K` qualifies stocks and
+nearby option chains read-only and never adds a forbidden contract. Existing
+caps (12 underlyings, 6 option names per underlying, 50 contracts per option,
+risk limits) are unchanged.
+
 SPY stock can remain in `contracts` for underlying market data. It cannot be in
 `allowlist`. Other-expiry SPY options, other-expiry RKLB calls, SPCX/RKLB shares,
 and other permitted stock/option hedges still need explicit approval through the
@@ -53,4 +63,5 @@ Score = sum over days 1-10 of |V_i − (1 + r/360)^n_i × V_(i−1)|, r = 3.44%.
 `scoring_rule: calendar_interest_benchmark` implements this: n_i is the number of
 calendar days since the previous contest session, so it is 3 on Mondays
 (Oct 26, Nov 2) and 1 otherwise. The template sets these dates, the expiry and
-the rate; the account, report source and verified conIds must still be filled in.
+the rate, and `policy.cash_rate: 0.0344` so NAV forecasts include cash interest.
+The account, report source and verified conIds must still be filled in.

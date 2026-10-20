@@ -125,7 +125,9 @@ class Manifest(Frozen):
     contest_rules: Literal["practice", "spcx_rklb_spy"] = "practice"
     contest_option_expiry: date | None = None
     mandatory: dict[int, int]
-    allowlist: tuple[int, ...]
+    # "open" derives the allowlist: every defined, non-mandatory, non-forbidden contract.
+    universe: Literal["allowlist", "open"] = "allowlist"
+    allowlist: tuple[int, ...] = ()
     dividends: dict[str, tuple[Dividend, ...]] = Field(default_factory=dict)
     risk_free_rate: float = 0.04
     dividend_yields: dict[str, float] = Field(default_factory=dict)
@@ -180,6 +182,16 @@ class Manifest(Frozen):
             raise ValueError("Mandatory positions must have nonzero fixed quantities")
         if self.contest_rules == "practice" and any(q < 0 for q in self.mandatory.values()):
             raise ValueError("Signed mandates require the spcx_rklb_spy contest rules")
+        if self.universe == "open":
+            object.__setattr__(
+                self,
+                "allowlist",
+                tuple(
+                    c.con_id
+                    for c in self.contracts
+                    if c.con_id not in self.mandatory and not self.prohibited_reason(c)
+                ),
+            )
         if not set(self.mandatory).issubset(ids) or not set(self.allowlist).issubset(ids):
             raise ValueError("Every mandate and allowlist ID must have a contract definition")
         if set(self.mandatory) & set(self.allowlist):

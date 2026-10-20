@@ -204,3 +204,15 @@ def test_contest_template_cannot_activate_without_confirmed_contracts():
 
     with pytest.raises(ValueError):
         load_manifest("config/contest.template.yaml")
+
+
+def test_open_universe_trades_everything_except_mandates_and_forbidden(contest, snapshot, now):
+    data = contest.model_dump()
+    data.update(universe="open", allowlist=())
+    m = Manifest.model_validate(data)
+    assert set(m.allowlist) == {10, 20, 204, 301, 302}
+    assert Manifest.model_validate(m.model_dump()).allowlist == m.allowlist
+    snap, quotes, scenarios = frame(m, snapshot, now)
+    for i in (30, 201, 202, 203):
+        result = RiskGate(m).validate(snap, quotes, scenarios, {**snap.quantities(), i: 1}, now)
+        assert not result.passed

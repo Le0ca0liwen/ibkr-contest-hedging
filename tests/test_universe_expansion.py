@@ -160,6 +160,101 @@ def test_related_stocks_use_measured_joint_signs_and_combined_limits(
     assert target.status == "OPTIMAL"
     assert all(target.quantities[i] == amount for i, amount in m.mandatory.items())
     assert all(target.quantities.get(c.con_id, 0) >= 0 for c in additions)
-    assert RiskGate(m).validate(
-        snapshot, qs, scenarios, target.quantities, now, target.estimated_cost
-    ).passed
+    assert RiskGate(m).validate(snapshot, qs, scenarios, target.quantities, now, target.estimated_cost).passed
+
+
+class ChainBroker(DiscoveryBroker):
+    async def reqSecDefOptParamsAsync(self, symbol, exchange, kind, con_id):
+        return [
+            SimpleNamespace(
+                exchange="SMART",
+                tradingClass=symbol,
+                multiplier="100",
+                expirations=["20261016", "20261120", "20261218", "20270115"],
+                strikes=[90, 95, 100, 105, 110, 115, 120],
+            )
+        ]
+
+    async def reqContractDetailsAsync(self, native):
+        if native.secType == "STK":
+            con_id = {"SPCX": 10, "RKLB": 20, "SPY": 30, "IVV": 40}[native.symbol]
+            return [
+                SimpleNamespace(
+                    contract=SimpleNamespace(
+                        symbol=native.symbol, secType="STK", currency="USD", conId=con_id
+                    )
+                )
+            ]
+        con_id = 1000 + len(self.seen)
+        self.seen.append((native.symbol, native.lastTradeDateOrContractMonth, native.strike, native.right))
+        underlying = {"SPCX": 10, "RKLB": 20, "SPY": 30}[native.symbol]
+        contract = SimpleNamespace(
+            symbol=native.symbol,
+            secType="OPT",
+            currency="USD",
+            conId=con_id,
+            lastTradeDateOrContractMonth=native.lastTradeDateOrContractMonth,
+            strike=native.strike,
+            right=native.right,
+            multiplier="100",
+            tradingClass=native.symbol,
+        )
+        return [SimpleNamespace(contract=contract, underConId=underlying)]
+
+
+async def test_option_chain_discovery_skips_forbidden_and_short_expiries():
+    from datetime import date
+
+    from hedge.config import Manifest
+
+    expiry = date(2026, 11, 20)
+    stocks = [Contract(con_id=i, symbol=s, kind="STK") for i, s in [(10, "SPCX"), (20, "RKLB"), (30, "SPY")]]
+    legs = [
+        (101, 10, 95, "C", 25),
+        (102, 10, 100, "C", -50),
+        (103, 10, 105, "C", 25),
+        (104, 20, 95, "P", -25),
+        (105, 20, 105, "P", 25),
+        (106, 30, 100, "C", 25),
+        (107, 30, 100, "P", 25),
+    ]
+    symbols = {10: "SPCX", 20: "RKLB", 30: "SPY"}
+    options = [
+        Contract(
+            con_id=i,
+            symbol=symbols[u],
+            kind="OPT",
+            multiplier=100,
+            expiry=expiry,
+            strike=k,
+            right=r,
+            underlying_id=u,
+        )
+        for i, u, k, r, _ in legs
+    ]
+    m = Manifest(
+        name="Contest",
+        account="DU_TEST",
+        day_zero=date(2026, 10, 21),
+        scoring_sessions=(date(2026, 10, 22), date(2026, 11, 4)),
+        valuation_convention="IBKR NAV",
+        report_source="IBKR statement",
+        contracts=(*stocks, *options),
+        mandatory={i: q for i, *_, q in legs},
+        contest_rules="spcx_rklb_spy",
+        contest_option_expiry=expiry,
+        universe="open",
+    )
+    broker = ChainBroker()
+    broker.seen = []
+    expanded = await qualify_stock_universe(
+        m, ["IVV"], broker, option_symbols=["RKLB", "SPY"], expiries=2, strikes=3
+    )
+    assert broker.connection["readonly"] and broker.disconnected
+    added = [c for c in expanded.contracts if c.con_id >= 1000]
+    assert added and all(c.expiry in (expiry, date(2026, 12, 18)) for c in added)
+    assert not any(c.symbol == "RKLB" and c.right == "C" and c.expiry == expiry for c in added)
+    assert not any(c.symbol == "SPY" and c.expiry == expiry for c in added)
+    assert {c.con_id for c in added} <= set(expanded.allowlist)
+    assert 40 in expanded.allowlist and 30 not in expanded.allowlist
+    assert expanded.mandatory == m.mandatory
