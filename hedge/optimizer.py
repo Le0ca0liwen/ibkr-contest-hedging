@@ -82,16 +82,6 @@ class HedgeOptimizer:
         desired = np.array([target.quantities.get(i, 0) for i in ids])
         delta = desired - current
         costs = execution_cost(m, quotes, ids, delta) if include_costs else 0
-        days = scenarios.calendar_days
-
-        def carry(quantities, cash):
-            borrow = sum(
-                max(0, -amount) * quotes[i].spot
-                for i, amount in zip(ids, quantities, strict=True)
-                if m.contract_map[i].kind == "STK"
-            )
-            return cash_carry(m, cash, borrow, days, float(snapshot.nav))
-
         cash = float(snapshot.cash)
         planned_cash = (
             cash
@@ -103,27 +93,74 @@ class HedgeOptimizer:
         )
         unscored_setup = snapshot.at.astimezone(NY).date() == m.day_zero
         error = 0 if unscored_setup else nav_estimate - float(previous_nav)
-        old = error + scenarios.changes @ current + carry(current, cash)
-        new = (
-            error
-            + scenarios.changes @ desired
-            + carry(desired, planned_cash)
-            - (0 if unscored_setup else costs)
+        old = self._score(snapshot, quotes, scenarios, error, previous_nav, current, cash, 0)
+        new = self._score(
+            snapshot,
+            quotes,
+            scenarios,
+            error,
+            previous_nav,
+            desired,
+            planned_cash,
+            0 if unscored_setup else costs,
         )
-        improvements = np.abs(old) - np.abs(new)
+        improvements = old["losses"] - new["losses"]
         uncertainty = (
             float(np.std(improvements, ddof=1) / np.sqrt(len(improvements))) if len(improvements) > 1 else 0
         )
         return target.model_copy(
             update={
-                "current_score": float(scenarios.weights @ np.abs(old)),
-                "expected_score": float(scenarios.weights @ np.abs(new)),
+                "current_score": old["score"],
+                "expected_score": new["score"],
                 "estimated_cost": costs,
                 "uncertainty": uncertainty,
+                "components": new["components"],
                 "snapshot_id": snapshot.version,
                 "scenario_id": scenarios.identifier,
             }
         )
+
+    def _overnight(self, scenarios, target_nav):
+        """(weight, accrual days, benchmark growth $) of the close -> next reopen term, or None.
+
+        Tomorrow's target is today's close x (1 + r/360)^n_next; today's target stands in for
+        today's close. Carry accrues over the same n_next calendar days as the benchmark: the next
+        session's own accrual is deterministic, so pro-rating it to the reopen would only add a
+        spurious shortfall that tomorrow recovers without trading.
+        """
+        m, day = self.manifest, scenarios.next_session
+        if not m.policy.overnight_weight or scenarios.overnight_changes is None:
+            return None
+        return m.policy.overnight_weight, m.accrual_days(day), m.benchmark_growth(day) * float(target_nav)
+
+    def _score(self, snapshot, quotes, scenarios, error, target_nav, vector, cash, cost):
+        """Numerical twin of the dynamic_l1 objective: per-scenario losses and components."""
+        m, ids, nav = self.manifest, scenarios.ids, float(snapshot.nav)
+        borrow = sum(
+            -amount * quotes[i].spot
+            for i, amount in zip(ids, vector, strict=True)
+            if amount < 0 and m.contract_map[i].kind == "STK"
+        )
+        gap = error + scenarios.changes @ vector + cash_carry(m, cash, borrow, scenarios.calendar_days, nav)
+        closing = np.abs(gap - cost) if m.policy.burn_surplus else np.abs(gap) + cost
+        overnight = np.zeros_like(closing)
+        if (term := self._overnight(scenarios, target_nav)) is not None:
+            weight, days, offset = term
+            overnight = weight * np.abs(
+                scenarios.overnight_changes @ vector + cash_carry(m, cash, borrow, days, nav) - offset
+            )
+        losses, w = closing + overnight, scenarios.weights
+        return {
+            "losses": losses,
+            "score": float(w @ losses),
+            "components": {
+                "closing": float(w @ closing),
+                "overnight": float(w @ overnight),
+                "scored_cost": float(cost),
+                # Credit the in-gap treatment gives spending: E|g| + c - E|g - c|, within [0, 2c].
+                "burn": float(w @ np.abs(gap) + cost - w @ np.abs(gap - cost)),
+            },
+        }
 
     def solve(
         self,
@@ -189,12 +226,15 @@ class HedgeOptimizer:
             if unscored_setup
             else (nav_estimate if nav_estimate is not None else float(snapshot.nav)) - float(previous_nav)
         )
+        target_nav = float(previous_nav)
         candidates = [
             i
             for i in ids
             if i in m.allowlist
             and not m.prohibited_reason(m.contract_map[i])
             and (not stock_only or m.contract_map[i].kind == "STK")
+            # Mirrors RiskGate's order window: e.g. no option proposals after the option cutoff.
+            and m.can_trade(snapshot.at, m.contract_map[i].kind)
         ]
         allowed_type = "synthetic" if snapshot.source == "synthetic" else "live"
         candidates = [
@@ -217,7 +257,7 @@ class HedgeOptimizer:
         frozen = [i for i in ids if i not in candidates]
         metrics["candidate_count"] = len(candidates)
         if not candidates:
-            return self._unchanged(snapshot, scenarios, error, quotes, "NO_CANDIDATES")
+            return self._unchanged(snapshot, scenarios, error, target_nav, quotes, "NO_CANDIDATES")
         idx = [ids.index(i) for i in candidates]
         current = quantities[idx]
         n = len(candidates)
@@ -254,7 +294,7 @@ class HedgeOptimizer:
                 lower[j] = max(lower[j], np.ceil(endpoints[0] - 1e-9))
                 upper[j] = min(upper[j], np.floor(endpoints[1] + 1e-9))
         if np.any(lower > upper):
-            return self._unchanged(snapshot, scenarios, error, quotes, "INFEASIBLE")
+            return self._unchanged(snapshot, scenarios, error, target_nav, quotes, "INFEASIBLE")
         buy_bounds, sell_bounds = np.maximum(upper - current, 0), np.maximum(current - lower, 0)
         # Only net holdings need integer domains. Exact sign/direction gates
         # imply integrality of the positive/negative and buy/sell auxiliaries.
@@ -425,20 +465,37 @@ class HedgeOptimizer:
             if m.policy.cash_rate
             else cp.Constant(0)
         )
-        carry = (
-            days
-            / m.policy.cash_day_count
-            * (
-                m.policy.cash_rate * min(1, float(snapshot.nav) / 100000) * eligible_plus
-                - m.policy.financing_rate * cash_minus
-                - m.policy.borrow_rate * (short_stock + frozen_short)
-            )
+        annual_carry = (
+            m.policy.cash_rate * min(1, float(snapshot.nav) / 100000) * eligible_plus
+            - m.policy.financing_rate * cash_minus
+            - m.policy.borrow_rate * (short_stock + frozen_short)
         )
+        carry = days / m.policy.cash_day_count * annual_carry
         scored_costs = 0 if unscored_setup else costs
-        pnl = error + scenarios.changes @ total_h + carry - scored_costs
-        objective_score = scenarios.weights @ cp.abs(pnl)
+
+        def closing(gap, cost):
+            # burn_surplus: costs inside the gap spend down a surplus; otherwise an additive penalty.
+            if m.policy.burn_surplus:
+                return scenarios.weights @ cp.abs(gap - cost)
+            return scenarios.weights @ cp.abs(gap) + cost
+
+        objective_score = closing(error + scenarios.changes @ total_h + carry, scored_costs)
         if strategy == "historical_l1":
-            objective_score = scenarios.weights @ cp.abs(scenarios.changes @ total_h + carry - costs)
+            objective_score = closing(scenarios.changes @ total_h + carry, costs)
+        # two_close already prices the whole next session through next_changes.
+        overnight = (
+            self._overnight(scenarios, target_nav) if strategy in ("dynamic_l1", "historical_l1") else None
+        )
+        if overnight is not None:
+            overnight_weight, overnight_days, overnight_offset = overnight
+            objective_score += overnight_weight * (
+                scenarios.weights
+                @ cp.abs(
+                    scenarios.overnight_changes @ total_h
+                    + overnight_days / m.policy.cash_day_count * annual_carry
+                    - overnight_offset
+                )
+            )
         if strategy == "two_close" and scenarios.next_changes is not None:
             objective_score += scenarios.weights @ cp.abs(scenarios.next_changes @ total_h)
         fixed_quantities = quantities.copy()
@@ -612,7 +669,7 @@ class HedgeOptimizer:
             )
             problem.solve(solver=cp.OSQP, max_iter=10000)
             if problem.status != "optimal":
-                return self._unchanged(snapshot, scenarios, error, quotes, "BASELINE_FAILED")
+                return self._unchanged(snapshot, scenarios, error, target_nav, quotes, "BASELINE_FAILED")
             baseline = cp.norm1(h - continuous.value)
         options = {
             "threads": 1,
@@ -627,18 +684,16 @@ class HedgeOptimizer:
         # through its supported warm-start interface (unchanged column order).
         max_holdings = np.abs(quantities)
         max_holdings[idx] = np.maximum(np.abs(lower), np.abs(upper))
-        carry_bound = (
-            days
-            / m.policy.cash_day_count
-            * (
-                m.policy.cash_rate * eligible_bound
-                + m.policy.financing_rate * cash_bound
-                + m.policy.borrow_rate * short_bound
-            )
+        annual_carry_bound = (
+            m.policy.cash_rate * eligible_bound
+            + m.policy.financing_rate * cash_bound
+            + m.policy.borrow_rate * short_bound
         )
+        carry_bound = days / m.policy.cash_day_count * annual_carry_bound
+        # The next-close tie-breaker would re-rank by the exposure the overnight term already prices.
         next_objective = (
             scenarios.weights @ cp.abs(scenarios.next_changes @ total_h)
-            if baseline is None and scenarios.next_changes is not None
+            if baseline is None and scenarios.next_changes is not None and overnight is None
             else None
         )
         next_bound = (
@@ -648,6 +703,12 @@ class HedgeOptimizer:
         )
         primary_bound = abs(error) + float(np.max(np.abs(scenarios.changes) @ max_holdings))
         primary_bound += carry_bound + cost_bound
+        if overnight is not None:
+            primary_bound += overnight_weight * (
+                float(np.max(np.abs(scenarios.overnight_changes) @ max_holdings))
+                + overnight_days / m.policy.cash_day_count * annual_carry_bound
+                + abs(overnight_offset)
+            )
         if strategy == "two_close":
             primary_bound += next_bound
         if strategy == "delta":
@@ -736,6 +797,7 @@ class HedgeOptimizer:
                     snapshot,
                     scenarios,
                     error,
+                    target_nav,
                     quotes,
                     "OBJECTIVE_CERTIFICATE_FAILED"
                     if problem.status == "optimal"
@@ -771,13 +833,15 @@ class HedgeOptimizer:
                 next_objective is None or "next_selection_limit" in metrics
             )
             if monotonic() > deadline + 0.5:
-                return self._unchanged(snapshot, scenarios, error, quotes, "TIMEOUT")
+                return self._unchanged(snapshot, scenarios, error, target_nav, quotes, "TIMEOUT")
             # A timed-out ranking never replaces the saved certified solution.
             if accepted["primary"] > primary_limit.value + 1e-5 or (
                 "next_selection_limit" in metrics
                 and accepted["next"] > metrics["next_selection_limit"] + 1e-5
             ):
-                return self._unchanged(snapshot, scenarios, error, quotes, "OBJECTIVE_CERTIFICATE_FAILED")
+                return self._unchanged(
+                    snapshot, scenarios, error, target_nav, quotes, "OBJECTIVE_CERTIFICATE_FAILED"
+                )
             result = dict(actual)
             for i, value in zip(candidates, accepted["holdings"], strict=True):
                 result[i] = int(round(value))
@@ -786,25 +850,27 @@ class HedgeOptimizer:
             cost = execution_cost(m, quotes, candidates, delta)
             target_vector = np.array([result.get(i, 0) for i in ids])
             planned_cash = float(snapshot.cash) - prices @ (target_vector[idx] - current) - cost
-            target_carry = cash_carry(
-                m,
+            new = self._score(
+                snapshot,
+                quotes,
+                scenarios,
+                error,
+                target_nav,
+                target_vector,
                 planned_cash,
-                sum(
-                    max(0, -result.get(i, 0)) * quotes[i].spot for i in ids if m.contract_map[i].kind == "STK"
-                ),
-                days,
-                float(snapshot.nav),
+                0 if unscored_setup else cost,
             )
-            new_pnl = (
-                error + scenarios.changes @ target_vector + target_carry - (0 if unscored_setup else cost)
-            )
-            numerical_primary = float(scenarios.weights @ np.abs(new_pnl))
+            numerical_primary = new["score"]
             if strategy == "historical_l1":
-                numerical_primary = float(
-                    scenarios.weights @ np.abs(scenarios.changes @ target_vector + target_carry - cost)
-                )
-            elif strategy == "two_close" and scenarios.next_changes is not None:
-                numerical_primary += float(scenarios.weights @ np.abs(scenarios.next_changes @ target_vector))
+                numerical_primary = self._score(
+                    snapshot, quotes, scenarios, 0, target_nav, target_vector, planned_cash, cost
+                )["score"]
+            elif strategy == "two_close":
+                numerical_primary = new["components"]["closing"]
+                if scenarios.next_changes is not None:
+                    numerical_primary += float(
+                        scenarios.weights @ np.abs(scenarios.next_changes @ target_vector)
+                    )
             elif strategy == "delta":
                 numerical_primary = float(sum(abs(v @ target_vector) for v in delta_vectors.values()))
             elif strategy == "greek":
@@ -816,27 +882,23 @@ class HedgeOptimizer:
                 and float(scenarios.weights @ np.abs(scenarios.next_changes @ target_vector))
                 > metrics["next_selection_limit"] + 1e-5
             ):
-                return self._unchanged(snapshot, scenarios, error, quotes, "OBJECTIVE_CERTIFICATE_FAILED")
+                return self._unchanged(
+                    snapshot, scenarios, error, target_nav, quotes, "OBJECTIVE_CERTIFICATE_FAILED"
+                )
             metrics["returned_primary_objective"] = numerical_primary
             # No-trade includes its own carry, rather than comparing net against gross.
-            current_carry = cash_carry(
-                m,
-                float(snapshot.cash),
-                sum(
-                    max(0, -actual.get(i, 0)) * quotes[i].spot for i in ids if m.contract_map[i].kind == "STK"
-                ),
-                days,
-                float(snapshot.nav),
+            old = self._score(
+                snapshot, quotes, scenarios, error, target_nav, quantities, float(snapshot.cash), 0
             )
-            old_pnl = error + scenarios.changes @ quantities + current_carry
-            differences = np.abs(old_pnl) - np.abs(new_pnl)
+            differences = old["losses"] - new["losses"]
             uncertainty = (
                 float(np.std(differences, ddof=1) / np.sqrt(len(differences))) if len(differences) > 1 else 0
             )
             return Target(
                 quantities=result,
-                expected_score=float(scenarios.weights @ np.abs(new_pnl)),
-                current_score=float(scenarios.weights @ np.abs(old_pnl)),
+                expected_score=new["score"],
+                current_score=old["score"],
+                components=new["components"],
                 uncertainty=uncertainty,
                 status="OPTIMAL",
                 snapshot_id=snapshot.version,
@@ -844,7 +906,13 @@ class HedgeOptimizer:
                 config_hash=m.config_hash,
                 estimated_cost=cost,
                 explanation=(
-                    f"{strategy}: integer scenario hedge; {scenarios.source}. Costs are included once. "
+                    f"{strategy}: integer scenario hedge; {scenarios.source}. Costs are included once"
+                    + (" inside the closing gap. " if m.policy.burn_surplus else " as an additive penalty. ")
+                    + (
+                        f"Overnight term to the {scenarios.next_session} reopen at weight {overnight[0]:g}. "
+                        if overnight is not None
+                        else ""
+                    )
                     + (
                         "Secondary ranking completed."
                         if metrics["ranking_complete"]
@@ -853,23 +921,16 @@ class HedgeOptimizer:
                 ),
             )
         except cp.error.SolverError as exc:
-            return self._unchanged(snapshot, scenarios, error, quotes, f"SOLVER_ERROR:{exc}")
+            return self._unchanged(snapshot, scenarios, error, target_nav, quotes, f"SOLVER_ERROR:{exc}")
 
-    def _unchanged(self, snapshot, scenarios, error, quotes, status):
+    def _unchanged(self, snapshot, scenarios, error, target_nav, quotes, status):
         q = np.array([snapshot.quantities().get(i, 0) for i in scenarios.ids])
-        borrow = sum(
-            max(0, -amount) * quotes[i].spot
-            for i, amount in snapshot.quantities().items()
-            if i in quotes and self.manifest.contract_map[i].kind == "STK"
-        )
-        carry = cash_carry(
-            self.manifest, float(snapshot.cash), borrow, scenarios.calendar_days, float(snapshot.nav)
-        )
-        score = float(scenarios.weights @ np.abs(error + scenarios.changes @ q + carry))
+        current = self._score(snapshot, quotes, scenarios, error, target_nav, q, float(snapshot.cash), 0)
         return Target(
             quantities=snapshot.quantities(),
-            expected_score=score,
-            current_score=score,
+            expected_score=current["score"],
+            current_score=current["score"],
+            components=current["components"],
             uncertainty=0,
             status=status,
             snapshot_id=snapshot.version,

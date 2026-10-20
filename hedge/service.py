@@ -805,6 +805,10 @@ class TradingService:
                 "optimization_scope": "CORRECTIVE_STOCK" if failed_primary else "FULL" if full else "STOCK",
                 "hold_distance": target.current_score,
                 "proposed_distance": target.expected_score,
+                "cost_treatment": "burn_surplus" if self.manifest.policy.burn_surplus else "additive",
+                # E|g| + c - E|g - c|: how much of the modeled benefit is spending a surplus on costs.
+                "burn_component": target.components.get("burn", 0.0),
+                "overnight_score": target.components.get("overnight", 0.0),
                 "blocking_reasons": (
                     list(gate.reasons)
                     + ([f"Solver: {target.status}"] if target.status != "OPTIMAL" else [])

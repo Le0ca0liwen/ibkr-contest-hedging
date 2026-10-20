@@ -53,6 +53,12 @@ policy:
   cash_rate: 0.0344
   cash_rate_status: modeled
   cash_rate_source: "Contest rules: cash balance earns nominal r ~ 3.44%"
+  # true (default): costs sit inside |closing gap - costs|, so a NAV surplus is partly spent
+  # by trading; false: costs are an additive penalty. Decisions record burn_component.
+  burn_surplus: true
+  # Weight on the modeled close -> next session open + 15 min gap (straddle decay, overnight
+  # moves); 0 disables. See docs/OPTIMIZER_RUNTIME.md.
+  overnight_weight: 0.5
 contracts: []
 # Insert verified conIds with signed quantities (all Nov 20 2026, multiplier 100).
 # The handout says strikes are set shortly before trading starts; use the final

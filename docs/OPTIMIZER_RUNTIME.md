@@ -1,9 +1,62 @@
 # Optimizer runtime improvements
 
-The objective remains absolute, interest-adjusted closing NAV deviation. Mandatory
-quantities, integer positions, transaction-cost relationships, liquidity, margin,
-cardinality, borrow, delta, gross-notional and stress limits remain enforced.
-No surplus-expense controller or new directional forecast is activated.
+The objective is absolute, interest-adjusted closing NAV deviation plus a weighted
+close-to-reopen term (below). Mandatory quantities, integer positions,
+transaction-cost relationships, liquidity, margin, cardinality, borrow, delta,
+gross-notional and stress limits remain enforced. No separate surplus-expense
+controller or new directional forecast is activated; whether costs may spend a
+surplus is the explicit `policy.burn_surplus` switch.
+
+## Cost treatment and the overnight term
+
+With `g` the scenario closing gap before costs (NAV estimate minus today's target,
+plus modeled changes and carry) and `c` the scored execution cost (zero on Day 0):
+
+- `policy.burn_surplus: true` (default, unchanged behaviour): `E|g - c|`. Costs sit
+  inside the gap, so while NAV is above target trading partly spends the surplus.
+- `policy.burn_surplus: false`: `E|g| + c`, an additive penalty; a surplus is never
+  a reason to trade.
+
+Each decision records `cost_treatment` and `burn_component = E|g| + c - E|g - c|`
+(between 0 and 2c; 2c means the whole cost was credited as surplus burn), plus
+`overnight_score` and the target's `components` (closing, overnight, scored_cost,
+burn). The dashboard decision log shows them.
+
+Today's close is the last instant the app can act before the next scored session,
+so decay and gaps until it can trade again land in tomorrow's score. The objective
+adds `w * E|O h + carry_next - ((1 + r/360)^n_next - 1) * target_today|`, where
+`w = policy.overnight_weight` (default 0.5, 0 disables, at most 2), `O` holds
+per-contract changes from today's close to the next scored session's open + 15
+minutes, `n_next` is that session's accrual days and `r` the scoring rate
+(`Manifest.accrual_days` and `Manifest.benchmark_growth`). Carry accrues over the
+same `n_next` calendar days as the benchmark; the next session's own accrual is
+deterministic, so stopping it at 9:45 would add a spurious ~$25 shortfall that
+tomorrow recovers without trading. There is no term on the final scored session.
+
+`O` reuses the closing scenarios' joint shocks. Options decay in calendar time to
+the reopen. Spot and IV variance follow a simple trading-time clock, a **modeled
+assumption** rather than an estimate: one weeknight carries 0.30 of a trading
+day's variance (sigma^2/252, or one row of the daily covariance) and every extra
+calendar day adds 0.10, so Friday to Monday is 0.50.
+
+Scores are evaluated identically by the CVXPY objective, `evaluate_target`, the
+post-rounding certificate check and no-trade targets, and the certified primary
+bound includes the term. `historical_l1` uses the same treatment; `two_close`
+keeps its next-close term instead of this one. When the overnight term is active the
+next-close tie-breaker stage is skipped, because it would re-rank the $1 band by
+the next-day exposure the primary objective already prices; with `w = 0` the
+previous primary/next-close/turnover sequence is unchanged. Instruments outside
+their order window (options after the 15-minute cutoff) are frozen, mirroring the
+RiskGate's window check, so close-time overnight hedges never propose an option
+order the gate would reject.
+
+Synthetic timings (`ops/benchmark_optimizer.py --baseline --baseline-ref 40007bd`,
+one machine, computation only): on the default 7-contract demo the full solve
+went from 4.1-4.6 s to 2.8 s (no next-close stage) and stock-only stayed at about
+0.13 s. On a contest-shaped synthetic universe (SPCX/RKLB/SPY legs, 20 permitted
+candidates) stock-only went from 0.88 s to 1.37 s, but the full solve hit the 10 s
+deadline (`USER_LIMIT`, no trade) both before and after, also with 16 candidates.
+Benchmark the real contest universe before relying on option-side overnight hedges.
 
 ## Model changes
 
