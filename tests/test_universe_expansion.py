@@ -346,3 +346,31 @@ async def test_prepare_contest_qualifies_signed_legs_from_final_strikes(tmp_path
     ]
     assert m.market_data_provider == "moomoo" and not m.confirmed
     assert set(m.allowlist) == {10, 20}  # SPY shares stay quote-only under the open universe
+
+
+def test_neighbouring_expiries_alternate_sides():
+    from datetime import date
+
+    from hedge.universe import neighbouring_expiries
+
+    days = [date(2026, 11, d) for d in (13, 17, 18, 19, 20, 23, 24, 27)]
+    order = neighbouring_expiries(days, date(2026, 11, 20))
+    assert order[:4] == [date(2026, 11, 19), date(2026, 11, 23), date(2026, 11, 18), date(2026, 11, 24)]
+    weekly = neighbouring_expiries([date(2026, 11, d) for d in (13, 20, 27)], date(2026, 11, 20))
+    assert weekly == [date(2026, 11, 27), date(2026, 11, 13)]  # tie prefers the later expiry
+
+
+def test_missing_daily_history_file_waits_then_loads(manifest, snapshot, quotes, now, tmp_path):
+    from hedge.continuity import DataUnavailable
+
+    path = tmp_path / "later.csv"
+    spy = Contract(con_id=200, symbol="SPY", kind="STK")
+    m = manifest.model_copy(
+        update={"contracts": (*manifest.contracts, spy), "daily_stock_history": str(path)}
+    )
+    engine = ScenarioEngine(m)  # the service must start before the first fetch
+    with pytest.raises(DataUnavailable, match="not found"):
+        engine.build(snapshot, quotes, now)
+    joint_history(path, now)
+    engine.refresh_daily_history()
+    assert engine.daily_covariance(now, ("BA", "SPY")).shape == (2, 2)

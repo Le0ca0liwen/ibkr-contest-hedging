@@ -7,6 +7,27 @@ def screen_snapshot(manifest, quotes, snapshot):
     return screen_options(manifest, quotes, retained)
 
 
+def neighbouring_expiries(expiries, primary):
+    """Other expiries nearest `primary`, alternating sides (e.g. SPY Nov 19, Nov 23, Nov 18, ...)."""
+    others = sorted(set(expiries) - {primary})
+    if primary is None:
+        return others
+    before = sorted((e for e in others if e < primary), reverse=True)
+    after = [e for e in others if e > primary]
+    ordered = []
+    while before or after:
+        # Take the closer side first; on a tie prefer the later expiry.
+        if after and (not before or (after[0] - primary) <= (primary - before[0])):
+            ordered.append(after.pop(0))
+            if before:
+                ordered.append(before.pop(0))
+        else:
+            ordered.append(before.pop(0))
+            if after:
+                ordered.append(after.pop(0))
+    return ordered
+
+
 def screen_options(manifest, quotes, actual):
     """Screen by moneyness/expiry deterministically, preserving held hedges."""
     chosen = {i for i in actual if actual[i]} | set(manifest.mandatory)
@@ -28,10 +49,7 @@ def screen_options(manifest, quotes, actual):
         primary = sorted(mandatory_expiries)[0] if mandatory_expiries else None
         # Neighbouring expiries on either side of the mandated one (e.g. SPY Nov 19 / Nov 23 when
         # every other Nov 20 SPY option is forbidden), nearest first.
-        neighbours = sorted(
-            {c.expiry for c in options if c.expiry != primary},
-            key=lambda e: (abs((e - primary).days) if primary else 0, e),
-        )
+        neighbours = neighbouring_expiries({c.expiry for c in options}, primary)
 
         def nearest(expiry, options=options):
             group = [c for c in options if c.expiry == expiry]

@@ -8,6 +8,7 @@ from ib_async import IB, Option, Stock
 
 from .models import Contract
 from .practice import paper_account
+from .universe import neighbouring_expiries
 
 
 def _symbols(symbols):
@@ -142,7 +143,8 @@ async def _option_chain(manifest, broker, stock, expiries, strikes, center, know
         if e >= last and not all(manifest.prohibited_reason(placeholder(e, center, r)) for r in "CP")
     ]
     primary = mandated[0] if mandated else manifest.contest_option_expiry or (eligible or [last])[0]
-    chosen = sorted(eligible, key=lambda e: (abs((e - primary).days), e))[:expiries]
+    chosen = ([primary] if primary in eligible else []) + neighbouring_expiries(eligible, primary)
+    chosen = chosen[:expiries]
     near = sorted((k for k in chains[0].strikes if k > 0), key=lambda k: (abs(k - center), k))[:strikes]
     found = []
     for expiry in sorted(chosen):

@@ -66,10 +66,13 @@ class ScenarioEngine:
         self.manifest = manifest
         self.valuation = ValuationEngine(manifest)
         self.history = history
-        self.daily_history = (
-            pd.read_csv(manifest.daily_stock_history) if manifest.daily_stock_history else None
-        )
-        self.daily_mtime = self._daily_mtime()
+        try:
+            self.daily_history = (
+                pd.read_csv(manifest.daily_stock_history) if manifest.daily_stock_history else None
+            )
+        except OSError:
+            self.daily_history = None  # Not fetched yet: start anyway and wait for the file.
+        self.daily_mtime = self._daily_mtime() if self.daily_history is not None else None
         self.daily_cache = {}
         self.beta_cache = {}
 
@@ -94,6 +97,10 @@ class ScenarioEngine:
 
     def build(self, snapshot, quotes, now, ids=None):
         self.refresh_daily_history()
+        if self.manifest.daily_stock_history and self.daily_history is None:
+            raise DataUnavailable(
+                f"Daily stock history {self.manifest.daily_stock_history} not found; run fetch_moomoo_daily.py"
+            )
         ids = tuple(sorted(ids or quotes.keys()))
         end = self.manifest.next_close(now)
         if end is None:
