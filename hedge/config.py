@@ -26,6 +26,9 @@ class RiskLimits(Frozen):
     option_names: int = Field(default=6, gt=0, le=6)
     stock_quote_age: int = Field(default=5, gt=0)
     option_quote_age: int = Field(default=60, gt=0)
+    # Moomoo pushes a book only when it changes. A held option that is not being traded may keep
+    # an unchanged (quiet) book this long before it blocks all hedging; traded options stay strict.
+    held_option_quote_age: int = Field(default=300, ge=60, le=900)
     greek_age: int = Field(default=60, gt=0)
     account_age: int = Field(default=180, gt=0)
     rate_stress_shift: float = Field(default=0.01, ge=0.005, le=0.05)
@@ -116,6 +119,10 @@ class Manifest(Frozen):
     scoring_forecast_daily_rate: Decimal | None = Field(default=None, ge=0, le=1)
     scoring_forecast_source: str = ""
     market_data_provider: Literal["ibkr", "moomoo"] = "ibkr"
+    # Moomoo has no short-borrow data. Operator-verified shortable shares per symbol (e.g. from
+    # IBKR's Short Stock Availability tool) let the optimizer short; empty means no new shorts.
+    stock_borrow: dict[str, int] = Field(default_factory=dict)
+    stock_borrow_source: str = ""
     daily_stock_history: str | None = None
     closing_capture: ClosingCapturePolicy = ClosingCapturePolicy()
     execution: ExecutionPolicy = ExecutionPolicy()
@@ -154,6 +161,10 @@ class Manifest(Frozen):
             raise ValueError(
                 "Daily benchmark rates require scored sessions and finite fractional rates between 0 and 1"
             )
+        if self.stock_borrow and (
+            not self.stock_borrow_source.strip() or any(v < 0 for v in self.stock_borrow.values())
+        ):
+            raise ValueError("Stock borrow allowances need nonnegative shares and a recorded source")
         if (
             self.scoring_rule in ("interest_benchmark", "calendar_interest_benchmark")
             and self.scoring_annual_rate is None

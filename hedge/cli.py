@@ -94,6 +94,9 @@ def main():
     intake.add_argument("--expiry")
     intake.add_argument("--purchase-on-day", type=int, choices=[0, 1], default=0)
     intake.add_argument("--output", default="config/local.practice.inputs.yaml")
+    codes = commands.add_parser("moomoo-codes", help="Write the Moomoo quote-collector code list")
+    codes.add_argument("--config", required=True)
+    codes.add_argument("--output", default="config/local.moomoo-codes.json")
     expand = commands.add_parser("expand-universe", help="Read-only qualify US stocks/ETFs and options")
     expand.add_argument("--config", required=True)
     expand.add_argument("--symbols", nargs="*", default=[])
@@ -156,6 +159,13 @@ def main():
             )
             Path(args.output).write_text(yaml.safe_dump(result.model_dump(mode="json"), sort_keys=False))
             print("Qualified universe saved; enable only after joint-history and quote validation")
+        elif args.command == "moomoo-codes":
+            from .moomoo_data import collector_codes
+
+            result = collector_codes(load_manifest(args.config))
+            Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.output).write_text(json.dumps(result, indent=1) + "\n")
+            print(f"Wrote {len(result)} Moomoo codes; restart the service so the collector subscribes them")
         elif args.command == "validate":
             manifest = load_manifest(args.config)
             print(

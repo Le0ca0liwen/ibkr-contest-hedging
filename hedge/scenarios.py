@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
 from .config import NY
+from .continuity import DataUnavailable
 from .models import digest
 from .valuation import ValuationEngine
 
@@ -27,13 +29,28 @@ class ScenarioSet:
     built_at: datetime | None = None
     valuation_inputs: dict[int, tuple[float, float | None]] = field(default_factory=dict)
 
+    # Moomoo re-derives spot from the book mid and recalibrates IV on every read (time to expiry
+    # shrinks each call), so exact equality fails on unchanged markets. Tolerate only changes
+    # worth less than one cent per share: a half-tick mid move, or IV noise x vega under $0.01.
+    PRICE_TOLERANCE = 0.01
+
     def is_current(self, quotes, now, max_age):
-        return (
-            self.built_at is not None
-            and 0 <= (now - self.built_at).total_seconds() <= max_age
-            and set(self.ids).issubset(quotes)
-            and self.valuation_inputs == {i: (quotes[i].spot, quotes[i].iv) for i in self.ids}
-        )
+        if (
+            self.built_at is None
+            or not 0 <= (now - self.built_at).total_seconds() <= max_age
+            or not set(self.ids).issubset(quotes)
+        ):
+            return False
+        for i in self.ids:
+            spot, iv = self.valuation_inputs.get(i, (None, None))
+            q = quotes[i]
+            if spot is None or abs(q.spot - spot) > self.PRICE_TOLERANCE + 1e-4 * spot:
+                return False
+            if (iv is None) != (q.iv is None):
+                return False
+            if iv is not None and abs(q.iv - iv) * abs(q.vega) > self.PRICE_TOLERANCE:
+                return False
+        return True
 
     def __post_init__(self):
         if self.changes.shape[1] != len(self.ids) or self.changes.shape[0] != len(self.weights):
@@ -52,10 +69,31 @@ class ScenarioEngine:
         self.daily_history = (
             pd.read_csv(manifest.daily_stock_history) if manifest.daily_stock_history else None
         )
+        self.daily_mtime = self._daily_mtime()
         self.daily_cache = {}
         self.beta_cache = {}
 
+    def _daily_mtime(self):
+        try:
+            return Path(self.manifest.daily_stock_history).stat().st_mtime_ns
+        except (OSError, TypeError):
+            return None
+
+    def refresh_daily_history(self):
+        """Pick up a re-fetched daily file (run before each open) without a restart."""
+        mtime = self._daily_mtime()
+        if mtime is None or mtime == self.daily_mtime:
+            return
+        try:
+            history = pd.read_csv(self.manifest.daily_stock_history)
+        except (OSError, ValueError):
+            return  # Keep the previous history; its staleness check still applies.
+        self.daily_history, self.daily_mtime = history, mtime
+        self.daily_cache.clear()
+        self.beta_cache.clear()
+
     def build(self, snapshot, quotes, now, ids=None):
+        self.refresh_daily_history()
         ids = tuple(sorted(ids or quotes.keys()))
         end = self.manifest.next_close(now)
         if end is None:
@@ -254,11 +292,12 @@ class ScenarioEngine:
         if frame.duplicated(["date", "symbol"]).any():
             raise ValueError("Duplicate daily stock observations")
         prices = frame.pivot(index="date", columns="symbol", values="close").sort_index()
+        # Missing or stale history is recoverable by re-running the daily fetch: wait, don't hard-stop.
         if not set(symbols).issubset(prices.columns):
-            raise ValueError("Missing joint stock history for hedge universe")
+            raise DataUnavailable("Missing joint stock history for hedge universe; re-run the daily fetch")
         prices = prices[list(symbols)].dropna()
         if prices.empty or (now.astimezone(NY).date() - prices.index[-1]).days > 7:
-            raise ValueError("Joint stock history is stale")
+            raise DataUnavailable("Joint stock history is stale; re-run the daily fetch")
         returns = prices.pct_change(fill_method=None).dropna().tail(self.manifest.policy.history_sessions)
         if len(returns) < 20 or not np.isfinite(returns.to_numpy()).all() or (prices <= 0).any().any():
             raise ValueError("At least 20 aligned completed-session returns required")

@@ -21,6 +21,22 @@ valuation_convention: IBKR official closing account NAV
 report_source: null
 confirmed: false
 contest_rules: spcx_rklb_spy
+# IBKR supplies no live quotes to this team: all quotes, books and history come
+# from Moomoo OpenD (quote-only, never trades). IBKR stays the only broker.
+market_data_provider: moomoo
+# Joint daily closes for every underlying (SPY is required for beta even though
+# its shares are forbidden). Re-fetch before EACH open; the service reloads the
+# file when it changes and waits (instead of trading) if it is over 7 days old:
+#   .runtime/moomoo-env/bin/python ops/fetch_moomoo_daily.py \
+#     --symbols SPCX RKLB SPY IVV VOO --as-of <today> --output data/moomoo/daily-contest.csv
+daily_stock_history: data/moomoo/daily-contest.csv
+# Moomoo provides no borrow data, so new stock shorts are disabled unless you
+# record verified shortable shares here (check IBKR's short availability first):
+# stock_borrow: {SPCX: 2000, RKLB: 2000, IVV: 2000}
+# stock_borrow_source: "IBKR short stock availability, checked 2026-10-21 09:15"
+# Every risk limit scales with min(initial_nav, current NAV). Set this to the
+# verified IBKR Day 0 NAV; leaving the $1M default caps limits at $1M.
+initial_nav: "1000000"
 # The handout's "November 21, 2025" is last year's date; the "Nov 20" legs
 # expire Friday 2026-11-20 (third Friday). Verify against IBKR contract details.
 contest_option_expiry: 2026-11-20
@@ -35,7 +51,10 @@ policy:
   cash_rate_status: modeled
   cash_rate_source: "Contest rules: cash balance earns nominal r ~ 3.44%"
 contracts: []
-# Insert verified conIds with signed quantities (all Nov 20 2026, multiplier 100):
+# Insert verified conIds with signed quantities (all Nov 20 2026, multiplier 100).
+# The handout says strikes are set shortly before trading starts; use the final
+# ones. Validation checks the structure (signs, order, same SPY strike), not
+# these example strikes:
 # SPCX calls 130 / 145 / 160:  +25 / -50 / +25   (call butterfly)
 # RKLB puts 45 / 55:           -25 / +25         (bear put spread)
 # SPY call and put 770:        +25 / +25         (straddle)
@@ -45,5 +64,8 @@ mandatory: {}
 # instruments (SPY shares, Nov 20 RKLB calls, other Nov 20 SPY options) is
 # tradable. Define candidates with read-only discovery, e.g.
 #   python -m hedge.cli expand-universe --config CONFIG --symbols IVV VOO \
-#     --option-symbols SPCX RKLB SPY --expiries 2 --strikes 6 --output OUT.yaml
+#     --option-symbols SPCX RKLB SPY --expiries 3 --strikes 6 --output OUT.yaml
+# Discovery takes the expiries nearest Nov 20 on both sides (SPY Nov 19/23 etc.).
+# Then regenerate the Moomoo collector list and restart the service:
+#   python -m hedge.cli moomoo-codes --config OUT.yaml
 universe: open

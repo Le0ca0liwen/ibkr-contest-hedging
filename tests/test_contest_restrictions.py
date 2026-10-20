@@ -216,3 +216,35 @@ def test_open_universe_trades_everything_except_mandates_and_forbidden(contest, 
     for i in (30, 201, 202, 203):
         result = RiskGate(m).validate(snap, quotes, scenarios, {**snap.quantities(), i: 1}, now)
         assert not result.passed
+
+
+def test_contest_scale_mandates_do_not_consume_discretionary_gross_cap(contest, snapshot, now):
+    # At contest prices the seven fixed legs are ~$5.55M of underlying, above the 3x$1M cap.
+    snap, quotes, scenarios = frame(contest, snapshot, now)
+    spots = {"SPCX": 145.0, "RKLB": 50.0, "SPY": 770.0}
+    quotes = {
+        i: q.model_copy(update={"spot": spots[contest.contract_map[i].symbol]}) for i, q in quotes.items()
+    }
+    result = RiskGate(contest).validate(snap, quotes, scenarios, snap.quantities(), now)
+    assert result.metrics["mandated_gross_notional"] == 100 * (100 * 145 + 50 * 50 + 50 * 770)
+    assert result.metrics["gross_notional"] == 0
+    assert not any("Gross" in reason for reason in result.reasons)
+    hedged = RiskGate(contest).validate(snap, quotes, scenarios, {**snap.quantities(), 10: 100}, now)
+    assert hedged.metrics["gross_notional"] == 100 * 145
+
+
+def test_quiet_held_option_does_not_halt_hedging_but_traded_option_must_be_fresh(contest, snapshot, now):
+    snap, quotes, scenarios = frame(contest, snapshot, now)
+    quiet = now - timedelta(seconds=120)  # unchanged Moomoo book: no push for two minutes
+    quotes[103] = quotes[103].model_copy(update={"observed_at": quiet, "greek_at": quiet})
+    held = RiskGate(contest).validate(snap, quotes, scenarios, snap.quantities(), now)
+    assert not any(r.endswith(": 103") for r in held.reasons), held.reasons
+    quotes[204] = quotes[204].model_copy(update={"observed_at": quiet, "greek_at": quiet})
+    traded = RiskGate(contest).validate(snap, quotes, scenarios, {**snap.quantities(), 204: 1}, now)
+    assert "Stale/future quote: 204" in traded.reasons
+    stale = now - timedelta(seconds=contest.risk.held_option_quote_age + 1)
+    quotes[103] = quotes[103].model_copy(update={"observed_at": stale, "greek_at": stale})
+    assert (
+        "Stale/future quote: 103"
+        in RiskGate(contest).validate(snap, quotes, scenarios, snap.quantities(), now).reasons
+    )

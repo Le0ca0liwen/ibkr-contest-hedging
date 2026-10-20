@@ -267,6 +267,22 @@ class IBKRBroker:
                 self.market_rules[c.con_id] = await self.ib.reqMarketRuleAsync(rule_id)
         self.native[c.con_id] = native
 
+    def portfolio_marks(self):
+        """IBKR's own position marks from account updates (no market-data subscription needed)."""
+        marks = {}
+        try:
+            items = self.ib.portfolio(self.manifest.account)
+        except Exception:
+            return marks
+        for item in items:
+            if finite(item.marketPrice):
+                marks[item.contract.conId] = {
+                    "market_price": float(item.marketPrice),
+                    "market_value": float(item.marketValue) if finite(item.marketValue) else None,
+                    "position": float(item.position),
+                }
+        return marks
+
     async def closing_nav_observation(self):
         """Fresh, explicitly requested account NAV; never reuse summary cache."""
         async with self.reconcile_lock:
@@ -680,6 +696,9 @@ class SimBroker:
     async def reconcile(self):
         self.reconciled = self.connected
         return self.snapshot()
+
+    def portfolio_marks(self):
+        return {}
 
     async def closing_nav_observation(self):
         if not self.connected:

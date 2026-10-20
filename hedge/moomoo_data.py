@@ -7,13 +7,32 @@ from pathlib import Path
 
 from .config import NY
 from .models import Quote
-from .valuation import ValuationEngine
+from .valuation import BelowModelFloor, ValuationEngine
 
 
 def code_for(contract):
     if contract.kind == "STK":
         return f"US.{contract.symbol}"
     return f"US.{contract.symbol}{contract.expiry:%y%m%d}{contract.right}{round(contract.strike * 1000)}"
+
+
+def collector_codes(manifest):
+    """Collector subscription list: underlyings first, then mandated legs, then candidates."""
+    contracts = manifest.contracts
+    underlyings = {c.symbol for c in contracts if c.kind == "OPT"} | {manifest.beta_benchmark}
+    stocks = sorted({f"US.{s}" for s in underlyings} | {code_for(c) for c in contracts if c.kind == "STK"})
+    mandated = [code_for(manifest.contract_map[i]) for i in sorted(manifest.mandatory)]
+    others = sorted(code_for(c) for c in contracts if c.kind == "OPT" and c.con_id not in manifest.mandatory)
+    return list(dict.fromkeys([*stocks, *mandated, *others]))
+
+
+def missing_codes(manifest, path="config/local.moomoo-codes.json"):
+    """Manifest contracts the running collector will never subscribe (no quotes, silently untradable)."""
+    try:
+        subscribed = set(json.loads(Path(path).read_text()))
+    except (OSError, ValueError):
+        subscribed = set()
+    return [code for code in collector_codes(manifest) if code not in subscribed]
 
 
 class MoomooData:
@@ -23,6 +42,7 @@ class MoomooData:
         self.engine = ValuationEngine(manifest)
         self.received_at = None
         self.errors = []
+        self.last_iv = {}
 
     @staticmethod
     def book_time(item):
@@ -77,8 +97,10 @@ class MoomooData:
                         permission = raw.get("rights", {}).get(
                             "us_option_qot_right" if contract.kind == "OPT" else "us_qot_right"
                         )
+                        # A quiet (unchanged) option book stays valid up to the held-leg bound;
+                        # the risk gate still requires option_quote_age for anything traded.
                         max_age = (
-                            self.manifest.risk.option_quote_age
+                            self.manifest.risk.held_option_quote_age
                             if contract.kind == "OPT"
                             else self.manifest.risk.stock_quote_age
                         )
@@ -114,8 +136,27 @@ class MoomooData:
                         if live:
                             # Last trade and vendor IV may be old despite a current book.
                             # Calibrate the American model to the executable midpoint.
+                            vendor = iv if iv and math.isfinite(iv) and iv > 0 else None
                             try:
                                 iv = self.engine.implied_volatility(contract, spot, (bid + ask) / 2, now)
+                                self.last_iv[contract.con_id] = iv
+                            except BelowModelFloor as exc:
+                                # Deep ITM: price ~ intrinsic and delta ~ +/-1 regardless of IV, so a
+                                # carried IV keeps a valid, fresh book live instead of halting hedging.
+                                # Only when the book reaches the floor; a nonsense book stays frozen.
+                                iv = self.last_iv.get(contract.con_id) or vendor
+                                if ask < exc.floor - 0.01:
+                                    live, iv = False, vendor
+                                    errors.append(f"Model calibration blocked {contract.label}: {exc}")
+                                elif iv is None:
+                                    live = False
+                                    errors.append(
+                                        f"Model calibration blocked {contract.label}: no IV to carry"
+                                    )
+                                else:
+                                    errors.append(
+                                        f"Deep-ITM midpoint at model floor; carried IV for {contract.label}"
+                                    )
                             except ValueError as exc:
                                 live = False
                                 errors.append(f"Model calibration blocked {contract.label}: {exc}")
@@ -139,6 +180,9 @@ class MoomooData:
                         iv=iv,
                         greek_at=min(book_at, stock_at) if live and iv else at if iv else None,
                         model_price=self.engine.price(contract, spot, iv, now) if live and iv else None,
+                        shortable_shares=self.manifest.stock_borrow.get(contract.symbol)
+                        if contract.kind == "STK"
+                        else None,
                         **greeks,
                     )
                     if not live:

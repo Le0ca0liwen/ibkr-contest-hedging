@@ -26,12 +26,20 @@ def screen_options(manifest, quotes, actual):
             if manifest.contract_map[i].symbol == symbol and manifest.contract_map[i].kind == "OPT"
         }
         primary = sorted(mandatory_expiries)[0] if mandatory_expiries else None
-        expiries = sorted({c.expiry for c in options})
-        later = next((e for e in expiries if primary is None or e > primary), None)
-        same = [c for c in options if c.expiry == primary]
-        following = [c for c in options if c.expiry == later]
-        same.sort(key=lambda c: (abs(c.strike / quotes[c.con_id].spot - 1), c.con_id))
-        following.sort(key=lambda c: (abs(c.strike / quotes[c.con_id].spot - 1), c.con_id))
+        # Neighbouring expiries on either side of the mandated one (e.g. SPY Nov 19 / Nov 23 when
+        # every other Nov 20 SPY option is forbidden), nearest first.
+        neighbours = sorted(
+            {c.expiry for c in options if c.expiry != primary},
+            key=lambda e: (abs((e - primary).days) if primary else 0, e),
+        )
+
+        def nearest(expiry, options=options):
+            group = [c for c in options if c.expiry == expiry]
+            return sorted(group, key=lambda c: (abs(c.strike / quotes[c.con_id].spot - 1), c.con_id))
+
+        same = nearest(primary)
         chosen.update(c.con_id for c in same[:8])
-        chosen.update(c.con_id for c in following[:4])
+        # Without same-expiry candidates, the nearest two neighbours take that share.
+        for expiry in neighbours[: 1 if same else 2]:
+            chosen.update(c.con_id for c in nearest(expiry)[: 4 if same else 6])
     return tuple(sorted(i for i in chosen if i in quotes))

@@ -12,6 +12,14 @@ from .models import Contract, Quote
 _QL_LOCK = threading.Lock()  # QuantLib evaluation date is global process state.
 
 
+class BelowModelFloor(ValueError):
+    """Deep in the money: the midpoint is at/below the model's zero-vol value, so IV is unidentified."""
+
+    def __init__(self, message, floor):
+        super().__init__(message)
+        self.floor = floor
+
+
 class ValuationEngine:
     """American exercise and cash dividends with fractional calendar-time scaling.
 
@@ -86,7 +94,9 @@ class ValuationEngine:
             raise ValueError("Positive finite midpoint required")
         lo, hi = 0.001, 5.0
         low_price, high_price = self.price(c, spot, lo, at), self.price(c, spot, hi, at)
-        if market_price <= low_price + 0.0001 or market_price >= high_price:
+        if market_price <= low_price + 0.0001:
+            raise BelowModelFloor("Midpoint at or below the model floor (deep in the money)", low_price)
+        if market_price >= high_price:
             raise ValueError("Midpoint outside identifiable model IV bounds")
         for _ in range(45):
             mid = (lo + hi) / 2

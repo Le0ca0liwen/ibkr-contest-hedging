@@ -488,7 +488,10 @@ class HedgeOptimizer:
                 <= recovery_gross * budget
             ]
 
-        spots = np.array([quotes[i].spot * m.contract_map[i].multiplier for i in ids])
+        # Same measure as RiskEngine: fixed mandated legs are outside the discretionary gross cap.
+        spots = np.array(
+            [0.0 if i in m.mandatory else quotes[i].spot * m.contract_map[i].multiplier for i in ids]
+        )
         constraints += [spots @ absolute_h <= m.risk.gross_notional * budget]
         increment = cp.Variable(n, nonneg=True)
         constraints += [increment >= ah - np.abs(current)]

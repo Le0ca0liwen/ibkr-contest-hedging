@@ -116,17 +116,42 @@ async def _option_chain(manifest, broker, stock, expiries, strikes, center, know
     ]
     if len(chains) != 1:
         raise ValueError(f"Standard {symbol} option chain is ambiguous/unavailable")
-    # Options must outlive the final scored session.
-    last = manifest.scoring_sessions[-1].strftime("%Y%m%d")
-    chosen = [
-        date.fromisoformat(f"{e[:4]}-{e[4:6]}-{e[6:8]}") for e in sorted(chains[0].expirations) if e >= last
+    # Options must outlive the final scored session; take the expiries nearest the mandated one
+    # (both sides), which is what screen_options considers.
+    legs = [manifest.contract_map[i] for i in manifest.mandatory]
+    mandated = sorted(c.expiry for c in legs if c.symbol == symbol and c.kind == "OPT")
+    last = manifest.scoring_sessions[-1]
+    eligible = [date.fromisoformat(f"{e[:4]}-{e[4:6]}-{e[6:8]}") for e in sorted(chains[0].expirations)]
+
+    def placeholder(expiry, strike, right):
+        return Contract(
+            con_id=1,
+            symbol=symbol,
+            kind="OPT",
+            multiplier=100,
+            expiry=expiry,
+            strike=strike,
+            right=right,
+            underlying_id=stock.con_id,
+        )
+
+    # Skip expiries where every new contract would be forbidden (SPY on the contest expiry).
+    eligible = [
+        e
+        for e in eligible
+        if e >= last and not all(manifest.prohibited_reason(placeholder(e, center, r)) for r in "CP")
     ]
+    primary = mandated[0] if mandated else manifest.contest_option_expiry or (eligible or [last])[0]
+    chosen = sorted(eligible, key=lambda e: (abs((e - primary).days), e))[:expiries]
     near = sorted((k for k in chains[0].strikes if k > 0), key=lambda k: (abs(k - center), k))[:strikes]
     found = []
-    for expiry in chosen[:expiries]:
+    for expiry in sorted(chosen):
         for strike in sorted(near):
             for right in ("C", "P"):
                 if (symbol, expiry, strike, right) in known:
+                    continue
+                # Forbidden contest options (Nov 20 RKLB calls, extra Nov 20 SPY options) are never requested.
+                if manifest.prohibited_reason(placeholder(expiry, strike, right)):
                     continue
                 details = await broker.reqContractDetailsAsync(
                     Option(
@@ -141,7 +166,6 @@ async def _option_chain(manifest, broker, stock, expiries, strikes, center, know
                     )
                 )
                 c = _option(details, symbol, stock.con_id, expiry, strike, right)
-                # Forbidden contest options (Nov 20 RKLB calls, extra Nov 20 SPY options) are never added.
                 if c is not None and not manifest.prohibited_reason(c):
                     found.append(c)
     return found

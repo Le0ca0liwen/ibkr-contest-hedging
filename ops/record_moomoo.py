@@ -10,6 +10,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
+ARCHIVE_DAILY_BYTES = 750_000_000
+
 
 def make_handlers(sdk, lock, securities, rights, stamp, bars=None):
     class Quotes(sdk.StockQuoteHandlerBase):
@@ -38,15 +40,14 @@ def make_handlers(sdk, lock, securities, rights, stamp, bars=None):
     class Notify(sdk.SysNotifyHandlerBase):
         def on_recv_rsp(self, rsp):
             ret, data = super().on_recv_rsp(rsp)
-            if ret == sdk.RET_OK and data.get("type") == sdk.SysNotifyType.QOT_RIGHT:
-                with lock:
-                    rights.update(
-                        {
-                            k: v
-                            for k, v in data.get("msg", {}).items()
-                            if k in ("us_qot_right", "us_option_qot_right")
-                        }
-                    )
+            # The SDK returns (notify_type, sub_type, payload); quote rights are top-level payload keys.
+            if ret == sdk.RET_OK and isinstance(data, tuple) and len(data) == 3:
+                notify_type, _, payload = data
+                if notify_type == sdk.SysNotifyType.QOT_RIGHT and isinstance(payload, dict):
+                    with lock:
+                        rights.update(
+                            {k: v for k, v in payload.items() if k in ("us_qot_right", "us_option_qot_right")}
+                        )
             return ret, data
 
     class Bars(sdk.CurKlineHandlerBase):
@@ -157,8 +158,11 @@ def main():
                     temporary.write_text(encoded)
                     temporary.replace(path)
                     if time.monotonic() - last_archive >= 5:
-                        with (path.parent / "raw.jsonl").open("a") as archive:
-                            archive.write(encoded)
+                        # One file per day, capped, so a 10-day run cannot fill the disk.
+                        archive_path = path.parent / f"raw-{datetime.now(timezone.utc):%Y%m%d}.jsonl"
+                        if not archive_path.exists() or archive_path.stat().st_size < ARCHIVE_DAILY_BYTES:
+                            with archive_path.open("a") as archive:
+                                archive.write(encoded)
                         last_archive = time.monotonic()
                         from datetime import timedelta
                         from zoneinfo import ZoneInfo

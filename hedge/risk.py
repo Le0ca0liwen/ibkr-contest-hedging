@@ -40,14 +40,19 @@ class RiskEngine:
             return RiskResult(
                 passed=False, reasons=("Missing quotes or stress coverage for holdings",), metrics={}
             )
-        gross, delta, stock, names = 0.0, {}, {}, {}
+        # Gross notional caps discretionary leverage. The mandated legs are fixed by the contest
+        # (the SPY straddle alone is ~$3.85M of underlying) and are reported separately.
+        gross, mandated_gross, delta, stock, names = 0.0, 0.0, {}, {}, {}
         gamma, vega, theta = {}, {}, {}
         rho, beta_delta, rho_missing = {}, 0.0, set()
         actual = snapshot.quantities()
         margin_increment, assignment_cash = 0.0, 0.0
         for i, quantity in active.items():
             c, q = c_map[i], quotes[i]
-            gross += abs(quantity) * c.multiplier * q.spot
+            if i in self.manifest.mandatory:
+                mandated_gross += abs(quantity) * c.multiplier * q.spot
+            else:
+                gross += abs(quantity) * c.multiplier * q.spot
             delta[c.symbol] = delta.get(c.symbol, 0) + quantity * c.multiplier * q.delta * q.spot
             gamma[c.symbol] = gamma.get(c.symbol, 0) + quantity * c.multiplier * q.gamma
             vega[c.symbol] = vega.get(c.symbol, 0) + quantity * c.multiplier * q.vega / 100
@@ -79,6 +84,7 @@ class RiskEngine:
             "stress_loss": stress_loss,
             "stress_limit": 0.03 * budget,
             "gross_notional": gross,
+            "mandated_gross_notional": mandated_gross,
             "excess_liquidity_estimate": remaining_liquidity,
             "assignment_cash": assignment_cash,
             "estimated_added_margin": margin_increment,
@@ -185,15 +191,19 @@ class RiskGate:
             allowed_type = "synthetic" if self.demo else "live"
             if q.data_type != allowed_type:
                 reasons.append(f"Non-live quote: {i}")
+            limits = self.manifest.risk
+            traded = quantities.get(i, 0) != actual.get(i, 0)
+            # An unchanged holding only needs a current valuation; anything traded needs a fresh book.
             max_age = (
-                self.manifest.risk.option_quote_age if c.kind == "OPT" else self.manifest.risk.stock_quote_age
+                (limits.option_quote_age if traded else limits.held_option_quote_age)
+                if c.kind == "OPT"
+                else limits.stock_quote_age
             )
+            greek_age = limits.greek_age if traded else max(limits.greek_age, limits.held_option_quote_age)
             if (now - q.observed_at).total_seconds() > max_age or q.observed_at > now + timedelta(seconds=1):
                 reasons.append(f"Stale/future quote: {i}")
             if c.kind == "OPT" and (
-                q.iv is None
-                or q.greek_at is None
-                or (now - q.greek_at).total_seconds() > self.manifest.risk.greek_age
+                q.iv is None or q.greek_at is None or (now - q.greek_at).total_seconds() > greek_age
             ):
                 reasons.append(f"Missing/stale option Greeks: {i}")
             if c.kind == "OPT" and q.greek_at is not None and q.greek_at > now + timedelta(seconds=1):

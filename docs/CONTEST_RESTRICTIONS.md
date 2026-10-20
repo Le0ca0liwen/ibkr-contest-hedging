@@ -65,3 +65,37 @@ calendar days since the previous contest session, so it is 3 on Mondays
 (Oct 26, Nov 2) and 1 otherwise. The template sets these dates, the expiry and
 the rate, and `policy.cash_rate: 0.0344` so NAV forecasts include cash interest.
 The account, report source and verified conIds must still be filled in.
+
+## Contest setup checklist (Moomoo data, IBKR broker)
+
+IBKR provides no live quotes to this team; Moomoo OpenD is the only market-data
+source and never trades. Before Day 0:
+
+1. Copy `config/contest.template.yaml` to `config/local.contest.yaml`. Keep
+   `market_data_provider: moomoo`. Fill in `account`, `report_source`,
+   `initial_nav` (the verified Day 0 NAV), the final strikes' conIds (the handout
+   says strikes are set shortly before trading) and the SPCX/RKLB/SPY stocks.
+2. Fetch joint daily history (SPY is required for beta even though its shares are
+   forbidden), and re-run it before **every** open; the service reloads the file
+   and waits rather than trading if it is over 7 days old:
+   `.runtime/moomoo-env/bin/python ops/fetch_moomoo_daily.py --symbols SPCX RKLB SPY IVV VOO --as-of <today> --output data/moomoo/daily-contest.csv`.
+   SPCX needs at least 21 completed sessions.
+3. Discover hedge candidates read-only, then regenerate the collector list:
+   `python -m hedge.cli expand-universe --config config/local.contest.yaml --symbols IVV VOO --option-symbols SPCX RKLB SPY --expiries 3 --strikes 6 --output config/local.contest.yaml`
+   then `python -m hedge.cli moomoo-codes --config config/local.contest.yaml`.
+   Discovery and screening use the expiries nearest Nov 20 on both sides (for
+   SPY, Nov 19/23 because every other Nov 20 SPY option is forbidden).
+4. Optional: record verified shortable shares in `stock_borrow` with
+   `stock_borrow_source`; Moomoo has no borrow data, so new stock shorts are
+   otherwise disabled (options can still hedge).
+5. `python -m hedge.cli validate config/local.contest.yaml`, start the service in
+   shadow mode, and check the dashboard: provider "moomoo (data only)", no
+   "not subscribed" alert, `unquoted_tradable_contracts` empty.
+
+Risk notes: the seven fixed legs are reported as `mandated_gross_notional` and
+are outside the discretionary 3x gross cap (the SPY straddle alone is ~$3.85M of
+underlying). Held options that are not being traded may have an unchanged
+(quiet) Moomoo book for up to `held_option_quote_age` (300 s) before hedging
+waits; anything traded still needs a book under 60 s old. Each session's last
+pre-close and one post-close capture of all quotes, Greeks, IBKR position marks
+and risk metrics are stored as `close_marks` records for score attribution.

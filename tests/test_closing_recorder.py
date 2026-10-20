@@ -1,3 +1,4 @@
+import asyncio
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -342,3 +343,65 @@ async def test_submit_rejects_unqualified_contract_even_with_ready_account(manif
     broker.qualified = broker.reconciled = True
     with pytest.raises(ValueError, match="Order contract has not passed broker qualification"):
         await broker.submit(SimpleNamespace(con_id=10), 1)
+
+
+def test_close_marks_keep_last_pre_close_capture_and_one_post_close(store, manifest):
+    from hedge.closing import CloseMarkRecorder
+
+    store.initialize()
+    day = manifest.scoring_sessions[0]
+    close = manifest.session_close(day)
+    time = [close - timedelta(seconds=150)]
+    calls = []
+
+    def collect(now, session, phase):
+        calls.append((now, phase))
+        return {"date": str(session), "phase": phase, "at": now.isoformat()}
+
+    recorder = CloseMarkRecorder(manifest, store, lambda: time[0], collect, lambda *x: None)
+    recorder.tick()
+    assert not calls  # outside the final two minutes
+    for offset in (100, 30, 1):
+        time[0] = close - timedelta(seconds=offset)
+        recorder.tick()
+    time[0] = close + timedelta(seconds=1)
+    recorder.tick()
+    rows = store.records("close_marks", manifest.account)
+    assert [r["phase"] for r in rows] == ["pre_close"]
+    assert rows[0]["at"] == (close - timedelta(seconds=1)).isoformat()  # last capture before the bell
+    for offset in (40, 60):
+        time[0] = close + timedelta(seconds=offset)
+        recorder.tick()
+    assert sorted(r["phase"] for r in store.records("close_marks", manifest.account)) == [
+        "post_close",
+        "pre_close",
+    ]
+    # A restarted recorder cannot duplicate the session's captures.
+    again = CloseMarkRecorder(manifest, store, lambda: time[0], collect, lambda *x: None)
+    again.tick()
+    assert len(store.records("close_marks", manifest.account)) == 2
+
+
+@pytest.mark.asyncio
+async def test_service_close_marks_include_quotes_greeks_and_risk(tmp_path, monkeypatch):
+    from hedge.demo import demo_manifest
+    from hedge.service import TradingService
+    from hedge.storage import Store
+
+    monkeypatch.chdir(tmp_path)
+    service = TradingService(demo_manifest(), Store(f"sqlite:///{tmp_path}/marks.db"), demo=True)
+    await service.start()
+    try:
+        await asyncio.sleep(0.2)
+        now = service.now()
+        day = service.manifest.active_session(now) or service.manifest.day_zero
+        payload = service._close_marks(now, day, "pre_close")
+        assert payload["quotes"] and payload["positions"]
+        sample = next(iter(payload["quotes"].values()))
+        assert {"bid", "ask", "mid", "iv", "delta", "gamma", "vega", "theta", "data_type"} <= sample.keys()
+        assert payload["ibkr_marks"] == {}  # simulator has no IBKR marks
+        store = service.store
+        store.record("close_marks", service.manifest.account, payload)
+        assert store.records("close_marks", service.manifest.account, 1)
+    finally:
+        await service.stop()

@@ -35,7 +35,10 @@ def main():
         joined = pd.concat(frames, ignore_index=True)
         path = Path(args.output)
         path.parent.mkdir(parents=True, exist_ok=True)
-        joined.to_csv(path, index=False)
+        # Atomic replace: the running service reloads this file when it changes.
+        temporary = path.with_suffix(".tmp")
+        joined.to_csv(temporary, index=False)
+        temporary.replace(path)
         path.with_suffix(".json").write_text(
             json.dumps(
                 {

@@ -9,7 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from .broker import IBKRBroker, SimBroker
-from .closing import ClosingRecorder
+from .closing import CloseMarkRecorder, ClosingRecorder
 from .config import NY
 from .continuity import DataUnavailable, data_only, quote_coverage
 from .data import QuoteRecorder
@@ -17,7 +17,7 @@ from .demo import demo_quotes
 from .execution import ExecutionManager
 from .execution_quality import execution_quality
 from .models import digest, utcnow
-from .moomoo_data import MoomooData
+from .moomoo_data import MoomooData, missing_codes
 from .optimizer import HedgeOptimizer, execution_cost
 from .recovery import RecoveryController, recovery_budget_errors
 from .risk import RiskGate
@@ -109,6 +109,7 @@ class TradingService:
         self.closing_recorder = ClosingRecorder(
             manifest, self.ledger, self.broker, self.now, self.alert, demo
         )
+        self.close_marks = CloseMarkRecorder(manifest, store, self.now, self._close_marks, self.alert)
 
     def now(self):
         return self.demo_start + timedelta(seconds=time.monotonic() - self.started) if self.demo else utcnow()
@@ -141,6 +142,15 @@ class TradingService:
                 stderr=self.market_data_log,
                 env={k: v for k, v in os.environ.items() if k in ("HOME", "PATH", "TMPDIR", "LANG")},
             )
+        if not self.demo and self.manifest.market_data_provider == "moomoo":
+            # The collector subscribes only listed codes; anything missing silently has no quotes.
+            if missing := missing_codes(self.manifest):
+                self.alert(
+                    "error" if not Path("config/local.moomoo-codes.json").exists() else "warning",
+                    f"Moomoo collector is not subscribed to {len(missing)} manifest contracts "
+                    f"(e.g. {', '.join(missing[:4])}); run `python -m hedge.cli moomoo-codes --config "
+                    "<config>` and restart",
+                )
         if self.demo:
             if not self.rehearsal:
                 self.ledger.import_close(
@@ -160,6 +170,7 @@ class TradingService:
             asyncio.create_task(self._monitor_loop()),
             asyncio.create_task(self._supervisor_loop()),
             asyncio.create_task(self.closing_recorder.run()),
+            asyncio.create_task(self.close_marks.run()),
         ]
 
     async def stop(self):
@@ -779,6 +790,7 @@ class TradingService:
                 "reference_midpoints": {str(i): q.mid for i, q in quotes.items()},
                 "risk_passed": gate.passed,
                 "risk_reasons": gate.reasons,
+                "risk_metrics": gate.metrics,
                 "improvement": improvement,
                 "threshold": threshold,
                 "trade_eligible": gate.passed
@@ -1013,6 +1025,61 @@ class TradingService:
             if result["submitted"]
             else result["reason"]
         )
+
+    def _close_marks(self, now, day, phase):
+        """Everything needed later to split a day's score miss into Greeks, marks and costs."""
+        snap, quotes = self.last_snapshot, dict(self.last_quotes)
+        try:
+            estimate = self._estimate_nav(snap, quotes) if snap else None
+        except ValueError:
+            estimate = None
+        try:
+            target = self.closing_target(snap, now) if snap else None
+        except ValueError:
+            target = None
+        contracts = self.manifest.contract_map
+        return {
+            "contest": self.manifest.contest_id,
+            "date": str(day),
+            "phase": phase,
+            "at": now.isoformat(),
+            "scheduled_close": self.manifest.session_close(day).isoformat(),
+            "config_hash": self.manifest.config_hash,
+            "nav": str(snap.nav) if snap else None,
+            "cash": str(snap.cash) if snap else None,
+            "accrued_cash": str(snap.accrued_cash) if snap and snap.accrued_cash is not None else None,
+            "account_at": snap.account_at.isoformat() if snap else None,
+            "nav_estimate": estimate,
+            "closing_target": str(target) if target is not None else None,
+            "positions": {str(i): q for i, q in (snap.quantities() if snap else {}).items()},
+            "quotes": {
+                str(i): {
+                    "label": contracts[i].label,
+                    "kind": contracts[i].kind,
+                    "bid": q.bid,
+                    "ask": q.ask,
+                    "mid": q.mid,
+                    "data_type": q.data_type,
+                    "provider": q.provider,
+                    "observed_at": q.observed_at.isoformat(),
+                    "spot": q.spot,
+                    "iv": q.iv,
+                    "delta": q.delta,
+                    "gamma": q.gamma,
+                    "vega": q.vega,
+                    "theta": q.theta,
+                    "model_price": q.model_price,
+                }
+                for i, q in quotes.items()
+                if i in contracts
+            },
+            # IBKR's own marks are what the official NAV uses; Moomoo mids are our estimate.
+            "ibkr_marks": {
+                str(i): mark for i, mark in getattr(self.broker, "portfolio_marks", dict)().items()
+            },
+            "risk_metrics": self.last_risk.metrics if self.last_risk else None,
+            "risk_reasons": list(self.last_risk.reasons) if self.last_risk else [],
+        }
 
     def _session_clock(self):
         now = self.now()
@@ -1519,15 +1586,24 @@ class TradingService:
                 },
                 "contract_labels": {i: c.label for i, c in self.manifest.contract_map.items()},
                 "quote_count": len(self.last_quotes),
-                "market_data_provider": "moomoo (data only)"
+                # Label what execution actually uses, not merely whether a Moomoo file exists.
+                "market_data_provider": "synthetic"
+                if self.demo
+                else "moomoo (data only)"
+                if self.manifest.market_data_provider == "moomoo"
+                else "IBKR (Moomoo display only, not used for execution)"
                 if self.moomoo_data and self.moomoo_data.path.exists()
-                else "IBKR"
-                if not self.demo
-                else "synthetic",
+                else "IBKR",
                 "market_data_execution_verified": bool(self.last_quotes)
                 and all(q.data_type == "live" for q in self.last_quotes.values())
-                if self.moomoo_data and self.moomoo_data.path.exists()
+                and set(self.manifest.mandatory).issubset(self.last_quotes)
+                if self.manifest.market_data_provider == "moomoo" and not self.demo
                 else None,
+                "unquoted_tradable_contracts": [
+                    self.manifest.contract_map[i].label
+                    for i in self.manifest.allowlist
+                    if i not in self.last_quotes
+                ][:20],
                 "market_data_received_at": self.moomoo_data.received_at if self.moomoo_data else None,
                 "market_data_notes": self.moomoo_data.errors if self.moomoo_data else [],
                 "market_quotes": [

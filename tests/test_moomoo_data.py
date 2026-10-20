@@ -182,6 +182,7 @@ def test_option_book_one_minute_boundary_with_fresh_underlying(tmp_path):
 
     m = demo_manifest()
     assert m.risk.option_quote_age == 60
+    held_age = m.risk.held_option_quote_age  # quiet held books; the gate keeps 60 s for traded legs
     now = datetime.combine(m.scoring_sessions[0], datetime.min.time(), NY).replace(hour=10)
     raw = fixture(m, now)
     raw.update(
@@ -191,7 +192,7 @@ def test_option_book_one_minute_boundary_with_fresh_underlying(tmp_path):
     )
     for c in m.contracts:
         item = raw["securities"][code_for(c)]
-        book_at = now - timedelta(seconds=60) if c.kind == "OPT" else now
+        book_at = now - timedelta(seconds=held_age) if c.kind == "OPT" else now
         item.update(book_push_at=book_at.isoformat(), book_push_count=2)
         if c.kind == "OPT":
             raw["identities"][code_for(c)] = {
@@ -263,3 +264,77 @@ def test_future_last_trade_does_not_hide_verified_current_book(tmp_path):
         item["book_push_count"] = 1
     path.write_text(json.dumps(raw))
     assert feed.quotes(now) == {}
+
+
+def test_collector_codes_cover_underlyings_mandates_then_candidates(manifest, tmp_path):
+    import json
+
+    from hedge.moomoo_data import collector_codes, missing_codes
+
+    codes = collector_codes(manifest)
+    assert codes[0] == "US.BA" and "US.SPY" in codes[:2]  # beta benchmark is quoted even if untradable
+    mandated = {code_for(manifest.contract_map[i]) for i in manifest.mandatory}
+    assert set(codes[2 : 2 + len(mandated)]) == mandated
+    assert len(codes) == len(set(codes)) == 1 + 1 + len(manifest.contracts) - 1
+    path = tmp_path / "codes.json"
+    path.write_text(json.dumps(codes[:-1]))
+    assert missing_codes(manifest, path) == codes[-1:]
+
+
+def test_deep_itm_leg_at_model_floor_stays_live_with_carried_iv(tmp_path):
+    from datetime import datetime
+
+    m = demo_manifest()
+    now = datetime.combine(m.scoring_sessions[0], datetime.min.time(), NY).replace(hour=10)
+    raw = fixture(m, now)
+    raw.update(
+        quote_server_connected=True,
+        rights={"us_qot_right": "LV3", "us_option_qot_right": "LV1"},
+        identities={},
+    )
+    for c in m.contracts:
+        item = raw["securities"][code_for(c)]
+        item["quote"][0].update(data_date=str(now.date()), data_time=now.time().isoformat())
+        item.update(book_push_at=now.isoformat(), book_push_count=2)
+        if c.kind == "OPT":
+            raw["identities"][code_for(c)] = {
+                "stock_owner": "US.BA",
+                "strike_time": str(c.expiry),
+                "option_type": "CALL" if c.right == "C" else "PUT",
+                "strike_price": c.strike,
+            }
+    put = next(c for c in m.contracts if c.kind == "OPT" and c.right == "P" and c.strike >= 195)
+    intrinsic = put.strike - 150.0
+    raw["securities"]["US.BA"]["order_book"] = {"Bid": [[149.99, 100]], "Ask": [[150.01, 100]]}
+    raw["securities"][code_for(put)]["order_book"] = {
+        "Bid": [[intrinsic - 0.20, 10]],
+        "Ask": [[intrinsic + 0.18, 10]],  # mid below intrinsic, as real deep-ITM books often are
+    }
+    path = tmp_path / "quotes.json"
+    path.write_text(json.dumps(raw))
+    feed = MoomooData(m, path)
+    quote = feed.quotes(now)[put.con_id]
+    assert quote.data_type == "live" and quote.iv == 0.30  # vendor IV carried, not 0.001
+    assert quote.delta < -0.9
+    assert any("carried IV" in e for e in feed.errors)
+    raw["securities"][code_for(put)]["quote"][0]["implied_volatility"] = 0
+    path.write_text(json.dumps(raw))
+    quote = MoomooData(m, path).quotes(now).get(put.con_id)
+    assert quote is None or quote.data_type == "frozen"  # nothing to carry: never live
+
+
+def test_operator_borrow_allowance_reaches_moomoo_stock_quotes(tmp_path):
+    import pytest
+
+    from hedge.config import Manifest
+
+    m = demo_manifest()
+    now = utcnow()
+    path = tmp_path / "quotes.json"
+    path.write_text(json.dumps(fixture(m, now)))
+    assert MoomooData(m, path).quotes(now)[10].shortable_shares is None  # no data: no new shorts
+    data = {**m.model_dump(), "stock_borrow": {"BA": 500}, "stock_borrow_source": "IBKR SLB check"}
+    borrowed = Manifest.model_validate(data)
+    assert MoomooData(borrowed, path).quotes(now)[10].shortable_shares == 500
+    with pytest.raises(ValueError):
+        Manifest.model_validate({**data, "stock_borrow_source": ""})

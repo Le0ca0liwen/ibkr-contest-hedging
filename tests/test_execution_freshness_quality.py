@@ -299,3 +299,38 @@ def test_quality_batches_queries_and_keeps_accounts_and_late_fees_separate(store
     assert row["fees_complete"] and row["known_fees_usd"] == Decimal("0.5")
     assert store.fills("OTHER")[0]["commission"] == 999
     assert store.fills(manifest.account)[0]["commission_currency"] == "USD"
+
+
+def test_scenarios_tolerate_sub_tick_recalibration_noise_but_not_real_moves():
+    from datetime import datetime, timezone
+
+    import numpy as np
+
+    from hedge.models import Quote
+    from hedge.scenarios import ScenarioSet
+
+    now = datetime(2026, 10, 22, 15, tzinfo=timezone.utc)
+    scenarios = ScenarioSet(
+        ids=(1,),
+        changes=np.zeros((1, 1)),
+        weights=np.ones(1),
+        stress=np.zeros((1, 1)),
+        next_changes=None,
+        calendar_days=1,
+        source="test",
+        identifier="x",
+        built_at=now,
+        valuation_inputs={1: (770.0, 0.18)},
+    )
+
+    def quote(spot, iv, vega=88.0):  # SPY ATM: ~$0.88 per share per vol point
+        return {
+            1: Quote(
+                con_id=1, bid=1, ask=1.1, bid_size=1, ask_size=1, observed_at=now, spot=spot, iv=iv, vega=vega
+            )
+        }
+
+    assert scenarios.is_current(quote(770.005, 0.18004), now, 5)  # half-cent mid, recalibrated IV
+    assert not scenarios.is_current(quote(770.5, 0.18), now, 5)  # a real 6.5 bp move
+    assert not scenarios.is_current(quote(770.0, 0.181), now, 5)  # 0.1 vol point = $0.088/share
+    assert scenarios.is_current(quote(770.0, 0.25, vega=0.0), now, 5)  # deep ITM: IV moves price by $0

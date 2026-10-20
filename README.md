@@ -20,10 +20,11 @@ The [Google AI supervisor](docs/GOOGLE_SUPERVISOR.md) defaults to Gemini 3.8
 Flash and supports model selection in Hedge decisions. It provides bounded
 advice only and runs independently of trading; setup never enables orders.
 
-Moomoo is being evaluated strictly as a **market-data-only** source. The isolated
-quote diagnostic, OpenD setup, entitlements, and validation gates are described
-in [Moomoo market data](docs/MOOMOO_MARKET_DATA.md). It does not enable execution;
-IBKR remains the sole trading adapter.
+Moomoo is the **market-data-only** source for the contest (`market_data_provider:
+moomoo`): it supplies every quote, book and daily history, and never trades. IBKR
+remains the sole broker (orders, positions, NAV). OpenD setup, entitlements and
+validation gates are in [Moomoo market data](docs/MOOMOO_MARKET_DATA.md); the
+contest setup checklist is in [contest restrictions](docs/CONTEST_RESTRICTIONS.md).
 
 Follow [the practice runbook](docs/PRACTICE_RUNBOOK.md) for paper TWS setup, read-only account/contract discovery, empty-account purchase rehearsal, and Day 0 operation. Run `.venv/bin/python -m hedge.cli serve --rehearsal` (or double-click `Practice Rehearsal.command`) to test buying the mandatory options before hedging. Round dates live in the local manifest. The current practice schedules mandatory purchases on Day 0; scoring starts on the next configured session. Purchase timing is configured separately and must be revised explicitly if Day 0 is missed.
 

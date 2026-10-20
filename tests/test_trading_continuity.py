@@ -43,7 +43,12 @@ async def test_temporary_wait_resumes_only_after_fresh_preflight(operational):
     original = service.broker.quotes()
     old = {
         **original,
-        101: original[101].model_copy(update={"observed_at": service.now() - timedelta(seconds=61)}),
+        101: original[101].model_copy(
+            update={
+                "observed_at": service.now()
+                - timedelta(seconds=service.manifest.risk.held_option_quote_age + 1)
+            }
+        ),
     }
     service.broker.update_quotes(old, service.now())
     assert not risk_now(service).passed

@@ -170,7 +170,15 @@ class ChainBroker(DiscoveryBroker):
                 exchange="SMART",
                 tradingClass=symbol,
                 multiplier="100",
-                expirations=["20261016", "20261120", "20261218", "20270115"],
+                expirations=[
+                    "20261016",
+                    "20261104",
+                    "20261105",
+                    "20261119",
+                    "20261120",
+                    "20261123",
+                    "20261218",
+                ],
                 strikes=[90, 95, 100, 105, 110, 115, 120],
             )
         ]
@@ -252,9 +260,57 @@ async def test_option_chain_discovery_skips_forbidden_and_short_expiries():
     )
     assert broker.connection["readonly"] and broker.disconnected
     added = [c for c in expanded.contracts if c.con_id >= 1000]
-    assert added and all(c.expiry in (expiry, date(2026, 12, 18)) for c in added)
+    # Expiries nearest the contest expiry on both sides, never the days right after the contest.
+    assert {c.expiry for c in added if c.symbol == "RKLB"} == {expiry, date(2026, 11, 19)}
+    assert {c.expiry for c in added if c.symbol == "SPY"} == {date(2026, 11, 19), date(2026, 11, 23)}
+    assert not any(e[1] == "20261120" and e[0] == "SPY" for e in broker.seen)  # never requested
     assert not any(c.symbol == "RKLB" and c.right == "C" and c.expiry == expiry for c in added)
     assert not any(c.symbol == "SPY" and c.expiry == expiry for c in added)
     assert {c.con_id for c in added} <= set(expanded.allowlist)
     assert 40 in expanded.allowlist and 30 not in expanded.allowlist
     assert expanded.mandatory == m.mandatory
+
+
+def test_daily_history_reloads_and_stale_history_waits(manifest, now, tmp_path):
+    import os
+    from datetime import timedelta
+
+    from hedge.continuity import DataUnavailable
+
+    path = tmp_path / "stocks.csv"
+    joint_history(path, now)
+    spy = Contract(con_id=200, symbol="SPY", kind="STK")
+    m = manifest.model_copy(
+        update={"contracts": (*manifest.contracts, spy), "daily_stock_history": str(path)}
+    )
+    engine = ScenarioEngine(m)
+    assert engine.daily_covariance(now, ("BA", "SPY")).shape == (2, 2)
+    later = now + timedelta(days=10)
+    with pytest.raises(DataUnavailable, match="stale"):
+        engine.daily_covariance(later, ("BA", "SPY"))
+    joint_history(path, later)  # the operator re-runs the daily fetch
+    os.utime(path, ns=(engine.daily_mtime + 10**9, engine.daily_mtime + 10**9))
+    engine.refresh_daily_history()
+    assert engine.daily_covariance(later, ("BA", "SPY")).shape == (2, 2)
+
+
+def test_screening_uses_neighbouring_expiries_when_contest_expiry_is_forbidden(manifest, quotes):
+    from datetime import date
+
+    base = manifest.contract_map[101]
+    neighbours = [
+        base.model_copy(update={"con_id": 300 + n, "expiry": e, "strike": k})
+        for n, (e, k) in enumerate(
+            [(date(2026, 10, 15), 195), (date(2026, 10, 15), 200), (date(2026, 10, 19), 195)]
+        )
+    ]
+    m = manifest.model_copy(
+        update={
+            "contracts": (*manifest.contracts, *neighbours),
+            "allowlist": (10, *(c.con_id for c in neighbours)),
+        }
+    )
+    quotes = {**quotes, **{c.con_id: quotes[101].model_copy(update={"con_id": c.con_id}) for c in neighbours}}
+    ids = screen_options(m, quotes, {})
+    # No same-expiry candidates are allowlisted, so both neighbouring expiries are screened.
+    assert {300, 301, 302} <= set(ids)

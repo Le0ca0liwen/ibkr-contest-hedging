@@ -4,6 +4,8 @@ import asyncio
 from datetime import timedelta
 from decimal import Decimal
 
+from .models import digest
+
 
 class ClosingRecorder:
     def __init__(self, manifest, ledger, broker, clock, alert, demo=False):
@@ -136,6 +138,58 @@ class ClosingRecorder:
                 self.status = f"Closing recorder unavailable: {type(exc).__name__}"
                 try:
                     self.alert("error", self.status)
+                except Exception:
+                    pass
+            await asyncio.sleep(1)
+
+
+class CloseMarkRecorder:
+    """Durable per-session close marks for score attribution (quotes, Greeks, IBKR marks, risk).
+
+    During the final two minutes the latest capture is held in memory; the last one taken
+    before the bell is written once the session closes, plus one post-close capture 30-300 s
+    after the bell. Record ids are deterministic, so restarts never duplicate a session.
+    """
+
+    def __init__(self, manifest, store, clock, collect, alert):
+        self.manifest, self.store, self.clock = manifest, store, clock
+        self.collect, self.alert = collect, alert
+        self.pending = None
+        self.written = set()
+        self.status = "Waiting for the final two minutes of a contest session"
+
+    def _write(self, day, phase, payload):
+        # Deterministic id: a restart inside the window cannot duplicate or overwrite a capture.
+        identifier = digest((self.manifest.contest_id, str(day), phase))[:32]
+        self.store.record("close_marks", self.manifest.account, payload, identifier)
+        self.written.add((day, phase))
+        self.status = f"Close marks recorded for {day} ({phase})"
+
+    def tick(self):
+        now = self.clock()
+        day = self.manifest.active_session(now)
+        if day is None:
+            return
+        seconds = (self.manifest.session_close(day) - now).total_seconds()
+        if 0 < seconds <= 120:
+            self.pending = (day, self.collect(now, day, "pre_close"))
+        elif seconds <= 0:
+            if self.pending and self.pending[0] == day:
+                self._write(day, "pre_close", self.pending[1])
+                self.pending = None
+            if -300 <= seconds <= -30 and (day, "post_close") not in self.written:
+                self._write(day, "post_close", self.collect(now, day, "post_close"))
+
+    async def run(self):
+        while True:
+            try:
+                self.tick()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.status = f"Close mark recorder unavailable: {type(exc).__name__}"
+                try:
+                    self.alert("warning", self.status)
                 except Exception:
                     pass
             await asyncio.sleep(1)

@@ -46,3 +46,31 @@ def test_moomoo_probe_uses_only_quote_context_and_preserves_failures():
 def test_probe_rejects_nonmarket_codes_before_connecting():
     with pytest.raises(ValueError):
         probe(None, ["place_order"])
+
+
+def test_collector_applies_quote_right_downgrades_from_sdk_tuple():
+    import importlib.util
+    import threading
+    from types import SimpleNamespace
+
+    spec = importlib.util.spec_from_file_location("record_moomoo", "ops/record_moomoo.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    class Base:
+        def on_recv_rsp(self, rsp):
+            return rsp
+
+    sdk = SimpleNamespace(
+        StockQuoteHandlerBase=Base,
+        OrderBookHandlerBase=Base,
+        SysNotifyHandlerBase=Base,
+        CurKlineHandlerBase=Base,
+        RET_OK=0,
+        SysNotifyType=SimpleNamespace(QOT_RIGHT="QOT_RIGHT"),
+    )
+    rights = {"us_qot_right": "LV3", "us_option_qot_right": "LV1"}
+    notify = module.make_handlers(sdk, threading.Lock(), {}, rights, lambda: "now")[2]
+    # moomoo-api 10.11 returns (notify_type, sub_type, payload), not a dict.
+    notify.on_recv_rsp((0, ("QOT_RIGHT", None, {"us_option_qot_right": "NO", "other": "x"})))
+    assert rights == {"us_qot_right": "LV3", "us_option_qot_right": "NO"}
