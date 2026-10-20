@@ -1522,6 +1522,7 @@ class TradingService:
                     "beta_benchmark": self.manifest.beta_benchmark,
                     "beta_source": self.last_scenarios.beta_source if self.last_scenarios else "Unavailable",
                     "rho_source": "American-option model; dollars per 1 percentage-point rate change",
+                    "spot_vol_correlation": getattr(self.last_scenarios, "spot_vol_correlation", {}),
                 },
                 "rehearsal": self.rehearsal,
                 "day_zero": str(self.manifest.day_zero),

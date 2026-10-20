@@ -47,6 +47,10 @@ class ScenarioSet:
     overnight_changes: np.ndarray | None = None
     next_session: date | None = None
     overnight_variance: float = 0.0
+    # Symbol -> correlation of its modeled IV shock with its own spot shock (empty: observed IV paths),
+    # and the per-scenario IV shocks applied, aligned with the rows of changes/next_changes.
+    spot_vol_correlation: dict[str, float] = field(default_factory=dict)
+    iv_shocks: dict[str, np.ndarray] = field(default_factory=dict)
 
     # Moomoo re-derives spot from the book mid and recalibrates IV on every read (time to expiry
     # shrinks each call), so exact equality fails on unchanged markets. Tolerate only changes
@@ -154,38 +158,45 @@ class ScenarioEngine:
         n = 64
         normals = rng.standard_normal((n // 2, len(symbols) + 1))
         normals = np.vstack([normals, -normals])  # no invented directional drift
+        # Drawn after the spot block (spot paths unchanged) and antithetic with it, so each
+        # mirrored pair flips both the spot shock and the whole IV shock.
+        vol_normals = rng.standard_normal((n // 2, len(symbols)))
+        vol_normals = np.vstack([vol_normals, -vol_normals])
         vols = {
             s: next(
                 (q.iv for i, q in quotes.items() if self.manifest.contract_map[i].symbol == s and q.iv), 0.25
             )
             for s in symbols
         }
-        shocks = {
-            s: vols[s] * np.sqrt(days / 365) * (0.6 * normals[:, 0] + 0.8 * normals[:, j + 1])
-            for j, s in enumerate(symbols)
-        }
-        iv_shocks = {s: 0.015 * np.sqrt(days) * normals[:, j + 1] for j, s in enumerate(symbols)}
-        source = "modeled spot/IV scenarios; NOT historical performance evidence"
+        shocks = None
+        spot_vol = {}
         if self.history is not None and not self.history.empty:
             # Input is point-in-time archived quote observations, never future rows.
+            # Matched-clock paths carry observed IV changes: keep their empirical spot-vol link.
             historical = self._remaining_paths(now, end, symbols)
             if historical is not None:
                 shocks, iv_shocks = historical
                 n = len(next(iter(shocks.values())))
                 source = "historical matched-clock joint spot/IV paths"
-        if self.daily_history is not None:
-            if source.startswith("historical matched-clock"):
-                pass  # richer intraday history takes precedence
-            else:
+        if shocks is None:
+            if self.daily_history is not None:
                 covariance = self.daily_covariance(now, symbols)
-                shocks = dict(
-                    zip(
-                        symbols,
-                        (normals[:, 1:] @ np.linalg.cholesky(covariance).T * np.sqrt(days * 252 / 365)).T,
-                        strict=True,
-                    )
-                )
+                joint = normals[:, 1:] @ np.linalg.cholesky(covariance).T
+                standardized = joint / np.sqrt(np.diag(covariance))
+                shocks = dict(zip(symbols, (joint * np.sqrt(days * 252 / 365)).T, strict=True))
                 source = "prior daily joint returns, shrunk covariance; modeled intraday/IV scaling"
+            else:
+                standardized = 0.6 * normals[:, :1] + 0.8 * normals[:, 1:]
+                shocks = {
+                    s: vols[s] * np.sqrt(days / 365) * standardized[:, j] for j, s in enumerate(symbols)
+                }
+                source = "modeled spot/IV scenarios; NOT historical performance evidence"
+            # iv_s = sigma_iv * (rho_s * z_spot_s + sqrt(1 - rho_s^2) * u_s), z_spot_s unit variance.
+            spot_vol = {s: self.manifest.spot_vol_rho(s) for s in symbols}
+            rho = np.array([spot_vol[s] for s in symbols])
+            iv = 0.015 * np.sqrt(days) * (rho * standardized + np.sqrt(1 - rho**2) * vol_normals)
+            iv_shocks = dict(zip(symbols, iv.T, strict=True))
+            source += "; spot-vol corr " + " ".join(f"{s} {r:+.2f}" for s, r in spot_vol.items())
         if (
             len(symbols) > 1
             and self.daily_history is None
@@ -248,6 +259,7 @@ class ScenarioEngine:
                 "betas": betas,
                 "rhos": rhos,
                 "overnight": overnight_changes.tolist() if overnight_changes is not None else None,
+                "spot_vol_correlation": spot_vol,
             }
         )
         return ScenarioSet(
@@ -267,6 +279,8 @@ class ScenarioEngine:
             overnight_changes,
             next_session,
             variance,
+            spot_vol,
+            iv_shocks,
         )
 
     def _reprice(self, ids, quotes, start, finish, shocks, iv_shocks, scale=1.0):
