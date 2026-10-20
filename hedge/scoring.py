@@ -9,6 +9,15 @@ from .config import Manifest
 from .models import utcnow
 from .storage import ClosingNAV, Record, Store
 
+# Closing-NAV provenance is derived from the stored source text, so no schema migration is needed.
+# Recorder captures are provisional; any other source (dashboard entry, CSV statement import) is
+# the official IBKR statement the instructor scores.
+API_SOURCES = ("IBKR API", "SYNTHETIC simulator")
+
+
+def provenance(source: str) -> str:
+    return "api" if source.startswith(API_SOURCES) else "statement"
+
 
 class ScoreLedger:
     def __init__(self, store: Store, manifest: Manifest):
@@ -63,7 +72,8 @@ class ScoreLedger:
                 )
         return self.summary()
 
-    def closes(self):
+    def revisions(self):
+        """Every closing-NAV row in insertion order, with derived provenance."""
         with self.store.sessions() as session:
             rows = session.scalars(
                 select(ClosingNAV)
@@ -73,26 +83,46 @@ class ScoreLedger:
                 )
                 .order_by(ClosingNAV.id)
             ).all()
-            return {r.day: r.nav for r in rows}
+            return [
+                {"day": r.day, "nav": r.nav, "source": r.source, "provenance": provenance(r.source)}
+                for r in rows
+            ]
 
-    def previous_close(self, day):
+    def close_records(self, revisions=None):
+        """Effective close per day: the latest statement row beats any API row regardless of
+        insertion order; among API rows (bell and post-close captures) the latest wins."""
+        chosen = {}
+        for row in self.revisions() if revisions is None else revisions:
+            current = chosen.get(row["day"])
+            if current is None or row["provenance"] == "statement" or current["provenance"] == "api":
+                chosen[row["day"]] = row
+        return chosen
+
+    def closes(self):
+        return {day: row["nav"] for day, row in self.close_records().items()}
+
+    def previous_close_record(self, day):
         days = (self.manifest.day_zero, *self.manifest.scoring_sessions)
         if day not in days or day == days[0]:
             return None
-        return self.closes().get(days[days.index(day) - 1])
+        return self.close_records().get(days[days.index(day) - 1])
+
+    def previous_close(self, day):
+        record = self.previous_close_record(day)
+        return record["nav"] if record else None
 
     def latest_report(self):
-        with self.store.sessions() as session:
-            row = session.scalars(
-                select(ClosingNAV)
-                .where(
-                    ClosingNAV.account == self.manifest.account,
-                    ClosingNAV.contest == self.manifest.contest_id,
-                )
-                .order_by(ClosingNAV.day.desc(), ClosingNAV.id.desc())
-                .limit(1)
-            ).first()
-            return {"date": str(row.day), "nav": str(row.nav), "source": row.source} if row else None
+        records = self.close_records()
+        if not records:
+            return None
+        day = max(records)
+        row = records[day]
+        return {
+            "date": str(day),
+            "nav": str(row["nav"]),
+            "source": row["source"],
+            "provenance": row["provenance"],
+        }
 
     def daily_rates(self):
         rates = dict(self.manifest.scoring_daily_rates)
@@ -142,7 +172,8 @@ class ScoreLedger:
     def summary(self):
         pending = self.manifest.scoring_rule == "pending_interest_adjustment"
         days = (self.manifest.day_zero, *self.manifest.scoring_sessions)
-        closes = self.closes()
+        records = self.close_records()
+        closes = {day: row["nav"] for day, row in records.items()}
         result, total = [], Decimal(0)
         for previous, day in pairwise(days):
             target = self.target_for(day, closes.get(previous)) if previous in closes else None
@@ -155,6 +186,7 @@ class ScoreLedger:
                 {
                     "date": str(day),
                     "nav": str(closes[day]) if day in closes else None,
+                    "provenance": records[day]["provenance"] if day in records else None,
                     "previous_date": str(previous),
                     "target_nav": str(target) if target is not None else None,
                     "daily_cash_rate": str(self.daily_rates()[day]) if day in self.daily_rates() else None,
@@ -164,6 +196,7 @@ class ScoreLedger:
         return {
             "day_zero": str(days[0]),
             "baseline": str(closes[days[0]]) if days[0] in closes else None,
+            "baseline_provenance": records[days[0]]["provenance"] if days[0] in records else None,
             "days": result,
             "total": None
             if pending

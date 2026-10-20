@@ -179,7 +179,7 @@ class ChainBroker(DiscoveryBroker):
                     "20261123",
                     "20261218",
                 ],
-                strikes=[90, 95, 100, 105, 110, 115, 120],
+                strikes=[*range(35, 61), *range(120, 171, 5), *range(750, 791, 5)],
             )
         ]
 
@@ -218,13 +218,13 @@ async def test_option_chain_discovery_skips_forbidden_and_short_expiries():
     expiry = date(2026, 11, 20)
     stocks = [Contract(con_id=i, symbol=s, kind="STK") for i, s in [(10, "SPCX"), (20, "RKLB"), (30, "SPY")]]
     legs = [
-        (101, 10, 95, "C", 25),
-        (102, 10, 100, "C", -50),
-        (103, 10, 105, "C", 25),
-        (104, 20, 95, "P", -25),
-        (105, 20, 105, "P", 25),
-        (106, 30, 100, "C", 25),
-        (107, 30, 100, "P", 25),
+        (101, 10, 130, "C", 25),
+        (102, 10, 145, "C", -50),
+        (103, 10, 160, "C", 25),
+        (104, 20, 45, "P", -25),
+        (105, 20, 55, "P", 25),
+        (106, 30, 770, "C", 25),
+        (107, 30, 770, "P", 25),
     ]
     symbols = {10: "SPCX", 20: "RKLB", 30: "SPY"}
     options = [
@@ -392,7 +392,7 @@ async def test_discovery_skips_strikes_not_listed_at_an_expiry():
         async def reqContractDetailsAsync(self, native):
             if (
                 native.secType == "OPT"
-                and native.strike == 95
+                and native.strike == 770
                 and native.lastTradeDateOrContractMonth == "20261119"
             ):
                 raise RequestError(1, 200, "No security definition has been found for the request")
@@ -401,13 +401,13 @@ async def test_discovery_skips_strikes_not_listed_at_an_expiry():
     expiry = date(2026, 11, 20)
     stocks = [Contract(con_id=i, symbol=s, kind="STK") for i, s in [(10, "SPCX"), (20, "RKLB"), (30, "SPY")]]
     legs = [
-        (101, 10, 95, "C", 25),
-        (102, 10, 100, "C", -50),
-        (103, 10, 105, "C", 25),
-        (104, 20, 95, "P", -25),
-        (105, 20, 105, "P", 25),
-        (106, 30, 100, "C", 25),
-        (107, 30, 100, "P", 25),
+        (101, 10, 130, "C", 25),
+        (102, 10, 145, "C", -50),
+        (103, 10, 160, "C", 25),
+        (104, 20, 45, "P", -25),
+        (105, 20, 55, "P", 25),
+        (106, 30, 770, "C", 25),
+        (107, 30, 770, "P", 25),
     ]
     symbols = {10: "SPCX", 20: "RKLB", 30: "SPY"}
     options = [
@@ -441,4 +441,4 @@ async def test_discovery_skips_strikes_not_listed_at_an_expiry():
     expanded = await qualify_stock_universe(m, [], broker, option_symbols=["SPY"], expiries=2, strikes=3)
     added = [c for c in expanded.contracts if c.con_id >= 1000]
     nov19 = {c.strike for c in added if c.expiry == date(2026, 11, 19)}
-    assert 95 not in nov19 and len(nov19) == 3  # walked past the unlisted strike to the next one
+    assert 770 not in nov19 and len(nov19) == 3  # walked past the unlisted strike to the next one

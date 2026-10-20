@@ -1,5 +1,16 @@
 """Instructor rules for the SPCX butterfly, RKLB put spread and SPY straddle."""
 
+# Confirmed in the updated instructor table; no broker contract IDs or year are inferred.
+REQUIRED_LEGS = (
+    ("SPCX", "C", 130, 25),
+    ("SPCX", "C", 145, -50),
+    ("SPCX", "C", 160, 25),
+    ("RKLB", "P", 45, -25),
+    ("RKLB", "P", 55, 25),
+    ("SPY", "C", 770, 25),
+    ("SPY", "P", 770, 25),
+)
+
 
 def prohibited_reason(manifest, contract):
     if manifest.contest_rules != "spcx_rklb_spy":
@@ -17,14 +28,22 @@ def prohibited_reason(manifest, contract):
 
 
 def validate_portfolio(manifest):
-    """Require the seven signed legs; dates/strikes/IDs must come from confirmed inputs."""
+    """Require the confirmed strikes and signed legs; year/IDs need verified inputs."""
     if manifest.contest_option_expiry is None:
         raise ValueError("Contest option expiry must be confirmed explicitly")
+    if (manifest.contest_option_expiry.month, manifest.contest_option_expiry.day) != (11, 20):
+        raise ValueError("Contest option expiry must be November 20 in the confirmed year")
     legs = [manifest.contract_map[i] for i in manifest.mandatory]
     if len(legs) != 7 or any(
         c.kind != "OPT" or c.multiplier != 100 or c.expiry != manifest.contest_option_expiry for c in legs
     ):
         raise ValueError("Contest requires seven standard option legs at the confirmed contest expiry")
+    actual_legs = sorted((c.symbol.upper(), c.right, c.strike, manifest.mandatory[c.con_id]) for c in legs)
+    if actual_legs != sorted(REQUIRED_LEGS):
+        raise ValueError(
+            "Contest requires SPCX 130C/+25, 145C/-50, 160C/+25; "
+            "RKLB 45P/-25, 55P/+25; SPY 770C/+25, 770P/+25"
+        )
     grouped = {
         symbol: sorted([c for c in legs if c.symbol.upper() == symbol], key=lambda c: c.strike)
         for symbol in ("SPCX", "RKLB", "SPY")

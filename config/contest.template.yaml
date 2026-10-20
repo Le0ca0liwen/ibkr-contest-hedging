@@ -1,5 +1,6 @@
 # Instructor contest; deliberately incomplete and non-executable until the
 # account, report source and IBKR conIds are filled in from the broker.
+# The updated instructor table confirms November 20 and the strikes below.
 name: SPCX RKLB SPY contest
 account: null
 environment: paper
@@ -64,10 +65,9 @@ policy:
   # moves); 0 disables. See docs/OPTIMIZER_RUNTIME.md.
   overnight_weight: 0.5
 contracts: []
-# Insert verified conIds with signed quantities (all Nov 20 2026, multiplier 100).
-# The handout says strikes are set shortly before trading starts; use the final
-# ones. Validation checks the structure (signs, order, same SPY strike), not
-# these example strikes:
+# Insert verified conIds with signed quantities (all Nov 20 2026, multiplier 100),
+# e.g. with `python -m hedge.cli prepare-contest`. Validation requires exactly
+# these confirmed strikes and signs:
 # SPCX calls 130 / 145 / 160:  +25 / -50 / +25   (call butterfly)
 # RKLB puts 45 / 55:           -25 / +25         (bear put spread)
 # SPY call and put 770:        +25 / +25         (straddle)
