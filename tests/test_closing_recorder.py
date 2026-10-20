@@ -539,3 +539,23 @@ def test_close_marks_wait_for_data_instead_of_recording_an_empty_capture(store, 
     recorder.tick()
     rows = store.records("close_marks", manifest.account)
     assert [r["at"] for r in rows] == [(close + timedelta(seconds=55)).isoformat()]
+
+
+async def test_post_close_reading_far_from_the_bell_keeps_the_bell_value(store, manifest):
+    ledger, clock, broker, recorder, alerts = prepared(store, manifest)
+    day = manifest.scoring_sessions[0]
+    close = clock[0]
+    await recorder.tick()
+    bell = ledger.closes()[day]
+    # Extended-hours stock marks moved NAV $5,000 by 16:20: not a better close than the bell.
+    broker.changes = {"nav": bell + Decimal("5000")}
+    clock[0] = close + timedelta(minutes=20)
+    await recorder.tick()
+    assert ledger.closes()[day] == bell
+    statuses = [r["status"] for r in store.records("closing_capture", manifest.account)]
+    assert "DIVERGED" in statuses
+    assert any("diverged" in str(alert) for alert in alerts)
+    calls = broker.calls
+    clock[0] += timedelta(minutes=1)
+    await recorder.tick()
+    assert broker.calls == calls  # no retry after a divergence

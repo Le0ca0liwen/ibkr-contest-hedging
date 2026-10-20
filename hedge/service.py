@@ -303,6 +303,19 @@ class TradingService:
         )
         self.api_close_warned.add(day)
 
+    def _scores_with_provisional_warning(self):
+        """After the final close, warn once if any scored day still rests on an API capture."""
+        summary = self.ledger.summary()
+        last = self.manifest.scoring_sessions[-1]
+        provisional = [d["date"] for d in summary["days"] if d.get("provenance") == "api"]
+        if provisional and self.now() >= self.manifest.session_close(last):
+            self.alert(
+                "warning",
+                "Final contest score is provisional: import IBKR statement NAV for " + ", ".join(provisional),
+                key=("api_final", tuple(provisional)),
+            )
+        return summary
+
     def _hard_stop(self, reason):
         self.control_epoch += 1
         self.data_wait = None
@@ -1609,7 +1622,7 @@ class TradingService:
                 "provisional_score": abs(estimate - float(closing_target))
                 if estimate is not None and closing_target is not None
                 else None,
-                "scores": self.ledger.summary(),
+                "scores": self._scores_with_provisional_warning(),
                 "baseline_reference": self.store.records("baseline_reference", self.manifest.account, 1),
                 "positions": positions,
                 "orders": self.store.intents(self.manifest.account),

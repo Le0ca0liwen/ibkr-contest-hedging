@@ -88,11 +88,17 @@ class ClosingCapturePolicy(Frozen):
     # One more API observation this long after the bell, once SPY options have marked at their
     # close (15 minutes later) and account values have refreshed; 0 disables it.
     late_capture_minutes: int = Field(default=20, ge=0, le=60)
+    # After 16:00 IBKR may mark stocks at extended-hours prices, so a post-close reading that moves
+    # more than this fraction of initial NAV from the bell value is not used (statement required).
+    late_capture_max_delta: float = Field(default=0.0015, gt=0, le=0.05)
 
     @model_validator(mode="after")
     def late_after_options_close(self):
-        if 0 < self.late_capture_minutes < 16:
-            raise ValueError("Post-close NAV capture must follow the options close (16+ minutes)")
+        # Options close 15 minutes after the bell and account values refresh about every 3 minutes.
+        if 0 < self.late_capture_minutes < 18:
+            raise ValueError(
+                "Post-close NAV capture must follow the options close and a refresh (18+ minutes)"
+            )
         return self
 
 

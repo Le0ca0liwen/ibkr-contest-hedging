@@ -266,6 +266,8 @@ def test_calendar_interest_benchmark_compounds_weekend_days(store, manifest):
         ("IBKR Custom Statement NAV", "statement"),
         ("Corrected IBKR statement", "statement"),
         ("SYNTHETIC demo baseline", "statement"),
+        (" IBKR API NLV 16:20", "api"),  # typed in the dashboard with stray spacing/case
+        ("ibkr api closing observation", "api"),
     ],
 )
 def test_close_provenance_follows_source(source, expected):
@@ -307,6 +309,6 @@ def test_post_close_capture_policy_follows_the_options_close():
 
     assert ClosingCapturePolicy().late_capture_minutes == 20
     assert ClosingCapturePolicy(late_capture_minutes=0).late_capture_minutes == 0
-    for invalid in (-1, 10, 15, 61):
+    for invalid in (-1, 10, 15, 16, 17, 61):
         with pytest.raises(ValidationError):
             ClosingCapturePolicy(late_capture_minutes=invalid)

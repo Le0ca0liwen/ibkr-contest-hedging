@@ -27,6 +27,7 @@ class ClosingRecorder:
         self.status = "Waiting for scheduled market close"
         self.last = None
         self.missed = set()
+        self.post_close_done = set()  # diverged or skipped post-close observations (bell value kept)
         self.loaded = False
 
     def state(self):
@@ -101,11 +102,11 @@ class ClosingRecorder:
             if day in closes:
                 start = close + timedelta(minutes=policy.late_capture_minutes)
                 deadline = start + POST_CLOSE_WINDOW
-                if (
-                    not policy.late_capture_minutes
-                    or not start <= now <= deadline
-                    or self._post_close_settled(day, revisions)
-                ):
+                settled = day in self.post_close_done or self._post_close_settled(day, revisions)
+                if policy.late_capture_minutes and now > deadline and not settled:
+                    self.post_close_done.add(day)
+                    self.status = f"Post-close observation skipped for {day}; bell capture retained"
+                if not policy.late_capture_minutes or not start <= now <= deadline or settled:
                     continue
                 phase = "post_close"
             else:
@@ -145,6 +146,29 @@ class ClosingRecorder:
                 if phase == "post_close" and self._post_close_settled(day, self.ledger.revisions()):
                     self.status = (
                         f"Statement NAV for {day} already recorded; post-close observation discarded"
+                    )
+                    return
+                bell = closes[day]["nav"] if phase == "post_close" else None
+                limit = Decimal(str(policy.late_capture_max_delta)) * self.manifest.initial_nav
+                if bell is not None and abs(value - bell) > limit:
+                    # Likely extended-hours stock marks: keep the bell value, ask for the statement.
+                    self.post_close_done.add(day)
+                    self.ledger.store.record(
+                        "closing_capture",
+                        self.manifest.account,
+                        {
+                            "contest": self.manifest.contest_id,
+                            "date": str(day),
+                            "status": "DIVERGED",
+                            "phase": "post_close",
+                            "nav": str(value),
+                            "bell_nav": str(bell),
+                        },
+                    )
+                    self.status = f"Post-close NAV for {day} diverged from the bell by {value - bell:+.2f}"
+                    self.alert(
+                        "warning",
+                        f"{self.status}; bell value kept. Import the IBKR statement NAV for {day}",
                     )
                     return
                 if phase == "post_close":

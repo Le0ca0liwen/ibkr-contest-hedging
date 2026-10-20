@@ -16,7 +16,7 @@ API_SOURCES = ("IBKR API", "SYNTHETIC simulator")
 
 
 def provenance(source: str) -> str:
-    return "api" if source.startswith(API_SOURCES) else "statement"
+    return "api" if source.lstrip().upper().startswith(tuple(s.upper() for s in API_SOURCES)) else "statement"
 
 
 class ScoreLedger:
