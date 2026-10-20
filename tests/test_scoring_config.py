@@ -255,3 +255,58 @@ def test_calendar_interest_benchmark_compounds_weekend_days(store, manifest):
     data["scoring_annual_rate"] = None
     with pytest.raises(ValidationError):
         Manifest.model_validate(data)
+
+
+@pytest.mark.parametrize(
+    "source, expected",
+    [
+        ("IBKR API closing observation (NetLiquidation; statement reconciliation pending)", "api"),
+        ("IBKR API post-close observation (after 16:15 options close; NetLiquidation)", "api"),
+        ("SYNTHETIC simulator closing observation", "api"),
+        ("IBKR Custom Statement NAV", "statement"),
+        ("Corrected IBKR statement", "statement"),
+        ("SYNTHETIC demo baseline", "statement"),
+    ],
+)
+def test_close_provenance_follows_source(source, expected):
+    from hedge.scoring import provenance
+
+    assert provenance(source) == expected
+
+
+def test_statement_close_beats_later_api_rows_regardless_of_insertion_order(store, manifest, tmp_path):
+    ledger = ScoreLedger(store, manifest)
+    day0, day1, day2 = manifest.day_zero, *manifest.scoring_sessions[:2]
+    bell = "IBKR API closing observation (NetLiquidation; statement reconciliation pending)"
+    late = "IBKR API post-close observation (after 16:15 options close; NetLiquidation)"
+    ledger.import_close(day0, Decimal(1000000), "IBKR Custom Statement NAV", manifest.account)
+    ledger.import_close(day0, Decimal(1000900), bell, manifest.account)
+    ledger.import_close(day1, Decimal(1000100), bell, manifest.account)
+    ledger.import_close(day1, Decimal(1000700), late, manifest.account)
+    assert ledger.closes() == {day0: 1000000, day1: 1000700}  # latest API row wins among API rows
+    summary = ledger.summary()
+    assert summary["baseline_provenance"] == "statement"
+    assert [d["provenance"] for d in summary["days"]] == ["api", None, None]
+    assert Decimal(summary["days"][0]["score"]) == 700
+    assert ledger.previous_close_record(day2)["provenance"] == "api"
+    path = tmp_path / "statement.csv"
+    path.write_text(f"date,nav,source,account\n{day1},1000400,IBKR Custom Statement,{manifest.account}\n")
+    ledger.import_csv(path)
+    ledger.import_close(day1, Decimal(1000800), bell, manifest.account)
+    ledger.import_close(day1, Decimal(1000900), "SYNTHETIC simulator closing observation", manifest.account)
+    assert ledger.previous_close(day2) == 1000400
+    assert ledger.summary()["days"][0]["provenance"] == "statement"
+    assert Decimal(ledger.summary()["days"][0]["score"]) == 400
+    assert ledger.latest_report()["source"] == "IBKR Custom Statement"
+    ledger.import_close(day1, Decimal(1000450), "Corrected IBKR statement", manifest.account)
+    assert ledger.previous_close(day2) == 1000450  # the latest statement wins among statements
+
+
+def test_post_close_capture_policy_follows_the_options_close():
+    from hedge.config import ClosingCapturePolicy
+
+    assert ClosingCapturePolicy().late_capture_minutes == 20
+    assert ClosingCapturePolicy(late_capture_minutes=0).late_capture_minutes == 0
+    for invalid in (-1, 10, 15, 61):
+        with pytest.raises(ValidationError):
+            ClosingCapturePolicy(late_capture_minutes=invalid)

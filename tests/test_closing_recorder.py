@@ -143,6 +143,119 @@ async def test_report_arriving_during_request_wins(store, manifest):
     assert ledger.latest_report()["source"] == "IBKR statement"
 
 
+async def test_post_close_capture_supersedes_bell_once_and_yields_to_statement(store, manifest):
+    ledger, clock, broker, recorder, alerts = prepared(store, manifest)
+    day, following = manifest.scoring_sessions[:2]
+    close = clock[0]
+    await recorder.tick()
+    broker.changes = {"nav": Decimal("1000640.55")}  # SPY options marked at 16:15; account refreshed
+    clock[0] = close + timedelta(minutes=19, seconds=59)
+    await recorder.tick()
+    assert broker.calls == 1
+    clock[0] = close + timedelta(minutes=20)
+    await recorder.tick()
+    assert broker.calls == 2 and ledger.closes()[day] == Decimal("1000640.55")
+    record = ledger.previous_close_record(following)
+    assert record["provenance"] == "api"
+    assert record["source"].startswith("IBKR API post-close observation (after 16:15 options close")
+    assert ledger.summary()["days"][0]["provenance"] == "api"
+    assert recorder.state()["last"]["phase"] == "post_close"
+    clock[0] += timedelta(minutes=1)
+    await recorder.tick()
+    await ClosingRecorder(manifest, ledger, broker, lambda: clock[0], lambda *x: None).tick()
+    assert broker.calls == 2  # once per session, also across restarts
+    assert sorted(r["phase"] for r in store.records("closing_capture", manifest.account)) == [
+        "close",
+        "post_close",
+    ]
+    ledger.import_close(day, Decimal("1000312.40"), "IBKR Custom Statement NAV", manifest.account)
+    ledger.import_close(day, Decimal("1000999"), "IBKR API closing observation (re-run)", manifest.account)
+    assert ledger.previous_close(following) == Decimal("1000312.40")
+    assert ledger.previous_close_record(following)["provenance"] == "statement"
+    assert ledger.latest_report()["provenance"] == "statement"
+    assert not alerts
+
+
+@pytest.mark.parametrize("case", ["statement", "missed_bell", "disabled", "stale", "window_passed"])
+async def test_post_close_capture_only_follows_an_unreconciled_bell_capture(store, manifest, case):
+    from hedge.closing import POST_CLOSE
+    from hedge.config import ClosingCapturePolicy
+
+    if case == "disabled":
+        manifest = manifest.model_copy(
+            update={"closing_capture": ClosingCapturePolicy(late_capture_minutes=0)}
+        )
+    ledger, clock, broker, recorder, _ = prepared(store, manifest)
+    day, close = manifest.scoring_sessions[0], clock[0]
+    if case != "missed_bell":
+        await recorder.tick()
+    if case == "statement":
+        ledger.import_close(day, Decimal("1000400"), "IBKR Custom Statement NAV", manifest.account)
+    if case == "stale":  # a value requested before the post-close time is not a fresh observation
+        broker.changes = {"requested_at": close + timedelta(minutes=19)}
+    clock[0] = close + timedelta(minutes=25, seconds=1 if case == "window_passed" else 0)
+    await recorder.tick()
+    assert broker.calls == {"missed_bell": 0, "stale": 2}.get(case, 1)
+    assert not any(POST_CLOSE in r["source"] for r in ledger.revisions())
+    if case == "missed_bell":  # never backfilled; the statement remains required
+        assert day not in ledger.closes()
+        assert store.records("closing_capture", manifest.account)[0]["status"] == "MISSED"
+    if case == "statement":
+        assert ledger.closes()[day] == Decimal("1000400")
+
+
+async def test_statement_arriving_during_post_close_request_wins(store, manifest):
+    ledger, clock, broker, recorder, _ = prepared(store, manifest)
+    day = manifest.scoring_sessions[0]
+    await recorder.tick()
+    original = broker.closing_nav_observation
+
+    async def reply():
+        ledger.import_close(day, Decimal("1000250"), "IBKR Custom Statement NAV", manifest.account)
+        return await original()
+
+    broker.closing_nav_observation = reply
+    clock[0] += timedelta(minutes=20)
+    await recorder.tick()
+    assert broker.calls == 2 and ledger.closes()[day] == Decimal("1000250")
+    assert len([r for r in ledger.revisions() if r["day"] == day]) == 2
+    assert "post-close observation discarded" in recorder.status
+
+
+def test_api_previous_close_is_exposed_and_warned_once_per_session(store, manifest, snapshot, quotes):
+    from hedge.service import TradingService
+    from hedge.supervisor import Supervisor
+
+    service = TradingService(manifest, store, demo=True)
+    service.last_snapshot, service.last_quotes = snapshot, quotes
+    assert manifest.active_session(service.now()) == manifest.scoring_sessions[0]
+    source = "IBKR API post-close observation (after 16:15 options close; NetLiquidation)"
+    service.ledger.import_close(manifest.day_zero, Decimal("1000640.55"), source, manifest.account)
+
+    def warnings():
+        return [
+            a
+            for a in store.records("alert", manifest.account)
+            if a["message"].startswith("Import yesterday's official IBKR statement NAV before the open")
+        ]
+
+    state = service.state()
+    assert state["previous_close_provenance"] == "api"
+    assert Decimal(state["previous_close"]) == Decimal("1000640.55")
+    assert Supervisor.context(state)["previous_close_provenance"] == "api"
+    service.state()
+    TradingService(manifest, store, demo=True).state()  # a restart cannot repeat the warning
+    assert len(warnings()) == 1 and warnings()[0]["severity"] == "warning"
+    assert str(manifest.day_zero) in warnings()[0]["message"]
+    service.ledger.import_close(
+        manifest.day_zero, Decimal("1000312.40"), "IBKR Custom Statement NAV", manifest.account
+    )
+    state = service.state()
+    assert state["previous_close_provenance"] == "statement"
+    assert Decimal(state["previous_close"]) == Decimal("1000312.40")
+    assert len(warnings()) == 1
+
+
 @pytest.mark.parametrize("provide_fresh_value", [False, True])
 async def test_broker_summary_capture_requires_fresh_scoped_event(manifest, provide_fresh_value):
     import asyncio

@@ -75,6 +75,15 @@ class ClosingCapturePolicy(Frozen):
     enabled: bool = True
     window_seconds: int = Field(default=180, ge=15, le=300)
     retry_seconds: int = Field(default=15, ge=5, le=60)
+    # One more API observation this long after the bell, once SPY options have marked at their
+    # close (15 minutes later) and account values have refreshed; 0 disables it.
+    late_capture_minutes: int = Field(default=20, ge=0, le=60)
+
+    @model_validator(mode="after")
+    def late_after_options_close(self):
+        if 0 < self.late_capture_minutes < 16:
+            raise ValueError("Post-close NAV capture must follow the options close (16+ minutes)")
+        return self
 
 
 class ExecutionPolicy(Frozen):
