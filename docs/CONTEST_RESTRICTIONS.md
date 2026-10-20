@@ -84,7 +84,12 @@ source and never trades. Before Day 0:
    `.runtime/moomoo-env/bin/python ops/fetch_moomoo_daily.py --symbols SPCX RKLB SPY IVV VOO --as-of <today> --output data/moomoo/daily-contest.csv`.
    SPCX needs at least 21 completed sessions.
 3. Discover hedge candidates read-only, then regenerate the collector list:
-   `python -m hedge.cli expand-universe --config config/local.contest.yaml --symbols IVV VOO --option-symbols SPCX RKLB SPY --expiries 3 --strikes 6 --output config/local.contest.yaml`
+   `python -m hedge.cli expand-universe --config config/local.contest.yaml --option-symbols SPCX RKLB SPY --expiries 2 --strikes 1 --output config/local.contest.yaml`
+   This defines about 10 options (SPY Nov 19/23 770C/P; SPCX Nov 20 145P and Nov 27 145C/P;
+   RKLB Nov 20 50P and Nov 27 50C/P) plus SPCX/RKLB stock: about 12 tradable candidates.
+   Measured with realistic quotes, full solves certify in 1-3.5 s and scenario builds take
+   ~0.7 s; with ~45 candidates solves often timed out (no hedge) and builds exceeded the
+   transmission freshness window. Add `--symbols IVV` only with verified `stock_borrow`.
    then `python -m hedge.cli moomoo-codes --config config/local.contest.yaml`.
    Discovery and screening use the expiries nearest Nov 20 on both sides (for
    SPY, Nov 19/23 because every other Nov 20 SPY option is forbidden).

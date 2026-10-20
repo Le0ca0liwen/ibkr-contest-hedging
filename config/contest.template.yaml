@@ -76,8 +76,10 @@ mandatory: {}
 # open: every defined contract except the mandated legs and forbidden
 # instruments (SPY shares, Nov 20 RKLB calls, other Nov 20 SPY options) is
 # tradable. Define candidates with read-only discovery, e.g.
-#   python -m hedge.cli expand-universe --config CONFIG --symbols IVV VOO \
-#     --option-symbols SPCX RKLB SPY --expiries 3 --strikes 6 --output OUT.yaml
+#   python -m hedge.cli expand-universe --config CONFIG \
+#     --option-symbols SPCX RKLB SPY --expiries 2 --strikes 1 --output OUT.yaml
+# Keep the universe small (~12 tradable): the 10 s solver and the 5 s scenario
+# freshness check fail on ~40 candidates, and scanned peers did not improve hedges.
 # Discovery takes the expiries nearest Nov 20 on both sides (SPY Nov 19/23 etc.).
 # Then regenerate the Moomoo collector list and restart the service:
 #   python -m hedge.cli moomoo-codes --config OUT.yaml

@@ -61,7 +61,11 @@ def test_finite_action_path_and_identity(demo, research):
     proposal = decision["proposal"]
     assert proposal["con_id"] not in packet.manifest.mandatory
     assert proposal["path_checked_holdings"] == proposal["quantity"] + 1
-    assert proposal["expense_reserve"] <= 25
+    # Per-cycle loss reserve is a small, bounded share of the surplus to remove (cycle price risk is
+    # scaled on the trading-time clock, so it is larger than the old calendar-time $25 figure).
+    assert proposal["expense_reserve"] <= min(
+        decision["budget"]["expense_remaining"], 0.1 * decision["needed_reduction"]
+    )
     assert proposal["overshoot_probability"] <= 0.01
     assert proposal["expected_score_improvement"] > proposal["improvement_uncertainty"] * 1.645
     assert decision["snapshot_id"] == packet.snapshot.version
@@ -482,7 +486,8 @@ def test_turnover_is_telemetry_not_a_limit(demo, research):
 def test_allowance_shrinks_with_the_actual_remaining_surplus(demo, research):
     packet = demo.packet()
     first = check(demo, research, packet=packet)
-    smaller = with_snapshot(packet, nav=Decimal("1000100")).model_copy(update={"nav_estimate": 1000100})
+    # $117 left to remove: still room for a cycle whose loss reserve (~$32) fits the allowance.
+    smaller = with_snapshot(packet, nav=Decimal("1000200")).model_copy(update={"nav_estimate": 1000200})
     later = check(demo, research, packet=smaller, active=True)
     assert 0 < later["budget"]["expense_remaining"] < first["budget"]["expense_remaining"]
     assert later["proposal"]["expense_reserve"] <= later["needed_reduction"]
@@ -555,7 +560,7 @@ async def test_full_automatic_rehearsal_reduces_surplus_and_reports_residual(tmp
     assert not service.rehearsal_running
     d = service.decision
     assert d["state"] == "CLOSED"
-    assert 0 < d["closing_gap"] < 40
+    assert 0 < d["closing_gap"] < 60  # residual protected by trading-time cycle risk, not zero
     assert d["closing_score"] == abs(d["closing_gap"])
     assert d["stats"]["cycles"] > 90 and d["stats"]["orders"] > 100
     assert d["stats"]["turnover"] > 3000000 and d["stats"]["expense_used"] > 25
