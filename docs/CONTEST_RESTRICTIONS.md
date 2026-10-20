@@ -3,17 +3,17 @@
 Use `config/contest.template.yaml` for this contest, not the BA practice
 template. Set `contest_rules: spcx_rklb_spy` and fill in the verified
 `contest_option_expiry`, contract definitions, account, calendar, and source.
-The handout disagrees on expiry/date/year; no production date, strike or conId
-is inferred from it. The template intentionally cannot activate as supplied.
+The updated table confirms November 20 and the strikes below. The year and
+real broker conIds still require confirmation; neither is inferred. The template intentionally cannot activate as supplied.
 
 The manifest validates exactly seven mandatory legs, all standard 100-share
 options at the confirmed expiry:
 
 | Position | Required quantities |
 | --- | --- |
-| SPCX calls, ascending strikes | +25 / -50 / +25 |
-| RKLB puts, ascending strikes | -25 / +25 |
-| SPY call and put, same strike | +25 / +25 |
+| SPCX calls, strikes 130 / 145 / 160 | +25 / -50 / +25 |
+| RKLB puts, strikes 45 / 55 | -25 / +25 |
+| SPY call and put, strike 770 | +25 / +25 |
 
 The following are forbidden for both long and short holdings:
 

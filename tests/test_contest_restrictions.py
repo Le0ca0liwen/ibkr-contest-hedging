@@ -13,16 +13,16 @@ from hedge.universe import screen_options
 
 @pytest.fixture
 def contest(manifest):
-    expiry = date(2026, 10, 16)  # Synthetic test date, not an instructor-confirmed expiry.
+    expiry = date(2026, 11, 20)  # Synthetic test year; production year still requires confirmation.
     stocks = [Contract(con_id=i, symbol=s, kind="STK") for i, s in [(10, "SPCX"), (20, "RKLB"), (30, "SPY")]]
     specs = [
-        (101, 10, 90, "C"),
-        (102, 10, 100, "C"),
-        (103, 10, 110, "C"),
-        (104, 20, 90, "P"),
-        (105, 20, 100, "P"),
-        (106, 30, 100, "C"),
-        (107, 30, 100, "P"),
+        (101, 10, 130, "C"),
+        (102, 10, 145, "C"),
+        (103, 10, 160, "C"),
+        (104, 20, 45, "P"),
+        (105, 20, 55, "P"),
+        (106, 30, 770, "C"),
+        (107, 30, 770, "P"),
         (201, 20, 110, "C"),
         (202, 30, 110, "C"),
         (203, 30, 90, "P"),
@@ -166,7 +166,7 @@ def test_short_mandates_include_assignment_exposure_and_setup_is_blocked(contest
     snap, quotes, scenarios = frame(contest, snapshot, now)
     gate = RiskGate(contest)
     risk = gate.validate(snap, quotes, scenarios, snap.quantities(), now)
-    assert risk.metrics["assignment_cash"] == 50 * 100 * 100 + 25 * 100 * 90
+    assert risk.metrics["assignment_cash"] == 50 * 100 * 145 + 25 * 100 * 45
     with pytest.raises(ValueError, match="Automatic contest setup is unsupported"):
         SetupPlanner(contest, gate).plan(snap, quotes, scenarios, now)
 
@@ -204,3 +204,24 @@ def test_contest_template_cannot_activate_without_confirmed_contracts():
 
     with pytest.raises(ValueError):
         load_manifest("config/contest.template.yaml")
+
+
+@pytest.mark.parametrize("identifier", [101, 102, 103, 104, 105, 106, 107])
+def test_confirmed_strikes_cannot_be_substituted(contest, identifier):
+    data = contest.model_dump()
+    for contract in data["contracts"]:
+        if contract["con_id"] == identifier:
+            contract["strike"] += 1
+    with pytest.raises(ValueError, match="Contest requires SPCX 130C"):
+        Manifest.model_validate(data)
+
+
+@pytest.mark.parametrize("expiry", [date(2026, 11, 21), date(2026, 10, 20)])
+def test_all_legs_on_wrong_expiry_cannot_pass(contest, expiry):
+    data = contest.model_dump()
+    data["contest_option_expiry"] = expiry
+    for contract in data["contracts"]:
+        if contract["con_id"] in data["mandatory"]:
+            contract["expiry"] = expiry
+    with pytest.raises(ValueError, match="must be November 20"):
+        Manifest.model_validate(data)
