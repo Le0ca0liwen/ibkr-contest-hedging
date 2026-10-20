@@ -204,5 +204,10 @@ async def test_review_is_not_stale_when_only_the_snapshot_timestamp_moves(tmp_pa
         await service._review()
         assert service.store.records("supervisor", service.manifest.account, 1)[0]["stale"] is False
         assert service.state()["session_clock"]
+        assert service._ai_reviews()[0]["stale"] is False
+        service.last_snapshot = service.last_snapshot.model_copy(
+            update={"nav": service.last_snapshot.nav + 1}
+        )
+        assert service._ai_reviews()[0]["stale"] is True  # account changed after the review
     finally:
         await service.stop()

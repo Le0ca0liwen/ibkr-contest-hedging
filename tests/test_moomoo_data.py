@@ -317,6 +317,17 @@ def test_deep_itm_leg_at_model_floor_stays_live_with_carried_iv(tmp_path):
     assert quote.data_type == "live" and quote.iv == 0.30  # vendor IV carried, not 0.001
     assert quote.delta < -0.9
     assert any("carried IV" in e for e in feed.errors)
+    raw["securities"][code_for(put)]["order_book"] = {
+        "Bid": [[0.05, 10]],  # a market maker pulled the bid: mid ~ half of intrinsic
+        "Ask": [[intrinsic + 0.18, 10]],
+    }
+    path.write_text(json.dumps(raw))
+    stub = MoomooData(m, path).quotes(now).get(put.con_id)
+    assert stub is None or stub.data_type == "frozen"
+    raw["securities"][code_for(put)]["order_book"] = {
+        "Bid": [[intrinsic - 0.20, 10]],
+        "Ask": [[intrinsic + 0.18, 10]],
+    }
     raw["securities"][code_for(put)]["quote"][0]["implied_volatility"] = 0
     path.write_text(json.dumps(raw))
     quote = MoomooData(m, path).quotes(now).get(put.con_id)

@@ -288,6 +288,11 @@ def test_daily_history_reloads_and_stale_history_waits(manifest, now, tmp_path):
     later = now + timedelta(days=10)
     with pytest.raises(DataUnavailable, match="stale"):
         engine.daily_covariance(later, ("BA", "SPY"))
+    good = engine.daily_history.copy()
+    pd.DataFrame({"date": ["2026-10-20"], "symbol": ["BA"], "close": [-1]}).to_csv(path, index=False)
+    os.utime(path, ns=(engine.daily_mtime + 10**9, engine.daily_mtime + 10**9))
+    engine.refresh_daily_history()  # a bad fetch never replaces good history
+    assert engine.daily_history.equals(good)
     joint_history(path, later)  # the operator re-runs the daily fetch
     os.utime(path, ns=(engine.daily_mtime + 10**9, engine.daily_mtime + 10**9))
     engine.refresh_daily_history()
@@ -374,3 +379,65 @@ def test_missing_daily_history_file_waits_then_loads(manifest, snapshot, quotes,
     joint_history(path, now)
     engine.refresh_daily_history()
     assert engine.daily_covariance(now, ("BA", "SPY")).shape == (2, 2)
+
+
+async def test_discovery_skips_strikes_not_listed_at_an_expiry():
+    from datetime import date
+
+    from ib_async import RequestError
+
+    from hedge.config import Manifest
+
+    class SparseBroker(ChainBroker):
+        async def reqContractDetailsAsync(self, native):
+            if (
+                native.secType == "OPT"
+                and native.strike == 95
+                and native.lastTradeDateOrContractMonth == "20261119"
+            ):
+                raise RequestError(1, 200, "No security definition has been found for the request")
+            return await super().reqContractDetailsAsync(native)
+
+    expiry = date(2026, 11, 20)
+    stocks = [Contract(con_id=i, symbol=s, kind="STK") for i, s in [(10, "SPCX"), (20, "RKLB"), (30, "SPY")]]
+    legs = [
+        (101, 10, 95, "C", 25),
+        (102, 10, 100, "C", -50),
+        (103, 10, 105, "C", 25),
+        (104, 20, 95, "P", -25),
+        (105, 20, 105, "P", 25),
+        (106, 30, 100, "C", 25),
+        (107, 30, 100, "P", 25),
+    ]
+    symbols = {10: "SPCX", 20: "RKLB", 30: "SPY"}
+    options = [
+        Contract(
+            con_id=i,
+            symbol=symbols[u],
+            kind="OPT",
+            multiplier=100,
+            expiry=expiry,
+            strike=k,
+            right=r,
+            underlying_id=u,
+        )
+        for i, u, k, r, _ in legs
+    ]
+    m = Manifest(
+        name="Contest",
+        account="DU_TEST",
+        day_zero=date(2026, 10, 21),
+        scoring_sessions=(date(2026, 10, 22), date(2026, 11, 4)),
+        valuation_convention="IBKR NAV",
+        report_source="IBKR statement",
+        contracts=(*stocks, *options),
+        mandatory={i: q for i, *_, q in legs},
+        contest_rules="spcx_rklb_spy",
+        contest_option_expiry=expiry,
+        universe="open",
+    )
+    broker = SparseBroker()
+    broker.seen = []
+    expanded = await qualify_stock_universe(m, [], broker, option_symbols=["SPY"], expiries=2, strikes=3)
+    added = [c for c in expanded.contracts if c.con_id >= 1000]
+    assert added and not any(c.strike == 95 and c.expiry == date(2026, 11, 19) for c in added)

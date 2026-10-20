@@ -89,8 +89,18 @@ class ScenarioEngine:
             return
         try:
             history = pd.read_csv(self.manifest.daily_stock_history)
-        except (OSError, ValueError):
-            return  # Keep the previous history; its staleness check still applies.
+            closes = pd.to_numeric(history["close"])
+            dates = pd.to_datetime(history["date"]).dt.date
+            if (
+                not np.isfinite(closes).all()
+                or (closes <= 0).any()
+                or pd.DataFrame({"d": dates, "s": history["symbol"]}).duplicated().any()
+            ):
+                raise ValueError("Invalid daily history")
+        except (OSError, ValueError, KeyError):
+            # Reject this version and keep the previous (valid) history; staleness still applies.
+            self.daily_mtime = mtime
+            return
         self.daily_history, self.daily_mtime = history, mtime
         self.daily_cache.clear()
         self.beta_cache.clear()

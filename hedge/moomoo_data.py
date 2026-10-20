@@ -143,9 +143,11 @@ class MoomooData:
                             except BelowModelFloor as exc:
                                 # Deep ITM: price ~ intrinsic and delta ~ +/-1 regardless of IV, so a
                                 # carried IV keeps a valid, fresh book live instead of halting hedging.
-                                # Only when the book reaches the floor; a nonsense book stays frozen.
+                                # Only for a tight book around the floor; a nonsense or stub-bid book
+                                # (mid far below intrinsic) stays frozen, or NAV would swing on it.
                                 iv = self.last_iv.get(contract.con_id) or vendor
-                                if ask < exc.floor - 0.01:
+                                spread_cap = self.manifest.execution.option_spread_absolute
+                                if ask < exc.floor - 0.01 or bid < exc.floor - spread_cap:
                                     live, iv = False, vendor
                                     errors.append(f"Model calibration blocked {contract.label}: {exc}")
                                 elif iv is None:

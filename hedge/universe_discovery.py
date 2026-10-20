@@ -4,7 +4,7 @@ import re
 from datetime import date
 from decimal import Decimal
 
-from ib_async import IB, Option, Stock
+from ib_async import IB, Option, RequestError, Stock
 
 from .models import Contract
 from .practice import paper_account
@@ -26,6 +26,27 @@ async def _stock(broker, symbol):
     if c.symbol != symbol or c.secType != "STK" or c.currency != "USD" or not c.conId:
         raise ValueError(f"Instrument identity mismatch: {symbol}")
     return Contract(con_id=c.conId, symbol=symbol, kind="STK")
+
+
+async def _option_details(broker, symbol, expiry, strike, right):
+    """Contract details, or [] when IBKR has no such strike at this expiry (error 200)."""
+    try:
+        return await broker.reqContractDetailsAsync(
+            Option(
+                symbol,
+                expiry.strftime("%Y%m%d"),
+                strike,
+                right,
+                "SMART",
+                multiplier="100",
+                currency="USD",
+                tradingClass=symbol,
+            )
+        )
+    except RequestError as exc:
+        if exc.code == 200:  # Weeklies often omit strikes listed on the monthly chain.
+            return []
+        raise ValueError(f"IBKR contract request failed ({exc.code}): {exc.message}") from None
 
 
 def _option(details, symbol, underlying_id, expiry, strike, right):
@@ -155,18 +176,7 @@ async def _option_chain(manifest, broker, stock, expiries, strikes, center, know
                 # Forbidden contest options (Nov 20 RKLB calls, extra Nov 20 SPY options) are never requested.
                 if manifest.prohibited_reason(placeholder(expiry, strike, right)):
                     continue
-                details = await broker.reqContractDetailsAsync(
-                    Option(
-                        symbol,
-                        expiry.strftime("%Y%m%d"),
-                        strike,
-                        right,
-                        "SMART",
-                        multiplier="100",
-                        currency="USD",
-                        tradingClass=symbol,
-                    )
-                )
+                details = await _option_details(broker, symbol, expiry, strike, right)
                 c = _option(details, symbol, stock.con_id, expiry, strike, right)
                 if c is not None and not manifest.prohibited_reason(c):
                     found.append(c)
@@ -205,18 +215,7 @@ async def prepare_contest(template, account, strikes, report_source, port=4002, 
         stocks = {symbol: await _stock(broker, symbol) for symbol in ("SPCX", "RKLB", "SPY")}
         contracts, mandatory = list(stocks.values()), {}
         for symbol, strike, right, quantity in legs:
-            details = await broker.reqContractDetailsAsync(
-                Option(
-                    symbol,
-                    expiry.strftime("%Y%m%d"),
-                    strike,
-                    right,
-                    "SMART",
-                    multiplier="100",
-                    currency="USD",
-                    tradingClass=symbol,
-                )
-            )
+            details = await _option_details(broker, symbol, expiry, strike, right)
             c = _option(details, symbol, stocks[symbol].con_id, expiry, strike, right)
             if c is None:
                 raise ValueError(f"Ambiguous/unavailable {symbol} {expiry} {strike}{right}")

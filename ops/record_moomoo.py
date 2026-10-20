@@ -3,14 +3,26 @@
 import argparse
 import csv
 import fcntl
+import gzip
 import json
 import threading
 import time
 from datetime import datetime, timezone
+from datetime import time as clock
 from pathlib import Path
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 ARCHIVE_DAILY_BYTES = 750_000_000
+NEW_YORK = ZoneInfo("America/New_York")
+
+
+def archive_path(directory, now):
+    """Compressed per-New-York-day archive, regular session (+ margins) only; None outside it."""
+    local = now.astimezone(NEW_YORK)
+    if local.weekday() >= 5 or not clock(9, 25) <= local.time() <= clock(16, 10):
+        return None
+    return Path(directory) / f"raw-{local:%Y%m%d}.jsonl.gz"
 
 
 def make_handlers(sdk, lock, securities, rights, stamp, bars=None):
@@ -137,6 +149,7 @@ def main():
                             for row in json.loads(recent.to_json(orient="records")):
                                 bars[(row["code"], row["time_key"])] = row
                 last_archive = 0
+                capped = None
                 while True:
                     ret, state = ctx.get_global_state()
                     if ret != sdk.RET_OK or not state.get("qot_logined"):
@@ -159,10 +172,14 @@ def main():
                     temporary.replace(path)
                     if time.monotonic() - last_archive >= 5:
                         # One file per day, capped, so a 10-day run cannot fill the disk.
-                        archive_path = path.parent / f"raw-{datetime.now(timezone.utc):%Y%m%d}.jsonl"
-                        if not archive_path.exists() or archive_path.stat().st_size < ARCHIVE_DAILY_BYTES:
-                            with archive_path.open("a") as archive:
-                                archive.write(encoded)
+                        target = archive_path(path.parent, datetime.now(timezone.utc))
+                        if target is not None:
+                            if not target.exists() or target.stat().st_size < ARCHIVE_DAILY_BYTES:
+                                with gzip.open(target, "at") as archive:
+                                    archive.write(encoded)
+                            elif target != capped:
+                                print("Moomoo raw archive cap reached:", target, flush=True)
+                                capped = target
                         last_archive = time.monotonic()
                         from datetime import timedelta
                         from zoneinfo import ZoneInfo

@@ -74,3 +74,22 @@ def test_collector_applies_quote_right_downgrades_from_sdk_tuple():
     # moomoo-api 10.11 returns (notify_type, sub_type, payload), not a dict.
     notify.on_recv_rsp((0, ("QOT_RIGHT", None, {"us_option_qot_right": "NO", "other": "x"})))
     assert rights == {"us_qot_right": "LV3", "us_option_qot_right": "NO"}
+
+
+def test_raw_archive_only_during_the_new_york_session(tmp_path):
+    import importlib.util
+    from datetime import datetime, timezone
+
+    spec = importlib.util.spec_from_file_location("record_moomoo", "ops/record_moomoo.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    # 19:30 UTC = 15:30 New York (EDT): archived under the New York date.
+    assert module.archive_path(tmp_path, datetime(2026, 10, 22, 19, 30, tzinfo=timezone.utc)).name == (
+        "raw-20261022.jsonl.gz"
+    )
+    assert (
+        module.archive_path(tmp_path, datetime(2026, 10, 22, 2, 0, tzinfo=timezone.utc)) is None
+    )  # overnight
+    assert (
+        module.archive_path(tmp_path, datetime(2026, 10, 24, 15, 0, tzinfo=timezone.utc)) is None
+    )  # Saturday

@@ -1029,6 +1029,11 @@ class TradingService:
     def _close_marks(self, now, day, phase):
         """Everything needed later to split a day's score miss into Greeks, marks and costs."""
         snap, quotes = self.last_snapshot, dict(self.last_quotes)
+        if phase == "post_close":
+            # The monitor stops refreshing quotes after the final close; read the feed directly.
+            quotes = dict(self.broker.quotes()) or quotes
+        if snap is None or not quotes:
+            return None  # Not connected/quoted yet (e.g. just restarted): retry on the next tick.
         try:
             estimate = self._estimate_nav(snap, quotes) if snap else None
         except ValueError:
@@ -1081,6 +1086,20 @@ class TradingService:
             "risk_reasons": list(self.last_risk.reasons) if self.last_risk else [],
         }
 
+    @staticmethod
+    def _account_digest(snapshot):
+        return digest(snapshot.model_dump(mode="json", exclude={"at"})) if snapshot else None
+
+    def _ai_reviews(self):
+        # Staleness is judged when read: advice is stale once account content changes after it.
+        current = self._account_digest(self.last_snapshot)
+        reviews = self.store.records("supervisor", self.manifest.account, 1)
+        for review in reviews:
+            review["stale"] = (
+                bool(review.get("stale")) or current is None or review.get("content_digest") != current
+            )
+        return reviews
+
     def _session_clock(self):
         now = self.now()
         day = self.manifest.active_session(now)
@@ -1125,6 +1144,7 @@ class TradingService:
                     or result["snapshot_id"] != sent.version
                     or current.model_dump(exclude={"at"}) != sent.model_dump(exclude={"at"})
                 )
+                result["content_digest"] = self._account_digest(sent)
                 self.store.record("supervisor", self.manifest.account, result)
         except Exception as exc:
             self.alert("warning", f"AI supervisor unavailable; deterministic strategy continues: {exc}")
@@ -1571,7 +1591,7 @@ class TradingService:
                 "decisions": self.store.records("decision", self.manifest.account, 30),
                 "alerts": self.store.records("alert", self.manifest.account, 30),
                 "risk": self.last_risk.model_dump(mode="json") if self.last_risk else None,
-                "ai": self.store.records("supervisor", self.manifest.account, 1),
+                "ai": self._ai_reviews(),
                 "ai_enabled": self.supervisor.enabled,
                 "ai_status": self.supervisor.status(),
                 "recovery": {**self.recovery.latest, "promotion": self.recovery.promotion_status()},

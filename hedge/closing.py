@@ -172,13 +172,16 @@ class CloseMarkRecorder:
             return
         seconds = (self.manifest.session_close(day) - now).total_seconds()
         if 0 < seconds <= 120:
-            self.pending = (day, self.collect(now, day, "pre_close"))
+            # Keep the last good capture; an empty one (no snapshot/quotes yet) never replaces it.
+            if (payload := self.collect(now, day, "pre_close")) is not None:
+                self.pending = (day, payload)
         elif seconds <= 0:
             if self.pending and self.pending[0] == day:
                 self._write(day, "pre_close", self.pending[1])
                 self.pending = None
             if -300 <= seconds <= -30 and (day, "post_close") not in self.written:
-                self._write(day, "post_close", self.collect(now, day, "post_close"))
+                if (payload := self.collect(now, day, "post_close")) is not None:
+                    self._write(day, "post_close", payload)
 
     async def run(self):
         while True:

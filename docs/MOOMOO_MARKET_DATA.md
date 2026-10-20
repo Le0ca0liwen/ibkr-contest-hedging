@@ -73,7 +73,8 @@ The standalone diagnostic and persistent 30-second collector are implemented.
 The service supervises the isolated quote-only worker when the local code list
 exists, reads its atomic archive into the dashboard and monitoring risk engine,
 and displays all available quotes under Positions & risk. Raw records are saved
-in daily-rotated data/moomoo/raw-YYYYMMDD.jsonl files (capped at 750 MB/day).
+in gzip-compressed data/moomoo/raw-YYYYMMDD.jsonl.gz files per New York day,
+written 09:25-16:10 ET on weekdays only (capped at 750 MB/day).
 *Superseded (Oct 2026):* with `market_data_provider: moomoo`, verified live
 Moomoo quotes feed the optimizer, risk gate and IBKR execution; see the banner
 above and the contest checklist in CONTEST_RESTRICTIONS.md.

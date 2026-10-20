@@ -405,3 +405,24 @@ async def test_service_close_marks_include_quotes_greeks_and_risk(tmp_path, monk
         assert store.records("close_marks", service.manifest.account, 1)
     finally:
         await service.stop()
+
+
+def test_close_marks_wait_for_data_instead_of_recording_an_empty_capture(store, manifest):
+    from hedge.closing import CloseMarkRecorder
+
+    store.initialize()
+    day = manifest.scoring_sessions[0]
+    close = manifest.session_close(day)
+    time = [close + timedelta(seconds=40)]  # service (re)started just after the bell
+    ready = [False]
+
+    def collect(now, session, phase):
+        return {"phase": phase, "at": now.isoformat()} if ready[0] else None
+
+    recorder = CloseMarkRecorder(manifest, store, lambda: time[0], collect, lambda *x: None)
+    recorder.tick()
+    assert not store.records("close_marks", manifest.account)
+    ready[0], time[0] = True, close + timedelta(seconds=55)
+    recorder.tick()
+    rows = store.records("close_marks", manifest.account)
+    assert [r["at"] for r in rows] == [(close + timedelta(seconds=55)).isoformat()]
