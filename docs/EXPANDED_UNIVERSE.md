@@ -35,8 +35,15 @@ aligned across all represented symbols, with at least 20 observations, 20%
 diagonal covariance shrinkage, and deterministic antithetic shocks. The model
 has zero directional drift. Today's incomplete bar and future bars are excluded.
 Daily volatility is scaled to the remaining calendar horizon; option IV/skew
-paths remain modeled. Missing, duplicate or stale joint history blocks scenario
-construction instead of substituting invented correlations. Sufficient matched
+paths remain modeled. Each symbol's IV shock is correlated with its own
+standardized spot shock, `iv = sigma_iv * (rho * z_spot + sqrt(1 - rho^2) * u)`
+with `u` an independent antithetic normal block: rho defaults to -0.7 for broad
+index ETFs (SPY, IVV, VOO, SPLG, QQQ, IWM, DIA) and -0.4 for other symbols, and
+`spot_vol_correlation: {SYMBOL: rho}` in the manifest overrides it (each in
+[-0.95, 0.5]). The rho values used are recorded on the scenario set and in its
+source text; next-close scenarios reuse the same joint shocks. Matched-clock
+intraday paths keep their observed IV changes. Missing, duplicate or stale joint
+history blocks scenario construction instead of substituting invented correlations. Sufficient matched
 intraday option history takes precedence when supplied.
 
 These are forecast assumptions, not demonstrated contest performance. A broader

@@ -34,6 +34,10 @@ daily_stock_history: data/moomoo/daily-contest.csv
 # record verified shortable shares here (check IBKR's short availability first):
 # stock_borrow: {SPCX: 2000, RKLB: 2000, IVV: 2000}
 # stock_borrow_source: "IBKR short stock availability, checked 2026-10-21 09:15"
+# Scenario IV shocks move against spot (leverage effect): rho = -0.7 for broad
+# index ETFs (SPY, IVV, VOO, SPLG, QQQ, IWM, DIA), -0.4 for other symbols.
+# Override per symbol, each within [-0.95, 0.5]:
+# spot_vol_correlation: {SPCX: -0.3, RKLB: -0.3}
 # Every risk limit scales with min(initial_nav, current NAV). Set this to the
 # verified IBKR Day 0 NAV; leaving the $1M default caps limits at $1M.
 initial_nav: "1000000"

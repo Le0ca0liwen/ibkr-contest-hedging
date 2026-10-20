@@ -3,17 +3,21 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 from zoneinfo import ZoneInfo
 
 import exchange_calendars as xcals
 import pandas as pd
 import yaml
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
 from .models import Contract, Dividend, Frozen, digest
 
 NY = ZoneInfo("America/New_York")
+# Implied vol rises when spot falls (leverage effect); broad index ETFs show it most strongly.
+BROAD_INDEX_ETFS = frozenset({"SPY", "IVV", "VOO", "SPLG", "QQQ", "IWM", "DIA"})
+INDEX_SPOT_VOL_CORRELATION = -0.7
+SINGLE_NAME_SPOT_VOL_CORRELATION = -0.4
 
 
 class RiskLimits(Frozen):
@@ -124,6 +128,8 @@ class Manifest(Frozen):
     stock_borrow: dict[str, int] = Field(default_factory=dict)
     stock_borrow_source: str = ""
     daily_stock_history: str | None = None
+    # Per-symbol correlation of scenario IV shocks with same-symbol spot shocks (overrides defaults).
+    spot_vol_correlation: dict[str, Annotated[float, Field(ge=-0.95, le=0.5)]] = Field(default_factory=dict)
     closing_capture: ClosingCapturePolicy = ClosingCapturePolicy()
     execution: ExecutionPolicy = ExecutionPolicy()
     recovery: dict = Field(default_factory=dict)
@@ -147,6 +153,14 @@ class Manifest(Frozen):
     strategy: Literal["dynamic_l1", "delta", "greek", "min_variance", "historical_l1", "two_close"] = (
         "dynamic_l1"
     )
+
+    @field_validator("spot_vol_correlation")
+    @classmethod
+    def normalize_spot_vol(cls, value):
+        result = {k.strip().upper(): v for k, v in value.items()}
+        if "" in result or len(result) != len(value):
+            raise ValueError("Spot-vol correlation overrides need distinct nonempty symbols")
+        return result
 
     @model_validator(mode="after")
     def validate_contest(self):
@@ -232,6 +246,11 @@ class Manifest(Frozen):
     @property
     def contract_map(self):
         return {c.con_id: c for c in self.contracts}
+
+    def spot_vol_rho(self, symbol: str) -> float:
+        key = symbol.upper()
+        default = INDEX_SPOT_VOL_CORRELATION if key in BROAD_INDEX_ETFS else SINGLE_NAME_SPOT_VOL_CORRELATION
+        return self.spot_vol_correlation.get(key, default)
 
     def prohibited_reason(self, contract):
         from .contest_rules import prohibited_reason
