@@ -47,6 +47,9 @@ scoring_annual_rate: 0.0344
 # Forecast the cash interest the account accrues (ACT/360), so the optimizer
 # expects NAV to grow toward the (1 + r/360)^n target instead of staying flat.
 policy:
+  # Accept a hedge certified within $20 of the modeled optimum (the trade threshold is >= $100).
+  # The $1 default often cannot be proven inside the 10 s budget for this 45-candidate universe.
+  primary_band: 20
   cash_rate: 0.0344
   cash_rate_status: modeled
   cash_rate_source: "Contest rules: cash balance earns nominal r ~ 3.44%"

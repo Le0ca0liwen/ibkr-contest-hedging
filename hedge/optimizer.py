@@ -730,7 +730,7 @@ class HedgeOptimizer:
             return valid
 
         try:
-            primary_band = 1 if baseline is None else 0.01
+            primary_band = m.policy.primary_band if baseline is None else 0.01
             if not stage("primary", [1, 0, 0], primary_band / 4):
                 return self._unchanged(
                     snapshot,

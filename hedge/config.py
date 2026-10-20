@@ -44,6 +44,10 @@ class TradingPolicy(Frozen):
     option_cutoff_minutes: int = Field(default=15, ge=2)
     stock_cutoff_minutes: int = Field(default=2, ge=1)
     solver_seconds: float = Field(default=10, gt=0, le=10)
+    # Certified selection band ($) for the primary stage: the accepted portfolio's modeled score is
+    # within this of the true optimum (the solver stops at a quarter of it). $1 proves to the cent,
+    # which can exhaust the 10 s budget on a contest-sized universe; the trade threshold is >= $100.
+    primary_band: float = Field(default=1, ge=0.04, le=50)
     ranking_seconds: float = Field(default=1, gt=0, le=5)
     ranking_nodes: int = Field(default=32, ge=1, le=10000)
     commission_share: float = Field(default=0.005, ge=0)

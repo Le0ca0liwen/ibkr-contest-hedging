@@ -195,3 +195,14 @@ def test_deadline_includes_model_building(manifest, snapshot, quotes, monkeypatc
     target = HedgeOptimizer(m).solve(s, qs, sc, s.nav, estimate)
     assert target.status == "TIMEOUT"
     assert target.quantities == s.quantities()
+
+
+def test_primary_band_is_configurable_and_bounded(manifest):
+    import pytest
+
+    from hedge.config import TradingPolicy
+
+    assert TradingPolicy().primary_band == 1  # default keeps the original $1 certificate
+    assert TradingPolicy(primary_band=20).primary_band == 20
+    with pytest.raises(ValueError):
+        TradingPolicy(primary_band=100)
