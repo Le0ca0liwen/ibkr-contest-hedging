@@ -190,7 +190,11 @@ class HedgeOptimizer:
             else (nav_estimate if nav_estimate is not None else float(snapshot.nav)) - float(previous_nav)
         )
         candidates = [
-            i for i in ids if i in m.allowlist and (not stock_only or m.contract_map[i].kind == "STK")
+            i
+            for i in ids
+            if i in m.allowlist
+            and not m.prohibited_reason(m.contract_map[i])
+            and (not stock_only or m.contract_map[i].kind == "STK")
         ]
         allowed_type = "synthetic" if snapshot.source == "synthetic" else "live"
         candidates = [

@@ -15,6 +15,11 @@ class SetupPlanner:
 
     def plan(self, snapshot, quotes, scenarios, now):
         m = self.manifest
+        if m.contest_rules == "spcx_rklb_spy":
+            raise ValueError(
+                "Automatic contest setup is unsupported: seven-leg signed mandates require "
+                "a validated package adapter; reconcile the complete mandated portfolio before hedging"
+            )
         if len(m.mandatory) > 8:
             raise ValueError("Protected setup requires a validated adapter for more than eight mandate legs")
         actual = snapshot.quantities()

@@ -62,10 +62,11 @@ class RiskEngine:
             if c.kind == "STK":
                 stock[c.symbol] = stock.get(c.symbol, 0) + abs(quantity) * q.spot
                 margin_increment += max(0, abs(quantity) - abs(actual.get(i, 0))) * q.spot * 0.5
-            elif i not in self.manifest.mandatory:
-                names[c.symbol] = names.get(c.symbol, 0) + 1
-                if abs(quantity) > self.manifest.risk.contracts_per_option:
-                    reasons.append(f"Option quantity cap: {c.label}")
+            elif i not in self.manifest.mandatory or quantity < 0:
+                if i not in self.manifest.mandatory:
+                    names[c.symbol] = names.get(c.symbol, 0) + 1
+                    if abs(quantity) > self.manifest.risk.contracts_per_option:
+                        reasons.append(f"Option quantity cap: {c.label}")
                 increment = max(0, abs(quantity) - abs(actual.get(i, 0)))
                 margin_increment += increment * c.multiplier * (q.mid + 0.2 * q.spot)
                 if quantity < 0:
@@ -154,8 +155,20 @@ class RiskGate:
             ):
                 reasons.append("Mandatory setup only allowed on the configured purchase session")
             for i, required in self.manifest.mandatory.items():
-                if not 0 <= actual.get(i, 0) <= quantities.get(i, 0) <= required:
-                    reasons.append("Day 0 may only buy missing mandatory quantity")
+                sign = 1 if required > 0 else -1
+                if not 0 <= sign * actual.get(i, 0) <= sign * quantities.get(i, 0) <= abs(required):
+                    reasons.append("Day 0 may only add missing mandatory quantity in its required direction")
+        # Structural contest rules cannot be bypassed by corrective mode, an
+        # unchanged forbidden holding, or a misconfigured discretionary allowlist.
+        for i in set(actual) | set(quantities):
+            c = self.manifest.contract_map.get(i)
+            if c and (actual.get(i, 0) or quantities.get(i, 0)):
+                if reason := self.manifest.prohibited_reason(c):
+                    reasons.append(f"{reason}: conId {i}")
+        for order in snapshot.orders:
+            c = self.manifest.contract_map.get(order.con_id)
+            if c and order.signed_remaining and (reason := self.manifest.prohibited_reason(c)):
+                reasons.append(f"Forbidden working order: {reason}")
         ids = {i for i in quantities if quantities[i]} | {i for i in actual if actual[i]}
         for i in ids:
             c, q = self.manifest.contract_map.get(i), quotes.get(i)

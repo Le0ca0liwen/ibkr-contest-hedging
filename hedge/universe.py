@@ -10,11 +10,12 @@ def screen_snapshot(manifest, quotes, snapshot):
 def screen_options(manifest, quotes, actual):
     """Screen by moneyness/expiry deterministically, preserving held hedges."""
     chosen = {i for i in actual if actual[i]} | set(manifest.mandatory)
-    chosen |= {i for i in manifest.allowlist if manifest.contract_map[i].kind == "STK"}
+    approved = {i for i in manifest.allowlist if not manifest.prohibited_reason(manifest.contract_map[i])}
+    chosen |= {i for i in approved if manifest.contract_map[i].kind == "STK"}
     for symbol in sorted({c.symbol for c in manifest.contracts}):
         options = [
             manifest.contract_map[i]
-            for i in manifest.allowlist
+            for i in approved
             if manifest.contract_map[i].kind == "OPT"
             and manifest.contract_map[i].symbol == symbol
             and i in quotes

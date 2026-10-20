@@ -1,0 +1,25 @@
+# Instructor contest; deliberately incomplete and non-executable.
+# Confirm conflicting dates in the handout before filling any date or contract ID.
+name: SPCX RKLB SPY contest
+account: null
+environment: paper
+day_zero: null
+scoring_sessions: []
+valuation_convention: IBKR official closing account NAV
+report_source: null
+confirmed: false
+contest_rules: spcx_rklb_spy
+contest_option_expiry: null
+# The screenshot's interest formula includes calendar-day accrual.
+# Do not activate with the practice default (raw NAV) or assume the existing
+# single-day interest_benchmark mode handles weekends. Configure/verify scoring separately.
+scoring_rule: pending_interest_adjustment
+contracts: []
+# Insert verified conIds with signed quantities:
+# SPCX calls in ascending strike order: +25, -50, +25
+# RKLB puts in ascending strike order: -25, +25
+# SPY call and put at the same strike: +25, +25
+mandatory: {}
+# Only verified, permitted hedge conIds. SPY stock may be defined for quotes but
+# must NOT be here. Same-expiry RKLB calls and extra SPY options are rejected.
+allowlist: []

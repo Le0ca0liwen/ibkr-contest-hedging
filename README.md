@@ -11,6 +11,11 @@ The code includes American-option repricing, integer scenario optimization, an i
 
 ## Practice setup
 
+For the separate SPCX/RKLB/SPY contest, use the
+[contest restrictions and configuration guide](docs/CONTEST_RESTRICTIONS.md).
+Its seven signed mandatory legs and prohibited instruments differ from the BA
+practice setup; the existing automatic practice setup adapter cannot acquire it.
+
 The [Google AI supervisor](docs/GOOGLE_SUPERVISOR.md) defaults to Gemini 3.8
 Flash and supports model selection in Hedge decisions. It provides bounded
 advice only and runs independently of trading; setup never enables orders.

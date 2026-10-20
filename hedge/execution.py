@@ -409,6 +409,8 @@ class ExecutionManager:
                 return {"submitted": False, "reason": "Submission uncertain; reconcile before any new trade"}
 
     async def submit_package(self, buy_id, sell_id, decision_id, snapshot, quotes, scenarios, now):
+        if self.manifest.contest_rules == "spcx_rklb_spy":
+            return {"submitted": False, "reason": "Automatic seven-leg contest setup is unsupported"}
         self.current_scenarios = scenarios
         async with self.lock:
             if (

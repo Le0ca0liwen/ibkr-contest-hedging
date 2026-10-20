@@ -118,6 +118,8 @@ class Manifest(Frozen):
     recovery: dict = Field(default_factory=dict)
     initial_nav: Decimal = Field(default=Decimal("1000000"), gt=0)
     contracts: tuple[Contract, ...]
+    contest_rules: Literal["practice", "spcx_rklb_spy"] = "practice"
+    contest_option_expiry: date | None = None
     mandatory: dict[int, int]
     allowlist: tuple[int, ...]
     dividends: dict[str, tuple[Dividend, ...]] = Field(default_factory=dict)
@@ -167,14 +169,26 @@ class Manifest(Frozen):
         ids = [c.con_id for c in self.contracts]
         if len(set(ids)) != len(ids):
             raise ValueError("Duplicate contract IDs")
-        if not self.mandatory or any(q <= 0 for q in self.mandatory.values()):
-            raise ValueError("Mandatory positions must have positive fixed quantities")
+        if not self.mandatory or any(q == 0 for q in self.mandatory.values()):
+            raise ValueError("Mandatory positions must have nonzero fixed quantities")
+        if self.contest_rules == "practice" and any(q < 0 for q in self.mandatory.values()):
+            raise ValueError("Signed mandates require the spcx_rklb_spy contest rules")
         if not set(self.mandatory).issubset(ids) or not set(self.allowlist).issubset(ids):
             raise ValueError("Every mandate and allowlist ID must have a contract definition")
         if set(self.mandatory) & set(self.allowlist):
             raise ValueError("Mandatory contracts cannot be discretionary hedge instruments")
         if len(set(self.allowlist)) != len(self.allowlist):
             raise ValueError("Duplicate allowlist IDs")
+        from .contest_rules import validate_portfolio
+
+        mandate_symbols = {self.contract_map[i].symbol.upper() for i in self.mandatory}
+        if {"SPCX", "RKLB", "SPY"}.issubset(mandate_symbols) and self.contest_rules != "spcx_rklb_spy":
+            raise ValueError("SPCX/RKLB/SPY contest mandates require explicit contest rules")
+        if self.contest_rules == "spcx_rklb_spy":
+            validate_portfolio(self)
+        for i in self.allowlist:
+            if reason := self.prohibited_reason(self.contract_map[i]):
+                raise ValueError(f"Forbidden allowlist conId {i}: {reason}")
         for c in self.contracts:
             if c.kind == "OPT":
                 if c.expiry < self.scoring_sessions[-1]:
@@ -188,6 +202,11 @@ class Manifest(Frozen):
     @property
     def contract_map(self):
         return {c.con_id: c for c in self.contracts}
+
+    def prohibited_reason(self, contract):
+        from .contest_rules import prohibited_reason
+
+        return prohibited_reason(self, contract)
 
     @property
     def config_hash(self):
