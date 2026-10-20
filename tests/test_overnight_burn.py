@@ -10,7 +10,7 @@ from hedge.config import NY, Manifest
 from hedge.demo import demo_quotes
 from hedge.optimizer import HedgeOptimizer
 from hedge.risk import RiskGate
-from hedge.scenarios import TRADING_DAY, ScenarioEngine, overnight_variance
+from hedge.scenarios import ScenarioEngine, overnight_variance
 from hedge.service import TradingService
 
 
@@ -60,7 +60,7 @@ def test_overnight_scenarios_reuse_shocks_on_trading_time_and_calendar_decay(man
     stock = thursday.ids.index(10)
     for sc in (thursday, friday):
         # Same joint shocks, spot variance rescaled from the closing horizon to the gap clock.
-        scale = np.sqrt(sc.overnight_variance * TRADING_DAY / sc.calendar_days)
+        scale = np.sqrt(sc.overnight_variance / sc.trading_days)  # both on the trading-time clock
         assert sc.overnight_changes[:, stock] == pytest.approx(sc.changes[:, stock] * scale)
         assert sc.overnight_changes[:, stock].mean() == pytest.approx(0, abs=1e-9)  # antithetic
     straddle = np.array([25 if i in manifest.mandatory else 0 for i in thursday.ids])
@@ -147,7 +147,9 @@ def test_burn_switch_spends_a_surplus_only_when_enabled(manifest, snapshot, quot
         results[burn] = target
     burned, additive = results[True], results[False]
     assert burned.estimated_cost > 200
-    assert additive.estimated_cost < 0.2 * burned.estimated_cost
+    # Additive still pays for genuine risk reduction (intraday variance is on trading time),
+    # but spends clearly less than when the surplus itself is worth spending.
+    assert additive.estimated_cost < 0.6 * burned.estimated_cost
     # A surplus larger than the cost: spending is pure burn, E|g| + c - E|g - c| = 2c.
     assert burned.components["burn"] == pytest.approx(2 * burned.components["scored_cost"], rel=0.05)
     assert additive.components["burn"] <= 2 * additive.components["scored_cost"] + 1e-6

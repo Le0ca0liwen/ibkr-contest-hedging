@@ -27,6 +27,30 @@ def overnight_variance(close_day: date, next_day: date) -> float:
     return 0.30 + 0.10 * ((next_day - close_day).days - 1)
 
 
+def trading_variance(start: datetime, end: datetime) -> float:
+    """Spot/IV variance from start to end in trading days, on the same clock as overnight_variance.
+
+    Open-session time counts in proportion to the session length (early closes included); each
+    close -> reopen gap inside the interval counts overnight_variance. Intraday variance is
+    therefore not understated by calendar time (a 6-hour remainder is ~0.9 days, not 0.25).
+    """
+    import exchange_calendars as xcals
+
+    calendar = xcals.get_calendar("XNYS")
+    first, last = start.astimezone(NY).date(), end.astimezone(NY).date()
+    sessions = calendar.sessions_in_range(pd.Timestamp(first), pd.Timestamp(last))
+    total, previous = 0.0, None
+    for session in sessions:
+        opened = calendar.session_open(session).to_pydatetime()
+        closed = calendar.session_close(session).to_pydatetime()
+        overlap = (min(end, closed) - max(start, opened)).total_seconds()
+        total += max(0.0, overlap) / (closed - opened).total_seconds()
+        if previous is not None and start <= previous[1] and end >= opened:
+            total += overnight_variance(previous[0], session.date())
+        previous = (session.date(), closed)
+    return max(total, 1 / 23400)
+
+
 @dataclass(frozen=True)
 class ScenarioSet:
     ids: tuple[int, ...]
@@ -51,6 +75,8 @@ class ScenarioSet:
     # and the per-scenario IV shocks applied, aligned with the rows of changes/next_changes.
     spot_vol_correlation: dict[str, float] = field(default_factory=dict)
     iv_shocks: dict[str, np.ndarray] = field(default_factory=dict)
+    # Spot/IV variance horizon of `changes` in trading days (calendar_days drives decay and carry).
+    trading_days: float = 0.0
 
     # Moomoo re-derives spot from the book mid and recalibrates IV on every read (time to expiry
     # shrinks each call), so exact equality fails on unchanged markets. Tolerate only changes
@@ -153,6 +179,8 @@ class ScenarioEngine:
             else now
         )
         days = max((end - forecast_start).total_seconds() / 86400, 1 / 86400)
+        # Option decay and carry run on calendar days; spot/IV variance on the trading-time clock.
+        horizon = trading_variance(forecast_start, end)
         symbols = sorted({self.manifest.contract_map[i].symbol for i in ids})
         rng = np.random.default_rng(self.manifest.policy.seed)
         n = 64
@@ -183,18 +211,31 @@ class ScenarioEngine:
                 covariance = self.daily_covariance(now, symbols)
                 joint = normals[:, 1:] @ np.linalg.cholesky(covariance).T
                 standardized = joint / np.sqrt(np.diag(covariance))
-                shocks = dict(zip(symbols, (joint * np.sqrt(days * 252 / 365)).T, strict=True))
+                shocks = dict(zip(symbols, (joint * np.sqrt(horizon)).T, strict=True))
                 source = "prior daily joint returns, shrunk covariance; modeled intraday/IV scaling"
             else:
                 standardized = 0.6 * normals[:, :1] + 0.8 * normals[:, 1:]
                 shocks = {
-                    s: vols[s] * np.sqrt(days / 365) * standardized[:, j] for j, s in enumerate(symbols)
+                    s: vols[s] * np.sqrt(horizon / 252) * standardized[:, j] for j, s in enumerate(symbols)
                 }
                 source = "modeled spot/IV scenarios; NOT historical performance evidence"
             # iv_s = sigma_iv * (rho_s * z_spot_s + sqrt(1 - rho_s^2) * u_s), z_spot_s unit variance.
             spot_vol = {s: self.manifest.spot_vol_rho(s) for s in symbols}
             rho = np.array([spot_vol[s] for s in symbols])
-            iv = 0.015 * np.sqrt(days) * (rho * standardized + np.sqrt(1 - rho**2) * vol_normals)
+            # With a fixed seed the same draws recur all contest; make each u column exactly
+            # orthogonal to its own spot z (same norm) so the realized correlation equals rho.
+            # Projections are sign-symmetric, so antithetic pairs stay antithetic.
+            vol_normals = vol_normals.copy()
+            for j in range(len(symbols)):
+                z = standardized[:, j]
+                u = vol_normals[:, j] - (vol_normals[:, j] @ z) / (z @ z) * z
+                if np.linalg.norm(u) > 1e-12:
+                    vol_normals[:, j] = u * np.linalg.norm(z) / np.linalg.norm(u)
+            iv = (
+                0.015
+                * np.sqrt(horizon * TRADING_DAY)
+                * (rho * standardized + np.sqrt(1 - rho**2) * vol_normals)
+            )
             iv_shocks = dict(zip(symbols, iv.T, strict=True))
             source += "; spot-vol corr " + " ".join(f"{s} {r:+.2f}" for s, r in spot_vol.items())
         if (
@@ -234,18 +275,23 @@ class ScenarioEngine:
             # Same standardized joint shocks, longer calendar horizon; score is
             # next-close minus this-close, never versus the initial account NAV.
             following = self.manifest.session_close(next_session)
-            scale = np.sqrt((following - end).total_seconds() / 86400 / days)
+            scale = np.sqrt(trading_variance(end, following) / horizon)
             next_changes = self._reprice(ids, quotes, end, following, shocks, iv_shocks, scale)
             # Close -> reopen: calendar-time decay, trading-time spot/IV variance on the same shocks.
             variance = overnight_variance(close_day, next_session)
+            overnight_shocks, overnight_iv = shocks, iv_shocks
+            if source.startswith("historical matched-clock"):
+                # Realized rest-of-session paths carry a sample mean: no directional overnight drift.
+                overnight_shocks = {k: v - v.mean() for k, v in shocks.items()}
+                overnight_iv = {k: v - v.mean() for k, v in iv_shocks.items()}
             overnight_changes = self._reprice(
                 ids,
                 quotes,
                 end,
                 self.manifest.session_open(next_session) + OVERNIGHT_REACTION,
-                shocks,
-                iv_shocks,
-                np.sqrt(variance * TRADING_DAY / days),
+                overnight_shocks,
+                overnight_iv,
+                np.sqrt(variance / horizon),
             )
         weights = np.full(n, 1 / n)
         identifier = digest(
@@ -281,12 +327,14 @@ class ScenarioEngine:
             variance,
             spot_vol,
             iv_shocks,
+            horizon,
         )
 
     def _reprice(self, ids, quotes, start, finish, shocks, iv_shocks, scale=1.0):
         changes = np.empty((len(next(iter(shocks.values()))), len(ids)))
         for j, identifier in enumerate(ids):
             c, q = self.manifest.contract_map[identifier], quotes[identifier]
+            current = self.valuation.price(c, q.spot, q.iv, start) if c.kind == "OPT" and q.iv else None
             for s in range(len(changes)):
                 changes[s, j] = c.multiplier * self.valuation.scenario_change(
                     c,
@@ -295,6 +343,7 @@ class ScenarioEngine:
                     finish,
                     float(np.clip(shocks[c.symbol][s] * scale, -0.8, 2)),
                     float(iv_shocks[c.symbol][s] * scale),
+                    current=current,
                 )
         return changes
 

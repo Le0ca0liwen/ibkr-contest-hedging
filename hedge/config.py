@@ -185,6 +185,9 @@ class Manifest(Frozen):
             raise ValueError(
                 "Daily benchmark rates require scored sessions and finite fractional rates between 0 and 1"
             )
+        unknown = set(self.spot_vol_correlation) - {c.symbol.upper() for c in self.contracts}
+        if unknown:
+            raise ValueError(f"spot_vol_correlation symbols not in contracts: {sorted(unknown)}")
         if self.stock_borrow and (
             not self.stock_borrow_source.strip() or any(v < 0 for v in self.stock_borrow.values())
         ):

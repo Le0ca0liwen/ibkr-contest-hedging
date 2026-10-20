@@ -144,6 +144,9 @@ class Supervisor:
                         "nav_gap",
                         "hold_distance",
                         "proposed_distance",
+                        "overnight_score",
+                        "burn_component",
+                        "cost_treatment",
                     )
                 }
                 for item in (state.get("decisions") or [])[:3]
@@ -163,7 +166,9 @@ class Supervisor:
             return (
                 f"Score per session = |V_i - V_(i-1) x (1 + {rate}/360)^n_i|, n_i = calendar days since the "
                 "previous session (3 after a weekend). closing_target already includes that interest growth; "
-                "the deterministic optimizer trades toward it by design. Gains and losses count equally."
+                "the deterministic optimizer trades toward it by design. Gains and losses count equally. "
+                "Decision scores add a weighted next-open (overnight) term; burn_component is the part of a "
+                "trade's value that comes from paying costs out of an above-target NAV (cost_treatment says if enabled)."
             )
         if rule == "interest_benchmark":
             return f"Score per session = |V_i - V_(i-1) x (1 + {rate}/360)|. Gains and losses count equally."

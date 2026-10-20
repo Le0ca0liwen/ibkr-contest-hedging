@@ -134,13 +134,23 @@ class ValuationEngine:
         ) / (2 * bump)
 
     def scenario_change(
-        self, c: Contract, quote: Quote, now, end, return_shift, iv_shift=0, skew=0, rate_shift=0
+        self,
+        c: Contract,
+        quote: Quote,
+        now,
+        end,
+        return_shift,
+        iv_shift=0,
+        skew=0,
+        rate_shift=0,
+        current=None,
     ):
         if c.kind == "STK":
             return quote.spot * return_shift
         if quote.iv is None:
             raise ValueError(f"Missing implied volatility for {c.label}")
-        current = self.price(c, quote.spot, quote.iv, now)
+        if current is None:  # Callers repricing many scenarios pass the shared starting price.
+            current = self.price(c, quote.spot, quote.iv, now)
         moneyness = c.strike / quote.spot - 1
         future = self.price(
             c,

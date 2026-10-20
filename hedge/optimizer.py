@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import timedelta
 from time import monotonic
 
 import cvxpy as cp
@@ -233,8 +234,11 @@ class HedgeOptimizer:
             if i in m.allowlist
             and not m.prohibited_reason(m.contract_map[i])
             and (not stock_only or m.contract_map[i].kind == "STK")
-            # Mirrors RiskGate's order window: e.g. no option proposals after the option cutoff.
-            and m.can_trade(snapshot.at, m.contract_map[i].kind)
+            # Mirrors RiskGate's order window, checked at the end of the solve budget: the gate runs
+            # after a solve of up to solver_seconds, so options are frozen slightly before the cutoff.
+            and m.can_trade(
+                snapshot.at + timedelta(seconds=m.policy.solver_seconds + 5), m.contract_map[i].kind
+            )
         ]
         allowed_type = "synthetic" if snapshot.source == "synthetic" else "live"
         candidates = [

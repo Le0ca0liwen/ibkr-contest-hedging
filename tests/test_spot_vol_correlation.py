@@ -142,6 +142,8 @@ def test_spot_vol_configuration_bounds_and_defaults(manifest):
     for bad in ({"SPY": -0.96}, {"SPY": 0.51}, {"spy": -0.5, "SPY": -0.6}, {" ": -0.5}):
         with pytest.raises(ValidationError):
             Manifest.model_validate({**data, "spot_vol_correlation": bad})
-    assert Manifest.model_validate({**data, "spot_vol_correlation": {"spy": -0.95}}).spot_vol_correlation == {
-        "SPY": -0.95
+    assert Manifest.model_validate({**data, "spot_vol_correlation": {"ba": -0.95}}).spot_vol_correlation == {
+        "BA": -0.95
     }
+    with pytest.raises(ValidationError, match="not in contracts"):  # typo such as SPXC for SPCX
+        Manifest.model_validate({**data, "spot_vol_correlation": {"BAA": -0.5}})
