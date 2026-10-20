@@ -106,6 +106,7 @@ class TradingService:
         self.recovery = RecoveryController(manifest, store)
         self.pending_recovery = None
         self.market_data_errors = {}
+        self.api_close_warned = set()
         self.closing_recorder = ClosingRecorder(
             manifest, self.ledger, self.broker, self.now, self.alert, demo
         )
@@ -276,10 +277,31 @@ class TradingService:
             finally:
                 self.events.task_done()
 
-    def alert(self, severity, message):
+    def alert(self, severity, message, key=None):
+        if key is not None:
+            # Once-only alert: a deterministic record id keeps it single across restarts.
+            identifier = digest((self.manifest.contest_id, *key))[:32]
+            self.store.record(
+                "alert", self.manifest.account, {"severity": severity, "message": message}, identifier
+            )
+            return
         recent = self.store.records("alert", self.manifest.account, 1)
         if not recent or recent[0].get("message") != message:
             self.store.record("alert", self.manifest.account, {"severity": severity, "message": message})
+
+    def _warn_api_previous_close(self, day, record):
+        """Once per session: today's target rests on a provisional API close, not the statement."""
+        if record is None or record["provenance"] != "api" or day in self.api_close_warned:
+            return
+        sessions = (self.manifest.day_zero, *self.manifest.scoring_sessions)
+        self.alert(
+            "warning",
+            "Import yesterday's official IBKR statement NAV before the open: "
+            f"{day}'s closing target rests on the API closing observation for "
+            f"{sessions[sessions.index(day) - 1]}, which can differ from the statement NAV",
+            key=("api_previous_close", str(day)),
+        )
+        self.api_close_warned.add(day)
 
     def _hard_stop(self, reason):
         self.control_epoch += 1
@@ -572,11 +594,12 @@ class TradingService:
                     self._hard_stop("Contest ended; filled holdings retained")
                     await self.execution.pause()
                 if day:
-                    previous = self.ledger.previous_close(day)
-                    if previous is None and day != self.manifest.day_zero:
+                    record = self.ledger.previous_close_record(day)
+                    if record is None and day != self.manifest.day_zero:
                         self.alert(
                             "warning", "Previous official closing NAV missing; score-aware trading blocked"
                         )
+                    self._warn_api_previous_close(day, record)
                 await asyncio.sleep(self.manifest.policy.risk_seconds)
             except asyncio.CancelledError:
                 raise
@@ -1464,7 +1487,9 @@ class TradingService:
     def state(self):
         snap = self.last_snapshot
         day = self.manifest.active_session(self.now())
-        previous = self.ledger.previous_close(day) if day else None
+        previous_record = self.ledger.previous_close_record(day) if day else None
+        previous = previous_record["nav"] if previous_record else None
+        self._warn_api_previous_close(day, previous_record)
         closing_target = self.ledger.target_for(day, previous, allow_estimate=True) if day else None
         try:
             estimate = (
@@ -1547,6 +1572,8 @@ class TradingService:
                 },
                 "nav_estimate": estimate,
                 "previous_close": str(previous) if previous is not None else None,
+                # "statement" (official IBKR statement) or "api" (provisional recorder capture).
+                "previous_close_provenance": previous_record["provenance"] if previous_record else None,
                 "closing_target": str(closing_target) if closing_target is not None else None,
                 "closing_target_estimated": self.manifest.scoring_rule == "actual_daily_cash_rate"
                 and day not in self.ledger.daily_rates(),

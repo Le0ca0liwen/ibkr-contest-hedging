@@ -30,8 +30,9 @@ enable trading. Reviews that finish after the account changes are marked stale.
 The existing deterministic strategy continues on model failures. The scoring sentence in the
 prompt is generated from the manifest's `scoring_rule` and rate; for the SPCX/RKLB/SPY contest it
 is previous closing NAV × (1 + 0.0344/360)^n_i. Reviews also receive the NAV estimate, closing
-target, provisional score, session clock (minutes to close, n_i, oldest stock/option quote age),
-risk reasons and the latest decisions' gap/threshold figures. A review is marked stale only when
+target, the previous close's provenance (`statement` or provisional `api`), provisional score,
+session clock (minutes to close, n_i, oldest stock/option quote age), risk reasons and the latest
+decisions' gap/threshold figures. A review is marked stale only when
 the account content changes during the call, not when the snapshot is merely re-stamped.
 Official closing inputs and executable market-data validation remain required.
 

@@ -4,10 +4,22 @@ import asyncio
 from datetime import timedelta
 from decimal import Decimal
 
+from .config import NY
 from .models import digest
+
+# Source marker of the post-close capture, which stays an API row ("IBKR API ..."/"SYNTHETIC simulator ...").
+POST_CLOSE = "post-close observation"
+POST_CLOSE_WINDOW = timedelta(minutes=5)
 
 
 class ClosingRecorder:
+    """Records API NetLiquidation at the bell, then once more after the options close.
+
+    Both are provisional API rows; an imported IBKR statement always outranks them in the ledger
+    and is never overwritten. The post-close observation follows a recorded bell capture only, so
+    a missed bell still requires the statement.
+    """
+
     def __init__(self, manifest, ledger, broker, clock, alert, demo=False):
         self.manifest, self.ledger, self.broker = manifest, ledger, broker
         self.clock, self.alert, self.demo = clock, alert, demo
@@ -31,7 +43,31 @@ class ClosingRecorder:
             "next_close": min(future).isoformat() if future else None,
             "last": self.last,
             "window_seconds": self.manifest.closing_capture.window_seconds,
+            "late_capture_minutes": self.manifest.closing_capture.late_capture_minutes,
         }
+
+    def _post_close_settled(self, day, revisions):
+        """A statement exists for the day, or its post-close observation is already recorded."""
+        rows = [r for r in revisions if r["day"] == day]
+        return not rows or any(r["provenance"] == "statement" or POST_CLOSE in r["source"] for r in rows)
+
+    async def _observe(self, start, deadline):
+        observation = await self.broker.closing_nav_observation()
+        value = Decimal(str(observation["nav"]))
+        at = observation["observed_at"]
+        requested = observation["requested_at"]
+        expected_source = "synthetic" if self.demo else "ibkr"
+        if (
+            observation["account"] != self.manifest.account
+            or observation["source"] != expected_source
+            or not value.is_finite()
+            or requested.tzinfo is None
+            or at.tzinfo is None
+            or not start <= requested <= at <= deadline
+            or at > self.clock() + timedelta(seconds=1)
+        ):
+            raise ValueError("Invalid account, source, value or closing-observation timestamp")
+        return value, at
 
     async def tick(self):
         policy = self.manifest.closing_capture
@@ -56,65 +92,83 @@ class ClosingRecorder:
             )
             self.loaded = True
         now = self.clock()
-        closes = self.ledger.closes()
+        revisions = self.ledger.revisions()
+        closes = self.ledger.close_records(revisions)
         for day in (self.manifest.day_zero, *self.manifest.scoring_sessions):
             close = self.manifest.session_close(day)
-            if day in closes or now < close:
+            if now < close:
                 continue
-            deadline = close + timedelta(seconds=policy.window_seconds)
-            if now > deadline:
-                if str(day) not in self.missed:
-                    self.ledger.store.record(
-                        "closing_capture",
-                        self.manifest.account,
-                        {
-                            "contest": self.manifest.contest_id,
-                            "date": str(day),
-                            "status": "MISSED",
-                            "scheduled_close": close.isoformat(),
-                            "reason": "Capture window missed; historical statement import required",
-                        },
-                    )
-                    self.missed.add(str(day))
-                    self.alert("warning", f"Closing NAV capture missed for {day}; import the IBKR statement")
-                self.status = f"Closing capture missed for {day}; statement required"
-                continue
+            if day in closes:
+                start = close + timedelta(minutes=policy.late_capture_minutes)
+                deadline = start + POST_CLOSE_WINDOW
+                if (
+                    not policy.late_capture_minutes
+                    or not start <= now <= deadline
+                    or self._post_close_settled(day, revisions)
+                ):
+                    continue
+                phase = "post_close"
+            else:
+                start, deadline = close, close + timedelta(seconds=policy.window_seconds)
+                if now > deadline:
+                    if str(day) not in self.missed:
+                        self.ledger.store.record(
+                            "closing_capture",
+                            self.manifest.account,
+                            {
+                                "contest": self.manifest.contest_id,
+                                "date": str(day),
+                                "status": "MISSED",
+                                "scheduled_close": close.isoformat(),
+                                "reason": "Capture window missed; historical statement import required",
+                            },
+                        )
+                        self.missed.add(str(day))
+                        self.alert(
+                            "warning", f"Closing NAV capture missed for {day}; import the IBKR statement"
+                        )
+                    self.status = f"Closing capture missed for {day}; statement required"
+                    continue
+                phase = "close"
             if self.retry_at is not None and now < self.retry_at:
                 return
             self.retry_at = now + timedelta(seconds=policy.retry_seconds)
-            self.status = f"Requesting closing NAV for {day}"
+            label = "Post-close NAV" if phase == "post_close" else "Closing NAV"
+            self.status = f"{label} requested for {day}"
             try:
-                observation = await self.broker.closing_nav_observation()
-                value = Decimal(str(observation["nav"]))
-                at = observation["observed_at"]
-                requested = observation["requested_at"]
-                expected_source = "synthetic" if self.demo else "ibkr"
-                if (
-                    observation["account"] != self.manifest.account
-                    or observation["source"] != expected_source
-                    or not value.is_finite()
-                    or requested.tzinfo is None
-                    or at.tzinfo is None
-                    or not close <= requested <= at <= deadline
-                    or at > self.clock() + timedelta(seconds=1)
-                ):
-                    raise ValueError("Invalid account, source, value or closing-observation timestamp")
+                value, at = await self._observe(start, deadline)
                 # Report imports can arrive while the broker request is pending.
                 # No await separates this recheck and the synchronous ledger write.
-                if day in self.ledger.closes():
+                if phase == "close" and day in self.ledger.closes():
                     self.status = f"Closing NAV for {day} already recorded; existing value retained"
                     return
-                source = (
-                    "SYNTHETIC simulator closing observation"
-                    if self.demo
-                    else "IBKR API closing observation (NetLiquidation; statement reconciliation pending)"
-                ) + f"; scheduled {close.isoformat()}; observed {at.isoformat()}"
+                if phase == "post_close" and self._post_close_settled(day, self.ledger.revisions()):
+                    self.status = (
+                        f"Statement NAV for {day} already recorded; post-close observation discarded"
+                    )
+                    return
+                if phase == "post_close":
+                    options_close = (close + timedelta(minutes=15)).astimezone(NY)
+                    source = (
+                        f"SYNTHETIC simulator {POST_CLOSE} (after {options_close:%H:%M} options close)"
+                        if self.demo
+                        else f"IBKR API {POST_CLOSE} (after {options_close:%H:%M} options close; "
+                        "NetLiquidation; statement reconciliation pending)"
+                    )
+                else:
+                    source = (
+                        "SYNTHETIC simulator closing observation"
+                        if self.demo
+                        else "IBKR API closing observation (NetLiquidation; statement reconciliation pending)"
+                    )
+                source += f"; scheduled {start.isoformat()}; observed {at.isoformat()}"
                 self.ledger.import_close(day, value, source, self.manifest.account)
                 self.last = {
                     "date": str(day),
                     "nav": str(value),
                     "observed_at": at.isoformat(),
                     "scheduled_close": close.isoformat(),
+                    "phase": phase,
                     "source": source,
                 }
                 self.ledger.store.record(
@@ -122,9 +176,9 @@ class ClosingRecorder:
                     self.manifest.account,
                     {**self.last, "contest": self.manifest.contest_id, "status": "RECORDED"},
                 )
-                self.status = f"Closing NAV recorded for {day}"
+                self.status = f"{label} recorded for {day}"
             except (ConnectionError, TimeoutError, ValueError, KeyError, TypeError) as exc:
-                self.status = f"Closing NAV capture waiting for retry: {exc}"
+                self.status = f"{label} capture waiting for retry: {exc}"
                 self.alert("warning", self.status)
             return
 
