@@ -314,3 +314,35 @@ def test_screening_uses_neighbouring_expiries_when_contest_expiry_is_forbidden(m
     ids = screen_options(m, quotes, {})
     # No same-expiry candidates are allowlisted, so both neighbouring expiries are screened.
     assert {300, 301, 302} <= set(ids)
+
+
+async def test_prepare_contest_qualifies_signed_legs_from_final_strikes(tmp_path):
+    from pathlib import Path
+
+    import yaml
+
+    from hedge.universe_discovery import prepare_contest
+
+    template = yaml.safe_load(Path("config/contest.template.yaml").read_text())
+    (tmp_path / "daily").mkdir()
+    template["daily_stock_history"] = str(tmp_path / "daily" / "contest.csv")
+    broker = ChainBroker()
+    broker.seen = []
+    m = await prepare_contest(
+        template, None, {"SPCX": [160, 130, 145], "RKLB": [55, 45], "SPY": [770]}, "IBKR statement", ib=broker
+    )
+    assert broker.connection["readonly"] and broker.disconnected and m.account == "DU_TEST"
+    signed = sorted(
+        (c.symbol, c.strike, c.right, m.mandatory[c.con_id]) for c in m.contracts if c.con_id in m.mandatory
+    )
+    assert signed == [
+        ("RKLB", 45, "P", -25),
+        ("RKLB", 55, "P", 25),
+        ("SPCX", 130, "C", 25),
+        ("SPCX", 145, "C", -50),
+        ("SPCX", 160, "C", 25),
+        ("SPY", 770, "C", 25),
+        ("SPY", 770, "P", 25),
+    ]
+    assert m.market_data_provider == "moomoo" and not m.confirmed
+    assert set(m.allowlist) == {10, 20}  # SPY shares stay quote-only under the open universe

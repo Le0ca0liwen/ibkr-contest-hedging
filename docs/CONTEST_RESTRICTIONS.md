@@ -71,10 +71,13 @@ The account, report source and verified conIds must still be filled in.
 IBKR provides no live quotes to this team; Moomoo OpenD is the only market-data
 source and never trades. Before Day 0:
 
-1. Copy `config/contest.template.yaml` to `config/local.contest.yaml`. Keep
-   `market_data_provider: moomoo`. Fill in `account`, `report_source`,
-   `initial_nav` (the verified Day 0 NAV), the final strikes' conIds (the handout
-   says strikes are set shortly before trading) and the SPCX/RKLB/SPY stocks.
+1. With TWS/Gateway on the paper account (Read-Only API is enough), qualify the
+   three stocks and seven legs from the final strikes (the handout says strikes
+   are set shortly before trading):
+   `python -m hedge.cli prepare-contest --spcx 130 145 160 --rklb 45 55 --spy 770 --port 4002`
+   (7497 for TWS). It writes `config/local.contest.yaml` with
+   `market_data_provider: moomoo` and `confirmed: false`; set `initial_nav` to the
+   verified Day 0 NAV (`python -m hedge.cli probe-ibkr` shows it).
 2. Fetch joint daily history (SPY is required for beta even though its shares are
    forbidden), and re-run it before **every** open; the service reloads the file
    and waits rather than trading if it is over 7 days old:

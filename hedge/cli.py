@@ -94,6 +94,17 @@ def main():
     intake.add_argument("--expiry")
     intake.add_argument("--purchase-on-day", type=int, choices=[0, 1], default=0)
     intake.add_argument("--output", default="config/local.practice.inputs.yaml")
+    contest = commands.add_parser(
+        "prepare-contest", help="Read-only: qualify contest stocks and mandated legs from final strikes"
+    )
+    contest.add_argument("--template", default="config/contest.template.yaml")
+    contest.add_argument("--account")
+    contest.add_argument("--spcx", nargs=3, type=float, required=True, help="Butterfly call strikes")
+    contest.add_argument("--rklb", nargs=2, type=float, required=True, help="Bear spread put strikes")
+    contest.add_argument("--spy", type=float, required=True, help="Straddle strike")
+    contest.add_argument("--report-source", default="IBKR Custom Statement: Net Asset Value")
+    contest.add_argument("--port", type=int, choices=[7497, 4002], default=4002)
+    contest.add_argument("--output", default="config/local.contest.yaml")
     codes = commands.add_parser("moomoo-codes", help="Write the Moomoo quote-collector code list")
     codes.add_argument("--config", required=True)
     codes.add_argument("--output", default="config/local.moomoo-codes.json")
@@ -159,6 +170,25 @@ def main():
             )
             Path(args.output).write_text(yaml.safe_dump(result.model_dump(mode="json"), sort_keys=False))
             print("Qualified universe saved; enable only after joint-history and quote validation")
+        elif args.command == "prepare-contest":
+            import yaml
+
+            from .universe_discovery import prepare_contest
+
+            manifest = asyncio.run(
+                prepare_contest(
+                    yaml.safe_load(Path(args.template).read_text()),
+                    args.account,
+                    {"SPCX": args.spcx, "RKLB": args.rklb, "SPY": [args.spy]},
+                    args.report_source,
+                    args.port,
+                )
+            )
+            destination = Path(args.output)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with destination.open("x") as file:
+                file.write(yaml.safe_dump(manifest.model_dump(mode="json"), sort_keys=False))
+            print(f"Qualified 3 stocks and 7 mandated legs read-only: {destination} (confirmed: false)")
         elif args.command == "moomoo-codes":
             from .moomoo_data import collector_codes
 

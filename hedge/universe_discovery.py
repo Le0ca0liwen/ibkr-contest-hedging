@@ -169,3 +169,66 @@ async def _option_chain(manifest, broker, stock, expiries, strikes, center, know
                 if c is not None and not manifest.prohibited_reason(c):
                     found.append(c)
     return found
+
+
+async def prepare_contest(template, account, strikes, report_source, port=4002, ib=None):
+    """Read-only: qualify the 3 underlyings and 7 mandated legs from the final strikes.
+
+    `template` is the parsed contest template dict; `strikes` maps SPCX to its 3 call strikes,
+    RKLB to its 2 put strikes and SPY to the straddle strike. Signs follow the contest structure.
+    """
+    from .config import Manifest
+
+    expiry = date.fromisoformat(str(template["contest_option_expiry"]))
+    spcx, rklb, spy = sorted(strikes["SPCX"]), sorted(strikes["RKLB"]), strikes["SPY"]
+    if len(spcx) != 3 or len(rklb) != 2 or len(spy) != 1:
+        raise ValueError("Need 3 SPCX call strikes, 2 RKLB put strikes and 1 SPY strike")
+    legs = [
+        ("SPCX", spcx[0], "C", 25),
+        ("SPCX", spcx[1], "C", -50),
+        ("SPCX", spcx[2], "C", 25),
+        ("RKLB", rklb[0], "P", -25),
+        ("RKLB", rklb[1], "P", 25),
+        ("SPY", spy[0], "C", 25),
+        ("SPY", spy[0], "P", 25),
+    ]
+    broker = ib or IB()
+    broker.RaiseRequestErrors = True
+    broker.RequestTimeout = 15
+    try:
+        await broker.connectAsync(
+            "127.0.0.1", port, clientId=84, readonly=True, timeout=15, raiseSyncErrors=True
+        )
+        account = paper_account(broker.managedAccounts(), account)
+        stocks = {symbol: await _stock(broker, symbol) for symbol in ("SPCX", "RKLB", "SPY")}
+        contracts, mandatory = list(stocks.values()), {}
+        for symbol, strike, right, quantity in legs:
+            details = await broker.reqContractDetailsAsync(
+                Option(
+                    symbol,
+                    expiry.strftime("%Y%m%d"),
+                    strike,
+                    right,
+                    "SMART",
+                    multiplier="100",
+                    currency="USD",
+                    tradingClass=symbol,
+                )
+            )
+            c = _option(details, symbol, stocks[symbol].con_id, expiry, strike, right)
+            if c is None:
+                raise ValueError(f"Ambiguous/unavailable {symbol} {expiry} {strike}{right}")
+            contracts.append(c)
+            mandatory[c.con_id] = quantity
+        data = {
+            **template,
+            "account": account,
+            "report_source": report_source,
+            "gateway_port": port,
+            "contracts": [c.model_dump(mode="json") for c in contracts],
+            "mandatory": mandatory,
+            "confirmed": False,
+        }
+        return Manifest.model_validate(data)
+    finally:
+        broker.disconnect()
