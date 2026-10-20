@@ -149,6 +149,8 @@ class Target(Frozen):
     binding: tuple[str, ...] = ()
     explanation: str = ""
     solver_metrics: dict[str, Any] = Field(default_factory=dict)
+    # Expected-score parts at these quantities: closing, overnight, scored_cost, burn.
+    components: dict[str, float] = Field(default_factory=dict)
 
 
 class RiskResult(Frozen):

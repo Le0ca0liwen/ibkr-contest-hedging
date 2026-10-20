@@ -97,6 +97,45 @@ def test_reduced_model_matches_enumerated_integer_cost_and_carry(manifest, snaps
     )
 
 
+@pytest.mark.parametrize("burn", [True, False])
+@pytest.mark.parametrize("held,gap", [(-2, -25), (2, 140)])
+def test_overnight_and_cost_treatment_match_enumerated_objective(manifest, snapshot, quotes, burn, held, gap):
+    m, s, qs, sc, estimate = small_problem(manifest, snapshot, quotes, 100000, held, gap)
+    m = m.model_copy(
+        update={
+            "scoring_rule": "calendar_interest_benchmark",
+            "scoring_annual_rate": Decimal("0.0344"),
+            "policy": m.policy.model_copy(update={"burn_surplus": burn, "overnight_weight": 0.5}),
+        }
+    )
+    overnight = np.array([[60.0, 1.0, 0.0], [-50.0, -3.0, 0.0]])
+    sc = replace(sc, overnight_changes=overnight, next_session=manifest.scoring_sessions[1])
+    opt = HedgeOptimizer(m)
+    target = opt.solve(s, qs, sc, s.nav, estimate)
+    assert target.status == "OPTIMAL"
+    # The overnight term supersedes the next-close tie-breaker.
+    assert "next_close" not in [stage["stage"] for stage in target.solver_metrics["stages"]]
+    offset = ((1 + 0.0344 / 360) ** 1 - 1) * float(s.nav)
+    scores = []
+    for h in range(-2, 3):
+        fee = execution_cost(m, qs, [10], [h - held])
+        cash_after = 100000 - qs[10].mid * (h - held) - fee
+        short = max(0, -h) * qs[10].spot
+        g = gap + sc.changes[:, 0] * h + cash_carry(m, cash_after, short, sc.calendar_days, float(s.nav))
+        closing = np.abs(g - fee) if burn else np.abs(g) + fee
+        night = overnight[:, 0] * h + overnight[:, 1] * 25 + cash_carry(m, cash_after, short, 1, float(s.nav))
+        scores.append(float(sc.weights @ (closing + 0.5 * np.abs(night - offset))))
+    assert target.expected_score <= min(scores) + 1 + 1e-5
+    assert target.expected_score == pytest.approx(scores[target.quantities.get(10, 0) + 2])
+    assert target.solver_metrics["returned_primary_objective"] == pytest.approx(target.expected_score)
+    assert target.solver_metrics["returned_primary_objective"] <= (
+        target.solver_metrics["primary_lower_bound"] + 1 + 1e-5
+    )
+    assert opt.evaluate_target(s, qs, sc, target, s.nav, estimate).expected_score == pytest.approx(
+        target.expected_score
+    )
+
+
 def test_ranking_timeout_never_uses_failed_solution(manifest, snapshot, quotes, monkeypatch):
     m, s, qs, sc, estimate = small_problem(manifest, snapshot, quotes, 100000, -2, -25)
     original, calls = cp.Problem.solve, []

@@ -59,6 +59,12 @@ class TradingPolicy(Frozen):
     cash_day_count: Literal[360, 365] = 360
     seed: int = 17
     history_sessions: Literal[20, 60, 120] = 60
+    # True: scored costs sit inside |closing gap - costs|, so a NAV surplus above target is partly
+    # spent down by trading (burn). False: |closing gap| + costs, a separate additive penalty.
+    burn_surplus: bool = True
+    # Weight of the close -> next scored session's open + 15 min gap (decay and moves the app
+    # cannot trade against overnight) relative to the closing gap; 0 disables the term.
+    overnight_weight: float = Field(default=0.5, ge=0, le=2)
 
     @model_validator(mode="after")
     def interest_provenance(self):
@@ -288,6 +294,17 @@ class Manifest(Frozen):
         if day not in self.scoring_sessions:
             raise ValueError(f"{day} is not a scored session")
         return (day - days[days.index(day) - 1]).days
+
+    def next_scored_session(self, day: date) -> date | None:
+        return next((d for d in self.scoring_sessions if d > day), None)
+
+    def benchmark_growth(self, day: date) -> float:
+        """Modeled target growth over the previous close for scored ``day``; 0 when unknown."""
+        rate = self.scoring_daily_rates.get(day, self.scoring_forecast_daily_rate)
+        try:
+            return float(self.scoring_target(Decimal(1), day, rate) - 1)
+        except ValueError:
+            return 0.0
 
     @property
     def purchase_session(self) -> date:

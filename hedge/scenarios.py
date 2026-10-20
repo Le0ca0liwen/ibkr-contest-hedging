@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +11,20 @@ from .config import NY
 from .continuity import DataUnavailable
 from .models import digest
 from .valuation import ValuationEngine
+
+# The app can trade again once the next scored session has been open this long.
+OVERNIGHT_REACTION = timedelta(minutes=15)
+TRADING_DAY = 365 / 252  # calendar days of model variance in one trading day (sigma^2 / 252)
+
+
+def overnight_variance(close_day: date, next_day: date) -> float:
+    """Modeled trading-time clock, in trading days of spot/IV variance, from a close to the reopen.
+
+    An assumption, not an estimate: one weeknight carries 0.30 of a daily variance and every
+    extra calendar day (weekend, holiday) adds 0.10, so Friday close -> Monday open is 0.50.
+    Option decay is still repriced in calendar time.
+    """
+    return 0.30 + 0.10 * ((next_day - close_day).days - 1)
 
 
 @dataclass(frozen=True)
@@ -28,6 +42,11 @@ class ScenarioSet:
     beta_source: str = "Unavailable: no validated benchmark history"
     built_at: datetime | None = None
     valuation_inputs: dict[int, tuple[float, float | None]] = field(default_factory=dict)
+    # Value change from the scored close to next_session's open + OVERNIGHT_REACTION on the same
+    # joint shocks; None on the final scored session (no next session) or when not modeled.
+    overnight_changes: np.ndarray | None = None
+    next_session: date | None = None
+    overnight_variance: float = 0.0
 
     # Moomoo re-derives spot from the book mid and recalibrates IV on every read (time to expiry
     # shrinks each call), so exact equality fails on unchanged markets. Tolerate only changes
@@ -59,6 +78,13 @@ class ScenarioSet:
             raise ValueError("Nonfinite scenario values")
         if (self.weights < 0).any() or not np.isclose(self.weights.sum(), 1):
             raise ValueError("Scenario weights must sum to one")
+        if (self.overnight_changes is None) != (self.next_session is None):
+            raise ValueError("Overnight changes require their next scored session")
+        if self.overnight_changes is not None and (
+            self.overnight_changes.shape != self.changes.shape
+            or not np.isfinite(self.overnight_changes).all()
+        ):
+            raise ValueError("Invalid overnight scenario values")
 
 
 class ScenarioEngine:
@@ -156,18 +182,7 @@ class ScenarioEngine:
             and not source.startswith("historical matched-clock")
         ):
             raise ValueError("Joint historical coverage required for a cross-underlying hedge universe")
-        changes = np.empty((n, len(ids)))
-        for j, identifier in enumerate(ids):
-            c, q = self.manifest.contract_map[identifier], quotes[identifier]
-            for s in range(n):
-                changes[s, j] = c.multiplier * self.valuation.scenario_change(
-                    c,
-                    q,
-                    forecast_start,
-                    end,
-                    float(np.clip(shocks[c.symbol][s], -0.8, 2)),
-                    float(iv_shocks[c.symbol][s]),
-                )
+        changes = self._reprice(ids, quotes, forecast_start, end, shocks, iv_shocks)
         stress = self.stress_matrix(ids, quotes, now, max(end, now + timedelta(days=1)))
         betas, beta_source = self.market_betas(now, symbols)
         if all(symbol in betas for symbol in symbols):
@@ -190,32 +205,27 @@ class ScenarioEngine:
             i: self.valuation.rho(self.manifest.contract_map[i], quotes[i].spot, quotes[i].iv, now)
             for i in ids
         }
-        following = next(
-            (
-                self.manifest.session_close(d)
-                for d in self.manifest.scoring_sessions
-                if self.manifest.session_close(d) > end
-            ),
-            None,
-        )
-        next_changes = None
-        if following:
+        close_day = end.astimezone(NY).date()
+        next_session = self.manifest.next_scored_session(close_day)
+        next_changes = overnight_changes = None
+        variance = 0.0
+        if next_session:
             # Same standardized joint shocks, longer calendar horizon; score is
             # next-close minus this-close, never versus the initial account NAV.
-            next_days = (following - end).total_seconds() / 86400
-            next_changes = np.empty_like(changes)
-            for j, identifier in enumerate(ids):
-                c, q = self.manifest.contract_map[identifier], quotes[identifier]
-                scale = np.sqrt(next_days / days)
-                for s in range(n):
-                    next_changes[s, j] = c.multiplier * self.valuation.scenario_change(
-                        c,
-                        q,
-                        end,
-                        following,
-                        float(np.clip(shocks[c.symbol][s] * scale, -0.8, 2)),
-                        float(iv_shocks[c.symbol][s] * scale),
-                    )
+            following = self.manifest.session_close(next_session)
+            scale = np.sqrt((following - end).total_seconds() / 86400 / days)
+            next_changes = self._reprice(ids, quotes, end, following, shocks, iv_shocks, scale)
+            # Close -> reopen: calendar-time decay, trading-time spot/IV variance on the same shocks.
+            variance = overnight_variance(close_day, next_session)
+            overnight_changes = self._reprice(
+                ids,
+                quotes,
+                end,
+                self.manifest.session_open(next_session) + OVERNIGHT_REACTION,
+                shocks,
+                iv_shocks,
+                np.sqrt(variance * TRADING_DAY / days),
+            )
         weights = np.full(n, 1 / n)
         identifier = digest(
             {
@@ -227,6 +237,7 @@ class ScenarioEngine:
                 "config": self.manifest.config_hash,
                 "betas": betas,
                 "rhos": rhos,
+                "overnight": overnight_changes.tolist() if overnight_changes is not None else None,
             }
         )
         return ScenarioSet(
@@ -243,7 +254,25 @@ class ScenarioEngine:
             beta_source,
             now,
             {i: (quotes[i].spot, quotes[i].iv) for i in ids},
+            overnight_changes,
+            next_session,
+            variance,
         )
+
+    def _reprice(self, ids, quotes, start, finish, shocks, iv_shocks, scale=1.0):
+        changes = np.empty((len(next(iter(shocks.values()))), len(ids)))
+        for j, identifier in enumerate(ids):
+            c, q = self.manifest.contract_map[identifier], quotes[identifier]
+            for s in range(len(changes)):
+                changes[s, j] = c.multiplier * self.valuation.scenario_change(
+                    c,
+                    q,
+                    start,
+                    finish,
+                    float(np.clip(shocks[c.symbol][s] * scale, -0.8, 2)),
+                    float(iv_shocks[c.symbol][s] * scale),
+                )
+        return changes
 
     def market_betas(self, now, symbols):
         """OLS beta from aligned completed sessions; missing data is never beta=1."""
