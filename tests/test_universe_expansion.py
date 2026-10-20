@@ -440,4 +440,5 @@ async def test_discovery_skips_strikes_not_listed_at_an_expiry():
     broker.seen = []
     expanded = await qualify_stock_universe(m, [], broker, option_symbols=["SPY"], expiries=2, strikes=3)
     added = [c for c in expanded.contracts if c.con_id >= 1000]
-    assert added and not any(c.strike == 95 and c.expiry == date(2026, 11, 19) for c in added)
+    nov19 = {c.strike for c in added if c.expiry == date(2026, 11, 19)}
+    assert 95 not in nov19 and len(nov19) == 3  # walked past the unlisted strike to the next one

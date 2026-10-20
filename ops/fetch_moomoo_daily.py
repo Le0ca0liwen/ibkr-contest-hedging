@@ -2,8 +2,9 @@
 
 import argparse
 import json
-from datetime import date, timedelta
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 
 def main():
@@ -32,6 +33,12 @@ def main():
             frame = data[["time_key", "close"]].rename(columns={"time_key": "date"})
             frame["symbol"] = symbol
             frames.append(frame)
+        # A bar for a session that has not closed yet is an intraday price, not a close.
+        ny = datetime.now(ZoneInfo("America/New_York"))
+        open_day = str(ny.date()) if ny.weekday() < 5 and ny.time() < time(16, 10) else None
+        if open_day:
+            frames = [f[pd.to_datetime(f["date"]).dt.date.astype(str) != open_day] for f in frames]
+            print(f"Excluded the unfinished {open_day} session; re-run after 16:10 ET to include it")
         joined = pd.concat(frames, ignore_index=True)
         path = Path(args.output)
         path.parent.mkdir(parents=True, exist_ok=True)

@@ -30,6 +30,11 @@ def probe(sdk, codes, port=11111, context=None):
         "warning": "Pull receipt time does not establish quote freshness or live entitlement.",
     }
     try:
+        # Quote entitlements only (never BASIC, WEBKEY, trade or account fields).
+        if hasattr(context, "get_user_info"):
+            status, info = context.get_user_info([sdk.UserInfoField.QOTRIGHT])
+            if status == sdk.RET_OK:
+                result["rights"] = {k: info.get(k) for k in ("us_qot_right", "us_option_qot_right")}
         # Subscribe independently so one missing option right does not conceal stock coverage.
         for code in dict.fromkeys(codes):
             item = {}

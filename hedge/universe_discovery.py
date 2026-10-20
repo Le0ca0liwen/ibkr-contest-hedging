@@ -166,20 +166,30 @@ async def _option_chain(manifest, broker, stock, expiries, strikes, center, know
     primary = mandated[0] if mandated else manifest.contest_option_expiry or (eligible or [last])[0]
     chosen = ([primary] if primary in eligible else []) + neighbouring_expiries(eligible, primary)
     chosen = chosen[:expiries]
-    near = sorted((k for k in chains[0].strikes if k > 0), key=lambda k: (abs(k - center), k))[:strikes]
+    # The chain's strike list pools every expiry, and weeklies often list only $5 strikes. Walk
+    # outward from the centre per expiry until `strikes` listed strikes are found (bounded).
+    ranked = sorted((k for k in chains[0].strikes if k > 0), key=lambda k: (abs(k - center), k))
     found = []
     for expiry in sorted(chosen):
-        for strike in sorted(near):
+        listed = 0
+        for strike in ranked[: 4 * strikes]:
+            if listed >= strikes:
+                break
+            exists = False
             for right in ("C", "P"):
                 if (symbol, expiry, strike, right) in known:
+                    exists = True
                     continue
                 # Forbidden contest options (Nov 20 RKLB calls, extra Nov 20 SPY options) are never requested.
                 if manifest.prohibited_reason(placeholder(expiry, strike, right)):
                     continue
                 details = await _option_details(broker, symbol, expiry, strike, right)
                 c = _option(details, symbol, stock.con_id, expiry, strike, right)
-                if c is not None and not manifest.prohibited_reason(c):
-                    found.append(c)
+                if c is not None:
+                    exists = True
+                    if not manifest.prohibited_reason(c):
+                        found.append(c)
+            listed += exists
     return found
 
 
