@@ -256,3 +256,143 @@ def test_record_times_are_utc_from_either_database():
 
     assert utc_iso(datetime(2026, 10, 21, 6, 11, 35)) == "2026-10-21T06:11:35+00:00"  # SQLite (naive)
     assert utc_iso(datetime(2026, 10, 21, 2, 11, 35, tzinfo=NY)) == "2026-10-21T06:11:35+00:00"  # PostgreSQL
+
+
+async def test_refused_enable_paper_keeps_the_automatic_start_it_interrupted(launched):
+    launched._autostart_step([])
+    launched.broker.qualified = False
+    with pytest.raises(ValueError, match="contracts are not verified"):
+        await launched.control("paper")
+    wait = launched.data_wait
+    assert launched.mode == "WAITING_DATA" and wait["autostart"] and wait["epoch"] == launched.control_epoch
+    launched.broker.qualified = True
+    assert risk_now(launched).passed
+    await launched._resume_after_data_wait()
+    assert launched.mode == "PAPER"
+
+
+async def test_refused_enable_paper_keeps_a_pending_automatic_start_armed(launched):
+    launched._autostart_step(["Mandatory holding missing: BA 195C"])
+    launched.broker.qualified = False
+    with pytest.raises(ValueError):
+        await launched.control("paper")
+    assert launched.mode == "PAUSED" and launched.autostart_pending
+
+
+async def test_a_refused_operator_action_never_leaves_an_orphaned_wait(launched, monkeypatch):
+    launched._autostart_step([])
+    monkeypatch.setattr(launched.store, "intents", lambda *args, **kwargs: [{"state": "CANCEL_PENDING"}])
+    with pytest.raises(ValueError, match="pending cancellations"):
+        await launched.control("shadow")
+    assert launched.mode == "PAUSED" and launched.data_wait is None and launched.pause_reason
+    assert launched.execution.paused and launched.broker.readonly
+
+
+async def test_auto_paper_off_stops_an_activation_already_in_progress(launched):
+    launched._autostart_step([])
+    assert risk_now(launched).passed
+    entered, release = asyncio.Event(), asyncio.Event()
+    reconcile = launched.reconcile
+
+    async def slow_reconcile():
+        entered.set()
+        await release.wait()
+        return await reconcile()
+
+    launched.reconcile = slow_reconcile
+    activation = asyncio.create_task(launched._resume_after_data_wait())
+    await entered.wait()  # the automatic activation holds the control lock now
+    launched.set_autostart("off")
+    release.set()
+    await activation
+    assert launched.mode == "PAUSED" and launched.execution.paused and launched.broker.readonly
+
+
+async def test_a_failing_automatic_start_is_not_rearmed_every_loop(launched, monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr("hedge.service.time.monotonic", lambda: clock[0])
+    launched._autostart_step([])
+    launched._hard_stop("ValueError: something unexpected")
+    launched.autostart_pending = True  # what the monitor does after an unexpected error
+    launched._autostart_step([])
+    assert launched.mode == "PAUSED" and "unexpected" in launched.health  # the cause stays visible
+    clock[0] += 15
+    launched._autostart_step([])
+    assert launched.mode == "WAITING_DATA"
+    statuses = [r["status"] for r in launched.store.records("continuity", launched.manifest.account)]
+    assert statuses.count("AUTOSTART") == 1  # retries are not logged every loop
+
+
+async def test_auto_paper_switch_answers_while_an_activation_holds_the_control_lock(launched):
+    import httpx
+
+    from hedge.webapp import create_app
+
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=create_app(launched)), base_url="http://testserver"
+    ) as client:
+        token = re.search(r'name="control-token" content="([^"]+)"', (await client.get("/")).text).group(1)
+        launched._autostart_step([])
+        async with launched.control_lock:  # e.g. the automatic activation awaiting IBKR
+            response = await asyncio.wait_for(
+                client.post("/api/autostart", json={"mode": "off"}, headers={"X-Control-Token": token}), 5
+            )
+            assert response.status_code == 200 and launched.mode == "PAUSED"
+
+
+def test_a_mistyped_close_is_refused_without_a_snapshot_and_a_bad_one_can_be_corrected(
+    manifest, store, tmp_path
+):
+    from datetime import datetime
+
+    from fastapi.testclient import TestClient
+
+    from hedge.config import NY
+    from hedge.webapp import create_app
+
+    service = TradingService(manifest, store, demo=True)  # never connected: no snapshot
+    service.now = lambda: datetime(2026, 10, 7, 8, tzinfo=NY)
+    client = TestClient(create_app(service))
+    token = re.search(r'name="control-token" content="([^"]+)"', client.get("/").text).group(1)
+    nav = manifest.initial_nav
+
+    def post(value):
+        return client.post(
+            "/api/closes",
+            json={"date": "2026-10-06", "nav": str(value), "source": "IBKR statement", "account": "DU_TEST"},
+            headers={"X-Control-Token": token},
+        )
+
+    assert post(nav / 10).status_code == 422  # a missing digit
+    service.ledger.import_close(manifest.day_zero, nav / 10, "earlier typo", manifest.account)
+    assert post(nav + 2345).status_code == 200  # the correction is not judged against the typo
+    bad = tmp_path / "closes.csv"
+    bad.write_text("date,nav,source,account\n2026-10-06,0,statement,DU_TEST\n")
+    with pytest.raises(ValueError, match="Invalid NAV"):
+        service.ledger.import_csv(bad)
+
+
+async def test_unknown_holdings_never_produce_buy_sell_instructions(launched):
+    launched.last_snapshot = None
+    legs = {i["label"]: i for i in launched.checklist()}["Mandated legs"]
+    assert legs["status"] == "warn" and "BUY" not in legs["detail"] and "do not enter" in legs["detail"]
+    launched.last_snapshot = launched.broker.snapshot().model_copy(update={"connected": False})
+    legs = {i["label"]: i for i in launched.checklist()}["Mandated legs"]
+    assert legs["status"] == "warn" and "last known: 2 of 2 held" in legs["detail"]
+
+
+async def test_the_automatic_start_row_tells_whether_it_is_armed(launched):
+    def row():
+        return {i["label"]: i for i in launched.checklist()}["Automatic paper start"]
+
+    assert row()["status"] == "ok" and row()["detail"].startswith("On")
+    await launched.control("shadow")
+    assert row()["status"] == "warn" and "cancelled by an operator action" in row()["detail"]
+    trading = {i["label"]: i for i in launched.checklist()}["Trading"]
+    assert "Enable paper trading" in trading["detail"] or "rows above" not in trading["detail"]
+    # Turning the switch off and on again arms it from shadow too.
+    launched.set_autostart("off")
+    launched.set_autostart("paper")
+    assert launched.autostart_pending
+    launched._autostart_step([])
+    assert launched.mode == "WAITING_DATA" and launched.data_wait["autostart"]

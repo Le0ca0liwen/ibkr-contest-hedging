@@ -104,6 +104,8 @@ class TradingService:
         self.auto_hedge_after_setup = False
         self.autostart_override = None  # dashboard choice; None = configuration
         self.autostart_pending = False
+        self.autostart_next_at = 0.0
+        self.autostart_recorded_at = float("-inf")
         self.history_lock = asyncio.Lock()
         self.history_status = {"status": "unknown", "message": "", "at": None, "as_of": None}
         self.last_monitor_error = None
@@ -317,7 +319,8 @@ class TradingService:
                     self.ready = False
                     reason = event
                     if event == "disconnected" and self.last_monitor_error:
-                        reason = f"IBKR disconnected after: {self.last_monitor_error}"
+                        # Usually the app's own disconnect after a refused connect; TWS itself is fine.
+                        reason = f"Retrying IBKR every 15 s; the last attempt stopped at: {self.last_monitor_error}"
                     if event == "disconnected" and self._enter_data_wait("IBKR connection interrupted"):
                         pass  # Cancel/reconcile in the monitor, never block event delivery.
                     else:
@@ -652,12 +655,22 @@ class TradingService:
             for i, q in legs
             if held.get(i, 0) != q
         ]
-        item(
-            "Mandated legs",
-            "ok" if not todo else "fail",
-            f"{len(done)} of {len(m.mandatory)} held"
-            + ("" if not todo else ". Enter in TWS (Paper): " + "; ".join(todo)),
-        )
+        if snap is None or not snap.connected or not connected:
+            # Never print BUY/SELL instructions from unknown or stale holdings: entering the legs
+            # twice doubles the mandated book.
+            item(
+                "Mandated legs",
+                "warn",
+                "Unknown until IBKR reconciles: do not enter any legs before then"
+                + (f" (last known: {len(done)} of {len(m.mandatory)} held)" if snap else ""),
+            )
+        else:
+            item(
+                "Mandated legs",
+                "ok" if not todo else "fail",
+                f"{len(done)} of {len(m.mandatory)} held"
+                + ("" if not todo else ". Enter in TWS (Paper): " + "; ".join(todo)),
+            )
         confirmed = self.contest_confirmed()
         item(
             "Contest configuration",
@@ -703,24 +716,39 @@ class TradingService:
             )
         auto = self.autostart_mode()
         blocked = any(i["status"] == "fail" for i in items)
-        item(
-            "Automatic paper start",
-            "ok" if auto == "paper" and not self.last_monitor_error and not self.pause_reason else "warn",
-            ("On" if auto == "paper" else "Off")
-            + (
-                ""
-                if not (self.autostart_pending or (self.data_wait or {}).get("autostart"))
-                else " · waiting for the ✗ rows above"
-                if blocked
-                else " · waiting: " + self.health
-            ),
-        )
+        wait = self.data_wait or {}
+        # Armed: paper starts (or resumes) by itself once the checks pass.
+        armed = bool(self.autostart_pending or wait.get("autostart") or wait.get("resume_mode") == "PAPER")
+        if self.mode == "PAPER":
+            item(
+                "Automatic paper start",
+                "ok",
+                ("On" if auto == "paper" else "Off") + " · paper trading is running",
+            )
+        elif armed:
+            item(
+                "Automatic paper start",
+                "ok" if not self.last_monitor_error and not self.pause_reason else "warn",
+                ("On" if auto == "paper" else "Resume")
+                + (" · waiting for the ✗ rows above" if blocked else " · waiting: " + self.health),
+            )
+        elif auto == "paper":
+            item(
+                "Automatic paper start",
+                "warn",
+                "On, but cancelled by an operator action until the next launch: press Enable paper "
+                "trading, or turn Auto paper off and on",
+            )
+        else:
+            item("Automatic paper start", "warn", "Off: press Enable paper trading to start")
         item(
             "Trading",
             "ok" if self.mode == "PAPER" else "warn",
             "Paper trading on"
             if self.mode == "PAPER"
             else f"{self.mode.title()} until the ✗ rows above are fixed"
+            if blocked and armed
+            else f"{self.mode.title()}: fix the ✗ rows above, then press Enable paper trading"
             if blocked
             else {"WAITING_DATA": "Paper trading waits for its checks: " + self.health}.get(
                 self.mode, f"{self.mode.title()}: " + self.health
@@ -739,7 +767,7 @@ class TradingService:
 
     def set_autostart(self, mode):
         """Dashboard switch, persisted across restarts. 'paper' starts paper trading automatically
-        now (from PAUSED) and after every launch once all activation checks pass; 'off' cancels a
+        now (from PAUSED or SHADOW) and after every launch once all activation checks pass; 'off' cancels a
         pending automatic start but never stops paper trading that is already running."""
         if mode not in ("off", "paper"):
             raise ValueError("Automatic start must be off or paper")
@@ -750,7 +778,7 @@ class TradingService:
             {"override": self.autostart_override, "mode": mode, "config_hash": self.manifest.config_hash},
         )
         if mode == "paper":
-            self.autostart_pending = self.mode == "PAUSED"
+            self.autostart_pending = self.mode in ("PAUSED", "SHADOW")
         else:
             self.autostart_pending = False
             if self.mode == "WAITING_DATA" and self.data_wait and self.data_wait.get("autostart"):
@@ -761,13 +789,16 @@ class TradingService:
         """Launch-time automatic paper start. It only hands over to the automatic-resume path
         (WAITING_DATA -> control('paper', _automatic=True)), so every paper activation check,
         trading-window check and live-data check still applies; any operator control cancels it."""
-        if not self.autostart_pending or self.mode != "PAUSED":
+        if not self.autostart_pending or self.mode not in ("PAUSED", "SHADOW"):
             return
         if mandate_errors:
             self.health = "Automatic paper start waits for the mandated holdings: " + "; ".join(
                 mandate_errors
             )
             return
+        if time.monotonic() < self.autostart_next_at:
+            return  # a failed attempt stays visible for a while instead of re-arming every loop
+        self.autostart_next_at = time.monotonic() + 15
         self.autostart_pending = False
         self.data_wait = {
             "resume_mode": "PAPER",
@@ -784,15 +815,17 @@ class TradingService:
         self.broker.readonly = True
         self.pending_target = self.pending_recovery = None
         self.health = "Automatic paper start: waiting for the full paper activation checks"
-        self.store.record(
-            "continuity",
-            self.manifest.account,
-            {
-                **self.data_wait,
-                "status": "AUTOSTART",
-                "snapshot_id": self.last_snapshot.version if self.last_snapshot else None,
-            },
-        )
+        if time.monotonic() - self.autostart_recorded_at >= 600:
+            self.autostart_recorded_at = time.monotonic()
+            self.store.record(
+                "continuity",
+                self.manifest.account,
+                {
+                    **self.data_wait,
+                    "status": "AUTOSTART",
+                    "snapshot_id": self.last_snapshot.version if self.last_snapshot else None,
+                },
+            )
 
     def _enter_data_wait(self, reason):
         if self.mode in ("PAPER", "SETUP"):
@@ -1096,6 +1129,8 @@ class TradingService:
                         f"Cannot reach TWS/IB Gateway on 127.0.0.1:{self.manifest.gateway_port}: "
                         "open TWS (Paper) and enable the API on that port"
                     )
+                if isinstance(exc, (TimeoutError, ConnectionError)):
+                    self.last_monitor_error = None  # an earlier refusal is no longer the cause
                 self.ready = False
                 self.pending_target = self.pending_recovery = None
                 await self._wait_for_data(message)
@@ -1444,14 +1479,19 @@ class TradingService:
                 # Never park a plan through its cooldown: a parked target blocks every
                 # re-optimization, including stock-only hedges. Drop it, keep re-optimizing,
                 # and schedule the next full (option) solve for when the cooldown ends.
-                self.pending_target = None
-                if "OPT" in remaining:
-                    self.last_optimization["OPT"] = (
-                        time.monotonic() - self.manifest.policy.option_seconds + remaining["OPT"]
-                    )
+                # A dropped recovery plan must not linger either (it would block the burner).
+                self.pending_target = self.pending_recovery = None
+                self.execution.recovery_checks = None
                 wait = max(remaining.values())
+                if any(self.manifest.contract_map[i].kind == "OPT" for i in changed):
+                    # Even when only the stock cooldown blocks it, an option plan is re-solved
+                    # as soon as every cooldown it needs has ended.
+                    self.last_optimization["OPT"] = (
+                        time.monotonic() - self.manifest.policy.option_seconds + wait
+                    )
+                ends = (self.now() + timedelta(seconds=wait)).astimezone(NY)
                 self.health = (
-                    f"New plan waits for the trade cooldown ({wait / 60:.1f} min left); "
+                    f"New plan waits for the trade cooldown (until {ends:%H:%M:%S} ET); "
                     "stock hedging keeps re-optimizing meanwhile"
                 )
                 return
@@ -1720,15 +1760,43 @@ class TradingService:
             profile not in PROFILES or (not self.demo and profile not in self.supervisor.allowed_profiles)
         ):
             raise ValueError("Profile not validated for this contest")
-        if not _automatic and action in ("pause", "shadow", "profile", "paper", "setup", "arm_setup"):
+        operator = not _automatic and action in ("pause", "shadow", "profile", "paper", "setup", "arm_setup")
+        if operator:
+            # A refused "Enable paper" must not cancel the automatic start/resume it interrupted.
+            interrupted = self.data_wait if action == "paper" else None
+            auto_armed = action == "paper" and self.autostart_pending
             self.autostart_pending = False  # an operator decision supersedes the launch-time start
             self.control_epoch += 1
+            epoch = self.control_epoch
             self.data_wait = None
             if action in ("pause", "shadow", "profile"):
                 # Disarm immediately, including while an automatic preflight is
                 # awaiting the broker. Its epoch check prevents late activation.
                 self.execution.paused = True
                 self.broker.readonly = True
+        try:
+            return await self._control(action, profile, _automatic)
+        except Exception as exc:
+            if operator and self.control_epoch == epoch and self.mode not in ("PAPER", "SETUP"):
+                reason = str(exc) or type(exc).__name__
+                if (
+                    interrupted is not None
+                    and interrupted["resume_mode"] == "PAPER"
+                    and self.mode == "WAITING_DATA"
+                ):
+                    self.data_wait = {**interrupted, "epoch": epoch}
+                    self.health = "Automatic resume waiting for full preflight: " + reason
+                elif auto_armed and self.mode == "PAUSED":
+                    self.autostart_pending = self.autostart_mode() == "paper"
+                if self.mode == "WAITING_DATA" and self.data_wait is None:
+                    # Nothing would ever resume this wait: show the truth instead of a stuck mode.
+                    self.mode, self.ready, self.health = "PAUSED", False, reason
+                    self.pause_reason = reason
+                    self.execution.paused = True
+                    self.broker.readonly = True
+            raise
+
+    async def _control(self, action, profile, _automatic):
         async with self.control_lock:
             activation_epoch = self.control_epoch
             if _automatic and (

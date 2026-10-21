@@ -57,7 +57,7 @@ class ScoreLedger:
                 *self.manifest.scoring_sessions,
             ):
                 raise ValueError("Invalid report account/session")
-            if not nav.is_finite() or not row["source"].strip():
+            if not nav.is_finite() or nav <= 0 or not row["source"].strip():
                 raise ValueError("Invalid NAV/provenance")
             validated.append((day, nav, row["source"], row["account"]))
         with self.store.transaction() as session:

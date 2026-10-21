@@ -175,10 +175,11 @@ def create_app(service):
     @app.post("/api/autostart")
     async def autostart_settings(body: AutostartSettings):
         # Persisted switch: 'paper' starts paper trading automatically once every activation
-        # check passes (now from PAUSED, and after each launch); 'off' cancels a pending start.
+        # check passes (now from PAUSED or SHADOW, and after each launch); 'off' cancels a pending start.
+        # Not under control_lock: 'off' must take effect while an automatic activation holds the
+        # lock, and its epoch bump makes that activation refuse to enable execution.
         try:
-            async with service.control_lock:
-                return service.set_autostart(body.mode)
+            return service.set_autostart(body.mode)
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
 
@@ -229,13 +230,20 @@ def create_app(service):
                 if service.now() < service.manifest.session_close(body.date):
                     raise ValueError("That session has not closed yet (16:00 ET)")
             # Guard against a typo (a missing digit moves every later target and risk limit).
-            reference = service.ledger.close_records().get(body.date, {}).get("nav") or (
-                service.last_snapshot.nav if service.last_snapshot else None
-            )
-            if reference and abs(body.nav / Decimal(str(reference)) - 1) > Decimal("0.2"):
+            # Independent references only, so a mistyped earlier entry can still be corrected.
+            references = [
+                Decimal(str(nav))
+                for nav in (
+                    service.last_snapshot.nav if service.last_snapshot else None,
+                    service.manifest.initial_nav,
+                )
+                if nav
+            ]
+            if references and all(abs(body.nav / reference - 1) > Decimal("0.2") for reference in references):
                 raise ValueError(
-                    f"{body.nav:,.2f} differs by more than 20% from {Decimal(str(reference)):,.2f} "
-                    "(recorded or current NAV); check the statement figure"
+                    f"{body.nav:,.2f} differs by more than 20% from the current and the starting NAV "
+                    f"({' / '.join(f'{reference:,.2f}' for reference in references)}); "
+                    "check the statement figure"
                 )
             result = service.ledger.import_close(body.date, body.nav, body.source, body.account)
             service.force_optimize = True

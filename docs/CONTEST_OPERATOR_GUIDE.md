@@ -21,7 +21,7 @@ seven mandated legs and any leftover non-contest positions, both done in TWS).
 | Button | What it does |
 |---|---|
 | Enable paper trading | Starts paper hedging now, after the same checks as the automatic start. Shows "Paper trading on" while trading. |
-| Pause trading | Stops all new orders and cancels the app's working orders. Positions stay. Cancels a pending automatic start. |
+| Pause trading | Stops all new orders and cancels the app's working orders. Positions stay. Cancels a pending automatic start until the next launch: with Auto paper ON, a restart starts paper again once the checks pass. To stay paused across restarts, also turn Auto paper OFF. |
 | Reconcile | Re-reads positions, orders and fills from IBKR. Safe at any time. |
 | Start shadow | Watch-only: the app calculates hedges but sends nothing. Cancels a pending automatic start. |
 | Auto paper: ON/OFF | ON (the contest default) starts paper trading by itself once every check passes, now and after each launch. Turning it OFF never stops trading that is already running; use Pause for that. |

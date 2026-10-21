@@ -430,3 +430,40 @@ async def test_cooldown_never_parks_a_plan_and_blocks_stock_hedging(operational,
     assert service.last_optimization["OPT"] == pytest.approx(
         5000.0 - service.manifest.policy.option_seconds + left
     )
+
+
+async def test_option_plan_blocked_only_by_the_stock_cooldown_is_resolved_soon(operational, monkeypatch):
+    service = operational
+    clock = [9000.0]
+    monkeypatch.setattr("hedge.service.time.monotonic", lambda: clock[0])
+    option = next(i for i, c in service.manifest.contract_map.items() if c.kind == "OPT")
+    stock = next(i for i, c in service.manifest.contract_map.items() if c.kind == "STK")
+    held = service.broker.snapshot().quantities()
+    service.pending_target = Target(
+        quantities={**held, option: held.get(option, 0) + 1, stock: held.get(stock, 0) + 10},
+        expected_score=0,
+        current_score=1000,
+        uncertainty=0,
+        status="OPTIMAL",
+        snapshot_id="s",
+        scenario_id="x",
+        config_hash="h",
+    )
+    service.active_plan_started = False
+    service.last_trade = {"OPT": 0.0, "STK": clock[0] - 20}  # only a stock trade is recent
+    service.last_optimization = {"STK": clock[0], "OPT": clock[0]}
+    monkeypatch.setattr(service.recovery, "paper_errors", lambda model_hash: [], raising=False)
+    monkeypatch.setattr(service.recovery, "mode", "paper", raising=False)
+    service.pending_recovery = {  # a recovery plan that the cooldown drops with its target
+        "model_hash": None,
+        "generated_at": service.now(),
+        "scenarios": service.last_scenarios,
+        "reference": held,
+    }
+    await service._execute_pending()
+    assert service.pending_target is None and service.pending_recovery is None
+    assert service.execution.recovery_checks is None
+    assert "until" in service.health and "ET" in service.health
+    # The full (option) solve is due when the 40 s left on the stock cooldown end, not in 15 min.
+    clock[0] += service.manifest.policy.stock_seconds - 20
+    assert clock[0] - service.last_optimization["OPT"] >= service.manifest.policy.option_seconds
