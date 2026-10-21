@@ -15,7 +15,9 @@ plus modeled changes and carry) and `c` the scored execution cost (zero on Day 0
 - `policy.burn_surplus: true` (default, unchanged behaviour): `E|g - c|`. Costs sit
   inside the gap, so while NAV is above target trading partly spends the surplus.
 - `policy.burn_surplus: false`: `E|g| + c`, an additive penalty; a surplus is never
-  a reason to trade.
+  a reason to trade. The SPCX/RKLB/SPY contest template uses this setting: the
+  operator spends a surplus only near the close, through the separate closing
+  burner (docs/CLOSING_BURNER.md), not through all-day hedge costs.
 
 Each decision records `cost_treatment` and `burn_component = E|g| + c - E|g - c|`
 (between 0 and 2c; 2c means the whole cost was credited as surplus burn), plus

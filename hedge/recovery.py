@@ -665,8 +665,8 @@ def attributed_trading_pnl(store, manifest, quotes, now):
     provisional = False
     for fill in sorted(store.effective_fills(manifest.account), key=lambda r: r["at"]):
         intention = intentions.get(fill["order_id"])
-        if not intention:
-            continue
+        if not intention or intention.get("purpose") == "burn":
+            continue  # closing-burner round trips never touch recovery inventory or P&L
         i, amount = fill["con_id"], fill["signed_quantity"]
         recovery_fill = intention["decision_id"] in decisions
         owned = quantities.get(i, 0)

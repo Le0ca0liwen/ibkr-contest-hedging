@@ -66,6 +66,14 @@ calendar days since the previous contest session, so it is 3 on Mondays
 the rate, and `policy.cash_rate: 0.0344` so NAV forecasts include cash interest.
 The account, report source and verified conIds must still be filled in.
 
+Gains and losses score equally, so a NAV surplus over the target costs points.
+The instructor does not disallow spending it deliberately through ordinary trades
+against the market. The template therefore sets `policy.burn_surplus: false`
+(no all-day burning through hedge costs) and offers an optional closing surplus
+burner that acts only in the last minutes of a scored session, in allowlisted
+SPCX/RKLB shares (never SPY shares, never the mandated legs). See
+[CLOSING_BURNER.md](CLOSING_BURNER.md).
+
 ## Contest setup checklist (Moomoo data, IBKR broker)
 
 IBKR provides no live quotes to this team; Moomoo OpenD is the only market-data

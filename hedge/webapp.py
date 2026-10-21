@@ -7,12 +7,15 @@ from contextlib import asynccontextmanager
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
+from typing import Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+
+from .execution_quality import execution_quality
 
 
 class Control(BaseModel):
@@ -38,6 +41,11 @@ class AISettings(BaseModel):
 class RecoverySettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: str
+
+
+class BurnerSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["off", "shadow", "paper"]
 
 
 class DailyRateImport(BaseModel):
@@ -138,6 +146,16 @@ def create_app(service):
         except (OSError, ValueError, KeyError, TypeError) as exc:
             raise HTTPException(409, str(exc)) from exc
 
+    @app.post("/api/burner")
+    async def burner_settings(body: BurnerSettings):
+        # Downgrade-only switch for NEW burner entries; an open cycle still restores its inventory.
+        # It never changes the control epoch, so automatic data-wait resume is unaffected.
+        try:
+            async with service.control_lock:
+                return service.burner.set_mode(body.mode)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
     @app.get("/api/state")
     async def state():
         return service.state()
@@ -173,11 +191,19 @@ def create_app(service):
 
     @app.get("/api/export/{category}")
     async def export(category: str):
-        state = service.state()
+        account = service.manifest.account
         if category == "scores":
-            rows = state["scores"]["days"]
-        elif category in ("fills", "orders", "decisions", "execution_quality"):
-            rows = state[category]
+            rows = service.state()["scores"]["days"]
+        elif category == "burn_cycles":
+            rows = service.burner.export_rows()
+        elif category == "orders":
+            rows = service.store.intents(account)  # complete history, unlike the bounded state()
+        elif category == "fills":
+            rows = service.store.fills(account)
+        elif category == "execution_quality":
+            rows = execution_quality(service.store, account, service.manifest.contract_map)
+        elif category == "decisions":
+            rows = service.state()["decisions"]
         else:
             raise HTTPException(404, "Unknown export")
         buffer = io.StringIO()

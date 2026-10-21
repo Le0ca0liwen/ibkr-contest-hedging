@@ -1,7 +1,7 @@
 """Execution analytics from durable facts, with corrections and unknowns preserved."""
 
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
 
@@ -19,20 +19,45 @@ def slippage(mid, executions, contract, valid_direction):
     )
 
 
-def execution_quality(store, account, contracts):
-    records = store.grouped_records(
-        (
-            "execution_plan",
-            "decision",
-            "order_transition",
-            "price_amendment",
-            "package_amendment",
-            "cancel_request",
-        ),
-        account,
-    )
+def execution_quality(store, account, contracts, limit=None):
+    """Per-intent execution quality; `limit` restricts it to the most recent intents.
+
+    The bounded form reads only the related records and fills, so a dashboard poll stays cheap
+    however many closing-burner legs the contest accumulates. Exports use the full form.
+    """
+    orders = store.intents(account, include_metadata=False, limit=limit)
+    if limit is None:
+        records = store.grouped_records(
+            (
+                "execution_plan",
+                "decision",
+                "order_transition",
+                "price_amendment",
+                "package_amendment",
+                "cancel_request",
+                "burn_cycle",
+            ),
+            account,
+        )
+        all_fills = store.effective_fills(account)
+    else:
+        ids = {o["id"] for o in orders}
+        # Plans, transitions and amendments are written at or after their intent's creation.
+        oldest = min((o["created_at"] for o in orders), default=None)
+        since = oldest - timedelta(minutes=1) if oldest is not None else None  # clock-step margin
+        records = store.grouped_records(
+            ("execution_plan", "order_transition", "price_amendment"), account, intent_ids=ids, since=since
+        )
+        records.update(store.grouped_records(("package_amendment", "cancel_request"), account))
+        records.update(
+            store.grouped_records(("decision", "burn_cycle"), account, ids={o["decision_id"] for o in orders})
+        )
+        packages = {r["package_id"] for r in records["execution_plan"] if r.get("package_id")}
+        references = {"hedge:" + i for i in ids} | {"hedge-package:" + p for p in packages}
+        all_fills = store.effective_fills(account, references)
     plans = {r["intent_id"]: r for r in records["execution_plan"]}
-    decisions = {r["id"]: r for r in records["decision"]}
+    # Burn legs carry their cycle id as decision id; the cycle plan holds the decision midpoint.
+    decisions = {r["id"]: r for r in records["decision"] + records["burn_cycle"]}
     transitions, amendments, cancels = defaultdict(list), defaultdict(int), defaultdict(int)
     package_amendments = defaultdict(int)
     for row in records["order_transition"]:
@@ -45,10 +70,10 @@ def execution_quality(store, account, contracts):
         for identifier in row.get("intent_ids", []):
             cancels[identifier] += 1
     fills = defaultdict(list)
-    for fill in store.effective_fills(account):
+    for fill in all_fills:
         fills[(fill["order_ref"], fill["con_id"])].append(fill)
     result = []
-    for order in store.intents(account, include_metadata=False):
+    for order in orders:
         identifier, con_id = order["id"], order["con_id"]
         plan = plans.get(identifier, {})
         package = plan.get("package_id")
@@ -88,6 +113,9 @@ def execution_quality(store, account, contracts):
                 "decision_id": order["decision_id"],
                 "con_id": con_id,
                 "package_id": package,
+                "purpose": plan.get("purpose", "hedge"),
+                "cycle_id": plan.get("cycle_id"),
+                "leg": plan.get("leg"),
                 "state": order["state"],
                 "order_type": plan.get("order_type"),
                 "requested_quantity": abs(order["signed_quantity"]),

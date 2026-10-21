@@ -168,7 +168,15 @@ class OrderRequest(Frozen):
     snapshot_id: str
     decision_id: str
     order_type: Literal["LMT", "MKT"] = "LMT"
-    urgency: Literal["PATIENT", "NORMAL", "DEADLINE", "CORRECTIVE"] = "NORMAL"
+    urgency: Literal["PATIENT", "NORMAL", "DEADLINE", "CORRECTIVE", "BURN"] = "NORMAL"
+    # IOC is used only by closing-burner legs (marketable limits); every hedge order stays DAY.
+    time_in_force: Literal["DAY", "IOC"] = "DAY"
+
+    @model_validator(mode="after")
+    def ioc_is_limit(self):
+        if self.time_in_force == "IOC" and self.order_type != "LMT":
+            raise ValueError("IOC orders must be limit orders")
+        return self
 
 
 class SetupPackageRequest(Frozen):

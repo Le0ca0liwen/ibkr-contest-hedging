@@ -8,7 +8,7 @@ from decimal import Decimal
 from pathlib import Path
 from uuid import uuid4
 
-from sqlalchemy import JSON, Date, DateTime, Integer, Numeric, String, create_engine, select, update
+from sqlalchemy import JSON, Date, DateTime, Index, Integer, Numeric, String, create_engine, select, update
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 
 from .models import Execution, PortfolioSnapshot, utcnow
@@ -20,6 +20,9 @@ class Base(DeclarativeBase):
 
 class Record(Base):
     __tablename__ = "records"
+    # Recent-first reads by category (alerts, decisions, transitions, burn cycles) stay range
+    # scans as closing-burner records accumulate over the contest.
+    __table_args__ = (Index("ix_records_category_account_at", "category", "account", "at"),)
     id: Mapped[str] = mapped_column(String(64), primary_key=True)
     category: Mapped[str] = mapped_column(String(40), index=True)
     account: Mapped[str] = mapped_column(String(40), index=True)
@@ -77,6 +80,19 @@ class Fee(Base):
 
 
 TERMINAL = {"FILLED", "CANCELLED", "REJECTED", "ABANDONED"}
+# execution_plan keys exposed on intent rows (burn legs are told apart by purpose/cycle_id/leg).
+INTENT_METADATA = (
+    "order_type",
+    "urgency",
+    "initial_limit",
+    "package_id",
+    "net_limit",
+    "purpose",
+    "cycle_id",
+    "leg",
+    "attempt",
+    "time_in_force",
+)
 TRANSITIONS = {
     "CREATED": {"VALIDATED", "REJECTED"},
     "VALIDATED": {"SUBMITTING", "REJECTED"},
@@ -87,6 +103,26 @@ TRANSITIONS = {
     "CANCEL_PENDING": {"PARTIALLY_FILLED", "FILLED", "CANCELLED", "UNKNOWN"},
     "CANCELLED": {"FILLED"},  # a late broker execution wins over a cancellation callback
 }
+
+
+def burn_result_id(cycle_id):
+    return "result:" + cycle_id
+
+
+def burn_leg_prefix(cycle_id):
+    return cycle_id[:24]
+
+
+def burn_leg_id(cycle_id):
+    """32 hex characters like every intent id (orderRef stays 'hedge:' + 32), cycle-prefixed."""
+    if len(cycle_id) < 24 or any(c not in "0123456789abcdef" for c in cycle_id[:24]):
+        raise ValueError("Burn cycle ids must be lowercase hex uuids")
+    return burn_leg_prefix(cycle_id) + uuid4().hex[:8]
+
+
+def plan_record_id(intent_id):
+    """Deterministic execution_plan record id: per-event metadata lookups by primary key."""
+    return "plan:" + intent_id
 
 
 def payload(value):
@@ -109,6 +145,9 @@ class Store:
 
     def initialize(self):
         Base.metadata.create_all(self.engine)
+        # create_all never adds indexes to an existing table (e.g. the live PostgreSQL DB).
+        for index in Record.__table__.indexes:
+            index.create(self.engine, checkfirst=True)
 
     def now(self):
         return self.clock().astimezone(UTC)
@@ -146,15 +185,26 @@ class Store:
     def snapshot(self, snap: PortfolioSnapshot):
         self.record("snapshot", snap.account, snap, snap.version)
 
-    def grouped_records(self, categories, account):
-        """Read related audit categories without one round trip per category."""
+    def grouped_records(self, categories, account, *, intent_ids=None, ids=None, since=None):
+        """Read related audit categories without one round trip per category.
+
+        Optional filters keep bounded views cheap: `intent_ids` matches payload intent_id and
+        `ids` matches record ids.
+        """
         grouped = defaultdict(list)
         with self.sessions() as session:
-            rows = session.scalars(
+            query = (
                 select(Record)
                 .where(Record.category.in_(categories), Record.account == account)
                 .order_by(Record.at.desc())
-            ).all()
+            )
+            if intent_ids is not None:
+                query = query.where(Record.payload["intent_id"].as_string().in_(sorted(intent_ids)))
+            if ids is not None:
+                query = query.where(Record.id.in_(sorted(ids)))
+            if since is not None:
+                query = query.where(Record.at >= since)
+            rows = session.scalars(query).all()
             for row in rows:
                 grouped[row.category].append({"id": row.id, "at": row.at.isoformat(), **row.payload})
         return grouped
@@ -207,39 +257,94 @@ class Store:
                 )
             )
 
-    def intents(self, account, pending_only=False, *, include_metadata=True):
+    def intents(self, account, pending_only=False, *, include_metadata=True, limit=None):
         with self.sessions() as session:
             query = select(Intent).where(Intent.account == account).order_by(Intent.created_at.desc())
             if pending_only:
                 query = query.where(Intent.state.not_in(TERMINAL))
+            if limit is not None:
+                query = query.limit(limit)
             rows = session.scalars(query).all()
             if not include_metadata:
                 return [{c.name: getattr(r, c.name) for c in Intent.__table__.columns} for r in rows]
-            plans = session.scalars(
-                select(Record).where(Record.category == "execution_plan", Record.account == account)
-            ).all()
-            metadata = {r.payload["intent_id"]: r.payload for r in plans}
-            packages = {
+            # Pending or recent rows are few: read only their plans, not every historical plan.
+            return self._with_metadata(session, account, rows, only_rows=pending_only or limit is not None)
+
+    def plan(self, session, identifier, account):
+        """The execution_plan record of one intent (primary key first, legacy scan fallback)."""
+        row = session.get(Record, plan_record_id(identifier))
+        if row is not None and row.account == account and row.category == "execution_plan":
+            return row
+        return session.scalars(
+            select(Record).where(
+                Record.category == "execution_plan",
+                Record.account == account,
+                Record.payload["intent_id"].as_string() == identifier,
+            )
+        ).first()
+
+    def intent(self, identifier, account):
+        """One intent row with its plan metadata (cheap per-broker-event lookup)."""
+        with self.sessions() as session:
+            row = session.get(Intent, identifier)
+            if row is None or row.account != account:
+                return None
+            return self._with_metadata(session, account, [row], only_rows=True)[0]
+
+    def intent_by_order(self, order_id, account):
+        """Most recent intent (any state) transmitted with this broker order id."""
+        with self.sessions() as session:
+            row = session.scalars(
+                select(Intent)
+                .where(Intent.account == account, Intent.broker_order_id == order_id)
+                .order_by(Intent.created_at.desc())
+                .limit(1)
+            ).first()
+            return self._with_metadata(session, account, [row], only_rows=True)[0] if row else None
+
+    def _with_metadata(self, session, account, rows, only_rows):
+        query = select(Record).where(Record.category == "execution_plan", Record.account == account)
+        if only_rows:
+            if not rows:
+                return []
+            wanted = {r.id for r in rows}
+            # Plans written since deterministic ids exist are primary-key reads; older plans
+            # (random ids) fall back to a JSON-path filter restricted to the remaining intents.
+            plans = session.scalars(query.where(Record.id.in_([plan_record_id(i) for i in wanted]))).all()
+            missing = wanted - {r.payload.get("intent_id") for r in plans}
+            if missing:
+                plans += session.scalars(
+                    query.where(Record.payload["intent_id"].as_string().in_(sorted(missing)))
+                ).all()
+        else:
+            plans = session.scalars(query).all()
+        metadata = {r.payload["intent_id"]: r.payload for r in plans}
+        package_ids = {m["package_id"] for m in metadata.values() if m.get("package_id")}
+        packages = (
+            {
                 r.id: r.payload
                 for r in session.scalars(
-                    select(Record).where(Record.category == "setup_package", Record.account == account)
+                    select(Record).where(
+                        Record.category == "setup_package",
+                        Record.account == account,
+                        Record.id.in_(package_ids),
+                    )
                 ).all()
             }
-            for meta in metadata.values():
-                if meta.get("package_id") in packages:
-                    meta = {**meta, "net_limit": packages[meta["package_id"]]["limit_price"]}
-                    metadata[meta["intent_id"]] = meta
-            return [
-                {
-                    **{c.name: getattr(r, c.name) for c in Intent.__table__.columns},
-                    **{
-                        k: v
-                        for k, v in metadata.get(r.id, {}).items()
-                        if k in ("order_type", "urgency", "initial_limit", "package_id", "net_limit")
-                    },
-                }
-                for r in rows
-            ]
+            if package_ids
+            else {}
+        )
+        for meta in list(metadata.values()):
+            if meta.get("package_id") in packages:
+                meta = {**meta, "net_limit": packages[meta["package_id"]]["limit_price"]}
+                metadata[meta["intent_id"]] = meta
+        return [
+            {
+                **{c.name: getattr(r, c.name) for c in Intent.__table__.columns},
+                **{k: v for k, v in metadata.get(r.id, {}).items() if k in INTENT_METADATA},
+            }
+            for r in rows
+        ]
 
     def get_record(self, identifier, account, category):
         with self.sessions() as session:
@@ -250,10 +355,8 @@ class Store:
 
     def execution_plan(self, identifier, account):
         with self.sessions() as session:
-            rows = session.scalars(
-                select(Record).where(Record.category == "execution_plan", Record.account == account)
-            ).all()
-            return next((r.payload for r in rows if r.payload.get("intent_id") == identifier), None)
+            row = self.plan(session, identifier, account)
+            return row.payload if row is not None else None
 
     def update_package_price(self, identifier, account, price):
         with self.transaction() as session:
@@ -287,17 +390,13 @@ class Store:
                 raise ValueError("Only an unsent validated intent may refresh its price")
             row.limit_price = request.limit_price
             row.snapshot_id = request.snapshot_id
-            plans = session.scalars(
-                select(Record).where(Record.category == "execution_plan", Record.account == request.account)
-            ).all()
-            for plan in plans:
-                if plan.payload.get("intent_id") == request.intent_id:
-                    plan.payload = {
-                        **plan.payload,
-                        "order_type": request.order_type,
-                        "urgency": request.urgency,
-                    }
-                    break
+            plan = self.plan(session, request.intent_id, request.account)
+            if plan is not None:
+                plan.payload = {
+                    **plan.payload,
+                    "order_type": request.order_type,
+                    "urgency": request.urgency,
+                }
             session.add(
                 Record(
                     id=uuid4().hex,
@@ -323,13 +422,10 @@ class Store:
             row = session.get(Intent, identifier)
             if row is None or row.limit_price == price:
                 return
-            plans = session.scalars(
-                select(Record).where(Record.category == "execution_plan", Record.account == row.account)
-            ).all()
-            if not any(p.payload.get("intent_id") == identifier for p in plans):
+            if self.plan(session, identifier, row.account) is None:
                 session.add(
                     Record(
-                        id=uuid4().hex,
+                        id=plan_record_id(identifier),
                         category="execution_plan",
                         account=row.account,
                         at=self.now(),
@@ -391,7 +487,7 @@ class Store:
                 )
                 session.add(
                     Record(
-                        id=uuid4().hex,
+                        id=plan_record_id(identifier),
                         category="execution_plan",
                         account=request.account,
                         at=self.now(),
@@ -407,6 +503,78 @@ class Store:
                     )
                 )
 
+    def create_burn_leg(self, request, plan):
+        """One transaction: a CREATED burn-leg intent and its execution_plan (purpose='burn')."""
+        with self.transaction() as session:
+            if session.get(Intent, request.intent_id):
+                raise ValueError("Duplicate durable intent")
+            if session.get(Record, plan["cycle_id"]) is None:
+                raise ValueError("Burn leg requires its durable burn_cycle record")
+            session.add(
+                Intent(
+                    id=request.intent_id,
+                    account=request.account,
+                    con_id=request.con_id,
+                    signed_quantity=request.signed_quantity,
+                    limit_price=request.limit_price,
+                    decision_id=request.decision_id,
+                    snapshot_id=request.snapshot_id,
+                    state="CREATED",
+                    created_at=self.now(),
+                    updated_at=self.now(),
+                )
+            )
+            session.add(
+                Record(
+                    id=plan_record_id(request.intent_id),
+                    category="execution_plan",
+                    account=request.account,
+                    at=self.now(),
+                    payload=payload({**plan, "intent_id": request.intent_id, "purpose": "burn"}),
+                )
+            )
+
+    def open_burn_cycle_ids(self, account):
+        """Burn cycles without a final result record (durable hedge block)."""
+        with self.sessions() as session:
+            cycles = session.scalars(
+                select(Record.id).where(Record.category == "burn_cycle", Record.account == account)
+            ).all()
+            if not cycles:
+                return []
+            done = set(
+                session.scalars(
+                    select(Record.id).where(Record.category == "burn_cycle_result", Record.account == account)
+                ).all()
+            )
+            return [c for c in cycles if burn_result_id(c) not in done]
+
+    def burn_legs(self, account, cycle_id):
+        """Intents (with metadata) of one burn cycle, oldest first.
+
+        Burn-leg intent ids start with the cycle id's first 24 hex digits (burn_leg_id), so this
+        is a plain id prefix match: no JSON scan and no dependence on contest history or clocks.
+        """
+        with self.sessions() as session:
+            rows = session.scalars(
+                select(Intent).where(
+                    Intent.account == account, Intent.id.like(burn_leg_prefix(cycle_id) + "%")
+                )
+            ).all()
+            legs = self._with_metadata(session, account, rows, only_rows=True)
+            # Entry first, then exits by attempt: deterministic even when timestamps tie.
+            return sorted(
+                (r for r in legs if r.get("cycle_id") == cycle_id),
+                key=lambda r: (r["created_at"], r.get("leg") != "entry", r.get("attempt") or 0, r["id"]),
+            )
+
+    def fills_for_refs(self, account, references):
+        """Effective fills (with commissions) for the given order references."""
+        references = set(references)
+        if not references:
+            return []
+        return [f for f in self.effective_fills(account, references) if f["order_ref"] in references]
+
     def execution(self, execution: Execution):
         key = f"{execution.account}:{execution.exec_id}"
         with self.transaction() as session:
@@ -421,14 +589,19 @@ class Store:
         with self.transaction() as session:
             session.merge(Fee(id=f"{account}:{exec_id}", amount=Decimal(str(amount)), currency=currency))
 
-    def fills(self, account):
+    def fills(self, account, references=None, limit=None):
         with self.sessions() as session:
-            rows = session.execute(
+            query = (
                 select(Fill, Fee)
                 .outerjoin(Fee, Fee.id == Fill.id)
                 .where(Fill.account == account)
                 .order_by(Fill.at.desc())
-            ).all()
+            )
+            if references is not None:
+                query = query.where(Fill.order_ref.in_(sorted(references)))
+            if limit is not None:
+                query = query.limit(limit)
+            rows = session.execute(query).all()
             return [
                 {
                     **{c.name: getattr(r, c.name) for c in Fill.__table__.columns},
@@ -438,8 +611,8 @@ class Store:
                 for r, fee in rows
             ]
 
-    def effective_fills(self, account):
-        rows = self.fills(account)
+    def effective_fills(self, account, references=None):
+        rows = self.fills(account, references)
         corrected_roots = {r["correction_of"].rsplit(".", 1)[0] for r in rows if r["correction_of"]}
         selected = {}
         for row in rows:

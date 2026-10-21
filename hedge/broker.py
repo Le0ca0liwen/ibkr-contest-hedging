@@ -510,6 +510,8 @@ class IBKRBroker:
             raise ValueError("Paper account identity rejected")
         if request.con_id not in self.manifest.allowlist:
             raise ValueError("Discretionary trading of mandatory/unapproved instruments is forbidden")
+        if request.time_in_force == "IOC" and request.order_type != "LMT":
+            raise ValueError("Immediate-or-cancel orders must be marketable limits")
         if request.order_type == "MKT":
             from .order_policy import choose_order
 
@@ -536,7 +538,7 @@ class IBKRBroker:
             orderId=order_id,
             account=request.account,
             orderRef="hedge:" + request.intent_id,
-            tif="DAY",
+            tif=request.time_in_force,
             outsideRth=False,
         )
         trade = self.ib.placeOrder(self.native[request.con_id], order)
@@ -689,6 +691,10 @@ class SimBroker:
         self.requests = {}
         self._quotes = {}
         self._counter = 1000
+        self._exec_counter = 0
+        self.filled = {}
+        # Test/rehearsal hook: per-IOC fill caps consumed in submission order (0 = no fill).
+        self.ioc_fill_caps = []
 
     async def connect(self):
         self.connected = self.reconciled = True
@@ -766,6 +772,8 @@ class SimBroker:
     async def submit(self, request, order_id):
         if self.readonly or not self.connected:
             raise ValueError("Synthetic broker is read-only/disconnected")
+        if request.time_in_force == "IOC":
+            return self._submit_ioc(request, order_id)
         self.requests[order_id] = request
         self.orders[order_id] = WorkingOrder(
             order_id=order_id,
@@ -786,6 +794,97 @@ class SimBroker:
             )
         )
         return {"order_id": order_id, "perm_id": order_id}
+
+    def _submit_ioc(self, request, order_id):
+        """Immediate-or-cancel: fill at the touch up to displayed size, then cancel the rest.
+
+        Never rests in self.orders, so demo fill loops cannot fill it later. A marketable buy
+        (limit >= ask) fills at the ask and a marketable sell (limit <= bid) at the bid, with no
+        price improvement; the final status reports the true cumulative filled quantity.
+        """
+        if request.con_id not in self.manifest.allowlist:
+            raise ValueError("Discretionary trading of mandatory/unapproved instruments is forbidden")
+        self.requests[order_id] = request
+        reference = "hedge:" + request.intent_id
+        signed = request.signed_quantity
+        size = abs(signed)
+        status = {
+            "order_id": order_id,
+            "perm_id": order_id,
+            "order_ref": reference,
+            "order_type": "LMT",
+            "limit_price": float(request.limit_price),
+        }
+        self.events.put_nowait(("order", {**status, "status": "Submitted", "filled": 0, "remaining": size}))
+        cap = int(self.ioc_fill_caps.pop(0)) if self.ioc_fill_caps else None
+        quote = self._quotes.get(request.con_id)
+        amount = 0
+        if quote is not None:
+            touch = quote.ask if signed > 0 else quote.bid
+            limit = float(request.limit_price)
+            marketable = limit >= quote.ask - 1e-9 if signed > 0 else limit <= quote.bid + 1e-9
+            if marketable and touch > 0:
+                amount = min(size, quote.ask_size if signed > 0 else quote.bid_size)
+                if cap is not None:
+                    amount = min(amount, max(0, cap))
+        if amount:
+            self._execute(
+                order_id,
+                request.con_id,
+                amount if signed > 0 else -amount,
+                Decimal(str(quote.ask if signed > 0 else quote.bid)),
+                quote,
+                reference,
+            )
+        complete = amount == size
+        self.events.put_nowait(
+            (
+                "order",
+                {
+                    **status,
+                    "status": "Filled" if complete else "Cancelled",
+                    "filled": amount,
+                    "remaining": 0 if complete else size - amount,
+                },
+            )
+        )
+        return {"order_id": order_id, "perm_id": order_id}
+
+    def _execute(self, order_id, con_id, signed, price, quote, order_ref):
+        """Book one synthetic execution with a unique exec id and its commission report."""
+        c = self.manifest.contract_map[con_id]
+        fee = max(
+            self.manifest.policy.minimum_commission,
+            abs(signed)
+            * (
+                self.manifest.policy.commission_option
+                if c.kind == "OPT"
+                else self.manifest.policy.commission_share
+            ),
+        )
+        if c.kind == "STK":  # IBKR Fixed: capped at 1% of trade value
+            fee = min(fee, 0.01 * abs(signed) * float(price))
+        self.cash -= price * signed * c.multiplier + Decimal(str(fee))
+        self.nav -= (price - Decimal(str(quote.mid))) * signed * c.multiplier + Decimal(str(fee))
+        self.positions[con_id] = self.positions.get(con_id, 0) + signed
+        self.filled[order_id] = self.filled.get(order_id, 0) + abs(signed)
+        # Unique per execution: same-clock partial fills must never collide (store dedupes ids).
+        self._exec_counter += 1
+        execution = Execution(
+            exec_id=f"SIM.{order_id}.{self._exec_counter}.{self.now.timestamp()}",
+            order_id=order_id,
+            account=self.manifest.account,
+            con_id=con_id,
+            signed_quantity=signed,
+            price=price,
+            at=self.now,
+            order_ref=order_ref,
+        )
+        self.events.put_nowait(("execution", execution))
+        self.events.put_nowait(
+            ("commission", {"exec_id": execution.exec_id, "amount": str(fee), "currency": "USD"})
+        )
+        return execution
 
     async def fill(self, order_id, quantity=None):
         if order_id in self.package_orders:
@@ -873,38 +972,12 @@ class SimBroker:
             ):
                 return
             price = min(price, request.limit_price) if signed > 0 else max(price, request.limit_price)
-        c = self.manifest.contract_map[order.con_id]
-        fee = max(
-            self.manifest.policy.minimum_commission,
-            abs(signed)
-            * (
-                self.manifest.policy.commission_option
-                if c.kind == "OPT"
-                else self.manifest.policy.commission_share
-            ),
-        )
-        self.cash -= price * signed * c.multiplier + Decimal(str(fee))
-        self.nav -= (price - Decimal(str(quote.mid))) * signed * c.multiplier + Decimal(str(fee))
-        self.positions[order.con_id] = self.positions.get(order.con_id, 0) + signed
         remaining = order.signed_remaining - signed
         if remaining:
             self.orders[order_id] = order.model_copy(update={"signed_remaining": remaining})
         else:
             del self.orders[order_id]
-        execution = Execution(
-            exec_id=f"SIM.{order_id}.{self._counter}.{self.now.timestamp()}",
-            order_id=order_id,
-            account=self.manifest.account,
-            con_id=order.con_id,
-            signed_quantity=signed,
-            price=price,
-            at=self.now,
-            order_ref=order.order_ref,
-        )
-        self.events.put_nowait(("execution", execution))
-        self.events.put_nowait(
-            ("commission", {"exec_id": execution.exec_id, "amount": str(fee), "currency": "USD"})
-        )
+        self._execute(order_id, order.con_id, signed, price, quote, order.order_ref)
         self.events.put_nowait(
             (
                 "order",
@@ -974,7 +1047,7 @@ class SimBroker:
                         "order_ref": order.order_ref,
                         "status": "Cancelled",
                         "remaining": 0,
-                        "filled": 0,
+                        "filled": self.filled.get(order_id, 0),
                     },
                 )
             )

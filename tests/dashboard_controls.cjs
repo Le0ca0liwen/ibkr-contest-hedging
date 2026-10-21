@@ -4,7 +4,7 @@ const assert=require('node:assert/strict');
 const ids=new Set([...fs.readFileSync('hedge/web/index.html','utf8').matchAll(/id="([^"]+)"/g)].map(x=>x[1]));
 const nodes=new Map([...ids].map(id=>[id,{content:'old-token',dataset:{},classList:{toggle(){}},addEventListener(){}}]));
 const posts=[];
-let reject=true;
+let reject=true,lastPath=null,lastBody=null;
 const response=(status,text)=>({status,ok:status>=200&&status<300,text:async()=>text,json:async()=>JSON.parse(text)});
 const context=vm.createContext({
   console,Intl,Date,JSON,Error,AbortSignal,setInterval(){},
@@ -15,6 +15,7 @@ const context=vm.createContext({
     if(path==='/api/state')return response(200,'{}');
     if(path==='/')return response(200,'fresh authorization page');
     posts.push(options.headers['X-Control-Token']);
+    lastPath=path;lastBody=JSON.parse(options.body);
     if(options.headers['X-Control-Token']==='old-token')return response(403,'Local control token required');
     if(reject)return response(409,JSON.stringify({detail:'Mandatory holdings missing'}));
     return response(200,JSON.stringify({mode:'PAUSED'}));
@@ -50,5 +51,17 @@ vm.runInContext('refresh=async()=>{}',context);
   assert.match(nodes.get('continuity-status').textContent,/resumes automatically/);
   await vm.runInContext('renderContinuity({continuity:{automatic_resume_pending:false,pause_reason:"Operator requested pause"}})',context);
   assert.match(nodes.get('continuity-status').textContent,/Automatic resume is disabled/);
+  await vm.runInContext('renderBurner({mode:"paper",effective_mode:"paper",state:"RESIDUAL",reason:"<img src=x>",window:{start:"2026-10-22T15:40:00-04:00",stock_entry_cutoff:"2026-10-22T15:56:00-04:00"},gap:{median:12.5},today:{cycles:2,realized_cost:8.4},last_cycles:[{label:"<script>x</script>",entry_filled:10,exit_filled:4,residual:6,realized_loss:2,status:"RESIDUAL",reason:"<b>exit</b>",finished_at:"2026-10-22T15:58:00-04:00"}],symbols:["SPCX"],admissibility_source:"Instructor <note>"})',context);
+  assert.match(nodes.get('burner-cycles').innerHTML,/&lt;script&gt;/);
+  assert.doesNotMatch(nodes.get('burner-cycles').innerHTML,/<script>|<b>/);
+  assert.match(nodes.get('burner-detail').innerHTML,/Instructor &lt;note&gt;/);
+  assert.match(nodes.get('burner-status').textContent,/RESIDUAL/);
+  assert.equal(nodes.get('burner-enable').disabled,true);
+  await vm.runInContext('renderBurner({})',context);
+  const before=posts.length;
+  await vm.runInContext('control("burner_off")',context);
+  assert.equal(posts.length,before+1);
+  assert.equal(lastPath,'/api/burner');
+  assert.equal(lastBody.mode,'off');
   console.log('Dashboard controls: expired token refresh, server rejection, pause and shadow feedback passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

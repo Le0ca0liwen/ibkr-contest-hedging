@@ -58,12 +58,43 @@ policy:
   cash_rate: 0.0344
   cash_rate_status: modeled
   cash_rate_source: "Contest rules: cash balance earns nominal r ~ 3.44%"
-  # true (default): costs sit inside |closing gap - costs|, so a NAV surplus is partly spent
-  # by trading; false: costs are an additive penalty. Decisions record burn_component.
-  burn_surplus: true
+  # true: costs sit inside |closing gap - costs|, so a NAV surplus is partly spent by trading
+  # all day; false: costs are an additive penalty. Decisions record burn_component. The contest
+  # spends a surplus only near the close (see `burner` below), so all-day burning stays off.
+  burn_surplus: false
   # Weight on the modeled close -> next session open + 15 min gap (straddle decay, overnight
   # moves); 0 disables. See docs/OPTIMIZER_RUNTIME.md.
   overnight_weight: 0.5
+# Closing surplus burner (docs/CLOSING_BURNER.md): spends a forecast NAV surplus only in the
+# last 20 minutes before the close (never on Day 0), through buy-then-sell IOC round trips in
+# SPCX/RKLB shares. shadow records what it would do and sends nothing; paper trades when the app
+# is also in paper. The dashboard switch can downgrade it (paper -> shadow -> off) at any time.
+# An enabled burner requires policy.burn_surplus: false.
+burner:
+  mode: shadow                      # off | shadow | paper
+  admissibility_source: "Instructor: deliberate expense through ordinary trades not disallowed (operator confirmed 2026-10-21)"
+  symbols: [SPCX, RKLB]             # allowlisted stocks only (never SPY)
+  quantities: [1, 5, 10, 25, 50, 100, 200]
+  max_shares: 200
+  option_burn: false                # 1..option_max_contracts round trips in non-mandated options
+  option_max_contracts: 5
+  option_max_spread: 0.20
+  window_minutes: 20                # active from close - 20 min
+  stock_entry_cutoff_minutes: 4     # >= stock_cutoff_minutes + 2 so every exit fits
+  option_entry_cutoff_minutes: 17   # >= option_cutoff_minutes + 2
+  start_threshold: 25               # USD hysteresis on the median closing gap
+  stop_threshold: 5
+  bias: 0                           # signed model-vs-official bias; needs bias_source if nonzero
+  bias_source: ""
+  jit_headroom: 0.5                 # <= 1; lower starts burning earlier
+  jit_reserve_minutes: 1
+  assumed_cycle_seconds: 20         # minimum; today's measured mean only lengthens it
+  minimum_improvement: 0.25
+  daily_expense_cap: null           # optional USD cap on realized burn per session
+  max_cycles_per_day: 300
+  max_exit_attempts: 4
+  exit_collar_ticks: [0, 1, 2, 5]
+  quote_age_seconds: 3
 contracts: []
 # Insert verified conIds with signed quantities (all Nov 20 2026, multiplier 100),
 # e.g. with `python -m hedge.cli prepare-contest`. Validation requires exactly

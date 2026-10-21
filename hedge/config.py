@@ -126,6 +126,70 @@ class ExecutionPolicy(Frozen):
     market_slippage_bps: float = Field(default=5, gt=0, le=20)
 
 
+class BurnerPolicy(Frozen):
+    """Closing surplus burner: deliberate, bounded spending of a NAV surplus near the close.
+
+    Paper mode trades only allowlisted stocks (and optionally non-mandated options) in strictly
+    sequential buy-then-sell IOC round trips. See docs/CLOSING_BURNER.md.
+    """
+
+    mode: Literal["off", "shadow", "paper"] = "off"
+    # Provenance that deliberate expense through ordinary trades is admissible (required for paper).
+    admissibility_source: str = ""
+    symbols: tuple[str, ...] = ()
+    quantities: tuple[int, ...] = (1, 5, 10, 25, 50, 100, 200)
+    max_shares: int = Field(default=200, ge=1, le=10000)
+    option_burn: bool = False
+    option_max_contracts: int = Field(default=5, ge=1, le=50)
+    option_max_spread: float = Field(default=0.20, gt=0, le=5)
+    window_minutes: int = Field(default=20, ge=2, le=120)
+    stock_entry_cutoff_minutes: int = Field(default=4, ge=1, le=60)
+    option_entry_cutoff_minutes: int = Field(default=17, ge=1, le=120)
+    start_threshold: float = Field(default=25, ge=0)
+    stop_threshold: float = Field(default=5, ge=0)
+    bias: float = 0.0
+    bias_source: str = ""
+    jit_headroom: float = Field(default=0.5, ge=0, le=1)
+    jit_reserve_minutes: float = Field(default=1, ge=0, le=60)
+    assumed_cycle_seconds: float = Field(default=20, gt=0, le=600)
+    minimum_improvement: float = Field(default=0.25, ge=0)
+    daily_expense_cap: Decimal | None = Field(default=None, gt=0)
+    max_cycles_per_day: int = Field(default=300, ge=1, le=5000)
+    max_exit_attempts: int = Field(default=4, ge=1, le=20)
+    exit_collar_ticks: tuple[int, ...] = (0, 1, 2, 5)
+    quote_age_seconds: float = Field(default=3, gt=0, le=60)
+
+    @field_validator("symbols")
+    @classmethod
+    def normalize_symbols(cls, value):
+        result = tuple(s.strip().upper() for s in value)
+        if "" in result or len(set(result)) != len(result):
+            raise ValueError("Burner symbols must be distinct and nonempty")
+        return result
+
+    @model_validator(mode="after")
+    def coherent(self):
+        if self.mode == "paper" and not self.admissibility_source.strip():
+            raise ValueError("Paper burning requires a recorded admissibility_source")
+        if not self.quantities or any(q <= 0 for q in self.quantities):
+            raise ValueError("Burner quantities must be positive")
+        if tuple(sorted(set(self.quantities))) != self.quantities:
+            raise ValueError("Burner quantities must be sorted and unique")
+        if self.stop_threshold >= self.start_threshold:
+            raise ValueError("Burner stop_threshold must be below start_threshold")
+        if self.bias and not self.bias_source.strip():
+            raise ValueError("A nonzero burner bias requires its calibration source")
+        if not self.exit_collar_ticks or any(t < 0 for t in self.exit_collar_ticks):
+            raise ValueError("Exit collars must be nonnegative tick counts")
+        if list(self.exit_collar_ticks) != sorted(self.exit_collar_ticks):
+            raise ValueError("Exit collars must widen (non-decreasing ticks)")
+        if self.window_minutes <= self.stock_entry_cutoff_minutes:
+            raise ValueError("Burner window must open before the stock entry cutoff")
+        if self.option_burn and self.window_minutes <= self.option_entry_cutoff_minutes:
+            raise ValueError("Option burning needs the window to open before the option entry cutoff")
+        return self
+
+
 class Manifest(Frozen):
     name: str
     beta_benchmark: str = Field(default="SPY", min_length=1)
@@ -171,6 +235,7 @@ class Manifest(Frozen):
     dividend_yields: dict[str, float] = Field(default_factory=dict)
     risk: RiskLimits = RiskLimits()
     policy: TradingPolicy = TradingPolicy()
+    burner: BurnerPolicy = BurnerPolicy()
     gateway_host: Literal["127.0.0.1"] = "127.0.0.1"
     gateway_port: Literal[4002, 7497] = 4002
     client_id: int = Field(default=71, gt=0)
@@ -269,7 +334,55 @@ class Manifest(Frozen):
                     raise ValueError(f"{c.label} needs its underlying contract")
         if not self.valuation_convention.strip() or not self.report_source.strip():
             raise ValueError("Official valuation convention and report source required")
+        self._validate_burner()
         return self
+
+    def _validate_burner(self):
+        burner = self.burner
+        if burner.mode != "off":
+            # Exits must always fit inside the ordinary order window; RiskGate's window is never
+            # relaxed. A disabled burner never constrains the ordinary policy cutoffs.
+            if burner.stock_entry_cutoff_minutes < self.policy.stock_cutoff_minutes + 2:
+                raise ValueError(
+                    "Burner stock entry cutoff must leave 2+ minutes before the stock order cutoff"
+                )
+            if (
+                burner.option_burn
+                and burner.option_entry_cutoff_minutes < self.policy.option_cutoff_minutes + 2
+            ):
+                raise ValueError(
+                    "Burner option entry cutoff must leave 2+ minutes before the option order cutoff"
+                )
+            if not burner.symbols and not burner.option_burn:
+                raise ValueError("An enabled burner needs stock symbols or option burning")
+            if self.policy.burn_surplus:
+                # Otherwise the hedger spends surplus from the open, which the burner exists to avoid.
+                raise ValueError(
+                    "An enabled closing burner requires policy.burn_surplus: false "
+                    "(surplus is spent only near the close)"
+                )
+        for symbol in burner.symbols:
+            if symbol == "SPY":
+                raise ValueError("SPY shares are forbidden and cannot be burner symbols")
+            if self.burner_stock_id(symbol) is None:
+                raise ValueError(
+                    f"Burner symbol {symbol} must be a defined, allowlisted, permitted stock contract"
+                )
+
+    def burner_stock_id(self, symbol: str) -> int | None:
+        """The allowlisted, permitted, non-mandated STK conId for a burner symbol (else None)."""
+        return next(
+            (
+                c.con_id
+                for c in self.contracts
+                if c.kind == "STK"
+                and c.symbol.upper() == symbol.upper()
+                and c.con_id in self.allowlist
+                and c.con_id not in self.mandatory
+                and not self.prohibited_reason(c)
+            ),
+            None,
+        )
 
     @property
     def contract_map(self):

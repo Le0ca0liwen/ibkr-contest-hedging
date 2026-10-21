@@ -9,6 +9,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from .broker import IBKRBroker, SimBroker
+from .burner_service import ClosingBurner
 from .closing import CloseMarkRecorder, ClosingRecorder
 from .config import NY
 from .continuity import DataUnavailable, data_only, quote_coverage
@@ -28,6 +29,8 @@ from .storage import payload
 from .supervisor import PROFILES, Supervisor
 from .universe import screen_snapshot
 from .valuation import NAVTracker
+
+STATE_ROWS = 250  # most recent orders, fills and execution-quality rows in state()
 
 
 class TradingService:
@@ -111,6 +114,10 @@ class TradingService:
             manifest, self.ledger, self.broker, self.now, self.alert, demo
         )
         self.close_marks = CloseMarkRecorder(manifest, store, self.now, self._close_marks, self.alert)
+        # The closing burner shares this single execution owner; it can wake the monitor early
+        # when it needs a scenario forecast that includes its own latest fills.
+        self.monitor_wakeup = asyncio.Event()
+        self.burner = ClosingBurner(self)
 
     def now(self):
         return self.demo_start + timedelta(seconds=time.monotonic() - self.started) if self.demo else utcnow()
@@ -134,6 +141,7 @@ class TradingService:
                 self.pg_lock.close()
                 raise RuntimeError("Another PostgreSQL execution owner already holds this account")
         self.store.record("configuration", self.manifest.account, self.manifest, self.manifest.config_hash)
+        self.burner.restore_setting()
         if not self.demo and Path("config/local.moomoo-codes.json").exists():
             self.market_data_log = Path("data/moomoo-collector.log").open("a")
             self.market_data_process = await asyncio.create_subprocess_exec(
@@ -172,7 +180,23 @@ class TradingService:
             asyncio.create_task(self._supervisor_loop()),
             asyncio.create_task(self.closing_recorder.run()),
             asyncio.create_task(self.close_marks.run()),
+            asyncio.create_task(self._burner_loop()),
         ]
+
+    async def _burner_loop(self):
+        """Event-driven (1 s fallback) burner steps; a burner fault never hard-stops hedging."""
+        while True:
+            try:
+                await self.burner.step()
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.burner._set("ERROR", f"{type(exc).__name__}: {exc}")
+                try:
+                    self.alert("error", f"Closing burner step failed: {type(exc).__name__}: {exc}")
+                except Exception:
+                    pass
+            await self.burner.wait(1.0)
 
     async def stop(self):
         await self.execution.pause()
@@ -267,11 +291,21 @@ class TradingService:
                                 "status": "Inactive" if value["code"] == 201 else "Cancelled",
                             }
                         )
-                    self.alert("warning", value["message"])
+                    # An unfilled IOC burn leg is routinely cancelled (202); never alert per order.
+                    # Its Cancelled status usually arrives first, so look the leg up in any state.
+                    owner = (
+                        rows[0]
+                        if rows
+                        else self.store.intent_by_order(value["order_id"], self.manifest.account)
+                    )
+                    if not (value["code"] == 202 and owner and owner.get("purpose") == "burn"):
+                        self.alert("warning", value["message"])
                 elif event == "broker_error" and value.get("code") in (354, 10090, 10167, 10168):
                     self.market_data_errors[value.get("con_id") or value["order_id"]] = value["message"]
                     self.ready = False
                     self.alert("error", "Live API market data unavailable: " + value["message"])
+                if event in ("order", "execution", "commission", "position"):
+                    self.burner.on_broker_event(event, value)
             except Exception as exc:
                 self._hard_stop(f"Durable event processing failed: {type(exc).__name__}: {exc}")
             finally:
@@ -547,7 +581,8 @@ class TradingService:
                     self.execution.current_scenarios = self.last_scenarios
                     await self.execution.manage(self.broker.quotes(), self.now())
                     if self.mode in ("SHADOW", "PAPER"):
-                        if self.optimization_due():
+                        # A closing-burner cycle owns its temporary inventory until it is final.
+                        if self.optimization_due() and not self.execution.burn_open():
                             await self.optimize()
                     elif self.mode == "SETUP":
                         await self._setup_slice()
@@ -574,7 +609,7 @@ class TradingService:
                             self.health = (
                                 "Purchases complete; automatic hedging awaits previous official closing NAV"
                             )
-                if self.mode == "PAPER" and self.pending_target:
+                if self.mode == "PAPER" and self.pending_target and not self.execution.burn_open():
                     await self._execute_pending()
                 self.execution.current_scenarios = self.last_scenarios
                 # An optimizer/preflight may take seconds. Never manage a live
@@ -613,7 +648,7 @@ class TradingService:
                             "warning", "Previous official closing NAV missing; score-aware trading blocked"
                         )
                     self._warn_api_previous_close(day, record)
-                await asyncio.sleep(self.manifest.policy.risk_seconds)
+                await self._monitor_pause()
             except asyncio.CancelledError:
                 raise
             except (DataUnavailable, TimeoutError, ConnectionError) as exc:
@@ -638,6 +673,14 @@ class TradingService:
                     pass
                 next_connection = time.monotonic() + 15
                 await asyncio.sleep(5)
+
+    async def _monitor_pause(self):
+        """Sleep risk_seconds, or less when the closing burner needs a fresh scenario forecast."""
+        try:
+            await asyncio.wait_for(self.monitor_wakeup.wait(), self.manifest.policy.risk_seconds)
+        except TimeoutError:
+            pass
+        self.monitor_wakeup.clear()
 
     def optimization_due(self):
         """Continuous evaluation remains independent of whether past trades filled."""
@@ -673,7 +716,11 @@ class TradingService:
             self.health = "Scoring revision pending; interest-offset optimization disabled"
             return
         async with self.decision_lock:
+            if self.execution.burn_open():
+                self.health = "Closing-burner cycle open; hedge optimization waits for its result"
+                return
             decision_epoch = self.control_epoch
+            burn_epoch = self.burner.burn_epoch
             snap, quotes, scenarios, now = (
                 self.last_snapshot,
                 dict(self.last_quotes),
@@ -744,6 +791,8 @@ class TradingService:
                 newest.quantities() != snap.quantities()
                 or newest.orders != snap.orders
                 or decision_epoch != self.control_epoch
+                # A completed burn round trip restores quantities while NAV and fees moved.
+                or burn_epoch != self.burner.burn_epoch
             ):
                 self.last_target = None
                 self.force_optimize = True
@@ -775,7 +824,11 @@ class TradingService:
             )
             self.store.record("recovery_shadow", snap.account, recovery_record)
             newest = self.broker.snapshot()
-            if newest.quantities() != snap.quantities() or newest.orders != snap.orders:
+            if (
+                newest.quantities() != snap.quantities()
+                or newest.orders != snap.orders
+                or burn_epoch != self.burner.burn_epoch
+            ):
                 self.force_optimize = True
                 return
             recovery_selected = False
@@ -885,6 +938,8 @@ class TradingService:
                 )
 
     async def _execute_pending(self):
+        if self.execution.burn_open():
+            return
         target = self.pending_target
         snapshot = self.broker.snapshot()
         quotes = self.broker.quotes()
@@ -992,7 +1047,7 @@ class TradingService:
 
     async def _setup_slice(self):
         snap = self.broker.snapshot()
-        if snap.orders or self.store.intents(snap.account, True):
+        if snap.orders or self.store.intents(snap.account, True) or self.execution.burn_open():
             return
         quotes = self.broker.quotes()
         if self.setup_target_quantities is None or not self.setup_pairs:
@@ -1515,6 +1570,7 @@ class TradingService:
                     or self.pending_target
                     or self.pending_recovery
                     or self.store.intents(self.manifest.account, True)
+                    or self.execution.burn_open()
                 ),
                 "config_hash": self.manifest.config_hash,
                 "snapshot_id": snap.version,
@@ -1625,10 +1681,12 @@ class TradingService:
                 "scores": self._scores_with_provisional_warning(),
                 "baseline_reference": self.store.records("baseline_reference", self.manifest.account, 1),
                 "positions": positions,
-                "orders": self.store.intents(self.manifest.account),
-                "fills": self.store.fills(self.manifest.account),
+                # Bounded views keep the 2 s dashboard poll cheap as burner legs accumulate;
+                # CSV exports read the complete history.
+                "orders": self.store.intents(self.manifest.account, limit=STATE_ROWS),
+                "fills": self.store.fills(self.manifest.account, limit=STATE_ROWS),
                 "execution_quality": execution_quality(
-                    self.store, self.manifest.account, self.manifest.contract_map
+                    self.store, self.manifest.account, self.manifest.contract_map, limit=STATE_ROWS
                 ),
                 "package_executions": self.store.records("package_execution", self.manifest.account, 100),
                 "package_commissions": self.store.records("package_commission", self.manifest.account, 100),
@@ -1640,6 +1698,7 @@ class TradingService:
                 "ai_enabled": self.supervisor.enabled,
                 "ai_status": self.supervisor.status(),
                 "recovery": {**self.recovery.latest, "promotion": self.recovery.promotion_status()},
+                "burner": self.burner.state(),
                 "profile": self.profile,
                 "profiles": list(PROFILES if self.demo else self.supervisor.allowed_profiles),
                 "pause_pending": self.execution.pause_requested and not self.execution.pause_complete(),

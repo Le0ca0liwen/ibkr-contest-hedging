@@ -225,5 +225,7 @@ class NAVTracker:
                     else self.manifest.policy.commission_share
                 )
                 fee = max(self.manifest.policy.minimum_commission, abs(e.signed_quantity) * rate)
+                if contracts[e.con_id].kind == "STK":  # IBKR Fixed: capped at 1% of trade value
+                    fee = min(fee, 0.01 * abs(e.signed_quantity) * float(e.price))
             adjustment -= fee or 0
         return float(snapshot.nav) + adjustment

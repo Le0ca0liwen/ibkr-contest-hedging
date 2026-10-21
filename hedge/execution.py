@@ -10,7 +10,7 @@ from .models import OrderRequest, SetupPackageRequest, Target
 from .optimizer import execution_cost
 from .order_policy import choose_order, rounded_price, spread_error, urgency_for
 from .scenarios import ScenarioEngine
-from .storage import TERMINAL
+from .storage import TERMINAL, burn_leg_id, plan_record_id
 
 
 class ExecutionManager:
@@ -104,6 +104,10 @@ class ExecutionManager:
                 self.manifest.policy.uncertainty_multiplier * evaluated.uncertainty,
             )
         )
+
+    def burn_open(self):
+        """True while a closing-burner cycle has no final result (durable; survives restarts)."""
+        return bool(self.store.open_burn_cycle_ids(self.manifest.account))
 
     def unresolved(self):
         return [
@@ -204,6 +208,8 @@ class ExecutionManager:
         async with self.lock:
             if self.paused or self.pause_requested or self.unresolved():
                 return {"submitted": False, "reason": "Paused or unresolved submission"}
+            if self.burn_open():
+                return {"submitted": False, "reason": "Closing-burner cycle open; hedge slices wait"}
             if (
                 hasattr(self.broker, "margin_preview")
                 and self.last_preview is not None
@@ -274,6 +280,7 @@ class ExecutionManager:
                     "scenarios": scenarios.identifier,
                     "quote_at": q.observed_at.isoformat(),
                 },
+                plan_record_id(request.intent_id),
             )
             self.store.record(
                 "risk", snapshot.account, {"intent_id": request.intent_id, **result.model_dump(mode="json")}
@@ -418,6 +425,7 @@ class ExecutionManager:
                 or self.pause_requested
                 or self.store.intents(snapshot.account, True)
                 or snapshot.orders
+                or self.burn_open()
             ):
                 return {"submitted": False, "reason": "Protected setup waits for reconciled orders"}
             actual = snapshot.quantities()
@@ -525,6 +533,225 @@ class ExecutionManager:
                     "reason": f"Protected package submission uncertain; reconcile, never resend: {exc}",
                 }
 
+    def burn_limit(self, con_id, quote, signed, collar_ticks=0):
+        """Marketable IOC limit: buy at the ask (tick ceiling), sell at the bid less collar ticks."""
+        reference = quote.ask if signed > 0 else quote.bid
+        tick = self.broker.price_tick(con_id, reference) if hasattr(self.broker, "price_tick") else 0.01
+        if signed > 0:
+            return rounded_price(quote.ask, tick, -1)
+        # Decimal arithmetic: a float bid - k*tick can land just below a tick and floor one too far.
+        return rounded_price(Decimal(str(quote.bid)) - collar_ticks * Decimal(str(tick)), tick, 1)
+
+    def _burn_quote_error(self, quote, now, max_age):
+        if quote is None:
+            return "Missing burn quote"
+        if quote.data_type != ("synthetic" if self.gate.demo else "live"):
+            return "Non-live burn quote"
+        if not 0 <= (now - quote.observed_at).total_seconds() <= max_age:
+            return "Stale/future burn quote"
+        if quote.bid <= 0 or quote.ask <= 0:
+            return "Burn quote has no two-sided book"
+        return None
+
+    async def submit_burn_leg(
+        self,
+        *,
+        cycle_id,
+        leg,
+        attempt,
+        con_id,
+        signed,
+        original_quantity,
+        decision_id,
+        snapshot,
+        quotes,
+        scenarios,
+        now,
+        quote_age,
+        collar_ticks=0,
+        price_cap=None,
+        reserve=0.0,
+        deadline=None,
+    ):
+        """Durable IOC leg of a closing-burner cycle (entry buy or exit sell).
+
+        Mirrors submit_slice's durable sequence (intent before transmission; an uncertain send
+        is UNKNOWN and never resent) WITHOUT feasible_slices/economic_check, which by design
+        reject exposure-free cost trades. The burner owns the score test for these legs.
+        """
+        if leg not in ("entry", "exit") or not signed:
+            raise ValueError("Burn legs are a nonzero entry or exit")
+        async with self.lock:
+            if self.paused or self.pause_requested or self.unresolved() or self.broker.readonly:
+                return {"submitted": False, "reason": "Paused, read-only or unresolved submission"}
+            if self.store.intents(snapshot.account, True) or snapshot.orders:
+                return {"submitted": False, "reason": "Another order is working; burn legs are sequential"}
+            if (
+                leg == "entry"
+                and hasattr(self.broker, "margin_preview")
+                and self.last_preview is not None
+                and not self.preview_valid
+                and now - self.last_preview < timedelta(minutes=1)
+            ):
+                return {"submitted": False, "reason": "Prior credit preview failed; burn entry waits"}
+            quote = quotes.get(con_id)
+            if error := self._burn_quote_error(quote, now, quote_age):
+                return {"submitted": False, "reason": error}
+            limit = self.burn_limit(con_id, quote, signed, collar_ticks)
+            if limit <= 0:
+                return {"submitted": False, "reason": "Nonpositive burn limit"}
+            if price_cap is not None and signed > 0 and float(limit) > float(price_cap) + 1e-9:
+                return {"submitted": False, "reason": "Ask moved above the planned burn limit"}
+            actual = snapshot.quantities()
+            after = {**actual, con_id: actual.get(con_id, 0) + signed}
+            current = self.gate.engine.evaluate(snapshot, quotes, scenarios, actual)
+            corrective = leg == "exit" and not current.passed
+            result = self.gate.validate(
+                snapshot, quotes, scenarios, after, now, 2 * reserve, corrective=corrective
+            )
+            if not result.passed:
+                return {"submitted": False, "reason": "Burn leg risk: " + "; ".join(result.reasons)}
+            request = OrderRequest(
+                intent_id=burn_leg_id(cycle_id),
+                con_id=con_id,
+                signed_quantity=signed,
+                limit_price=limit,
+                account=snapshot.account,
+                snapshot_id=snapshot.version,
+                decision_id=decision_id,
+                order_type="LMT",
+                urgency="BURN",
+                time_in_force="IOC",
+            )
+            self.store.create_burn_leg(
+                request,
+                {
+                    "cycle_id": cycle_id,
+                    "leg": leg,
+                    "attempt": attempt,
+                    "time_in_force": "IOC",
+                    "order_type": "LMT",
+                    "urgency": "BURN",
+                    "initial_limit": str(limit),
+                    "price_cap": float(price_cap) if price_cap is not None else None,
+                    "collar_ticks": collar_ticks,
+                    "arrival_mid": quote.mid,
+                    "quote": quote.model_dump(mode="json"),
+                    "quote_at": quote.observed_at.isoformat(),
+                    "reserve": reserve,
+                    "original_quantity": original_quantity,
+                    "quantities": after,
+                    "scenarios": scenarios.identifier,
+                },
+            )
+            self.store.record(
+                "risk", snapshot.account, {"intent_id": request.intent_id, **result.model_dump(mode="json")}
+            )
+            self.store.transition(request.intent_id, "VALIDATED")
+            # Credit previews supplement entry risk only, under the shared one-per-minute limit.
+            # An exit restores pre-cycle inventory and is never blocked by preview state.
+            if (
+                leg == "entry"
+                and hasattr(self.broker, "margin_preview")
+                and (self.last_preview is None or now - self.last_preview >= timedelta(minutes=1))
+            ):
+                try:
+                    self.last_preview = now
+                    self.preview_valid = False
+                    preview = await asyncio.wait_for(self.broker.margin_preview(request), 15)
+                    change = Decimal(str(preview.initMarginChange))
+                    if (
+                        not change.is_finite()
+                        or float(snapshot.excess_liquidity - max(Decimal(0), change))
+                        < self.manifest.risk.liquidity_buffer * result.metrics["budget"]
+                    ):
+                        raise ValueError("Broker credit preview violates liquidity buffer")
+                    if preview.warningText:
+                        raise ValueError(f"Broker credit preview warning: {preview.warningText}")
+                    self.preview_valid = True
+                except Exception as exc:
+                    self.store.transition(request.intent_id, "REJECTED")
+                    return {"submitted": False, "reason": f"Burn credit preview blocked: {exc}"}
+            try:
+                fresh, qs = self.broker.snapshot(), self.broker.quotes()
+                clock = self.execution_time(now)
+                if self.paused or self.pause_requested or self.broker.readonly:
+                    raise ValueError("Execution was paused during burn preflight")
+                if deadline is not None and clock >= deadline:
+                    raise ValueError(f"Burner {leg} deadline passed while waiting to transmit")
+                if fresh.quantities() != actual or fresh.orders:
+                    raise ValueError("Inventory/orders changed before transmission")
+                fresh_quote = qs.get(con_id)
+                if error := self._burn_quote_error(fresh_quote, clock, quote_age):
+                    raise ValueError(error)
+                fresh_limit = self.burn_limit(con_id, fresh_quote, signed, collar_ticks)
+                if signed > 0 and fresh_limit > limit:
+                    raise ValueError("Fresh ask above the planned burn limit; replan")
+                if fresh_limit <= 0:
+                    raise ValueError("Nonpositive fresh burn limit")
+                current = self.gate.engine.evaluate(fresh, qs, scenarios, actual)
+                gate = self.gate.validate(
+                    fresh,
+                    qs,
+                    scenarios,
+                    after,
+                    clock,
+                    2 * reserve,
+                    corrective=leg == "exit" and not current.passed,
+                )
+                if not gate.passed:
+                    raise ValueError("; ".join(gate.reasons))
+                if not getattr(self.broker, "reconciled", True):
+                    raise ValueError("Broker reconciliation in progress")
+                request = request.model_copy(
+                    update={"limit_price": fresh_limit, "snapshot_id": fresh.version}
+                )
+                self.store.prepare_request(
+                    request,
+                    {
+                        "quote": fresh_quote.model_dump(mode="json"),
+                        "scenario_id": scenarios.identifier,
+                        "scenario_at": scenarios.built_at,
+                    },
+                )
+                order_id = self.broker.reserve_order_id()
+            except Exception as exc:
+                self.store.transition(request.intent_id, "REJECTED")
+                return {"submitted": False, "reason": f"Fresh burn validation: {exc}"}
+            self.store.transition(request.intent_id, "SUBMITTING", order_id=order_id)
+            bounds = (original_quantity, actual.get(con_id, 0), after[con_id])
+            self.owned_inventory_ranges[con_id] = (min(bounds), max(bounds))
+            try:
+                evidence = await self.broker.submit(request, order_id)
+                self.sent_at[request.intent_id] = clock
+                self.store.record(
+                    "submission", snapshot.account, {"intent_id": request.intent_id, **evidence}
+                )
+                return {
+                    "submitted": True,
+                    "intent_id": request.intent_id,
+                    "order_id": order_id,
+                    "limit": str(fresh_limit),
+                }
+            except Exception as exc:
+                self.store.transition(request.intent_id, "UNKNOWN")
+                self.store.record(
+                    "alert",
+                    snapshot.account,
+                    {
+                        "severity": "error",
+                        "message": f"Uncertain burn-leg submission: {exc}",
+                        "intent_id": request.intent_id,
+                    },
+                )
+                self.paused = True
+                return {
+                    "submitted": False,
+                    "uncertain": True,
+                    "intent_id": request.intent_id,
+                    "reason": "Burn-leg submission uncertain; reconcile before any new trade",
+                }
+
     def on_order(self, event):
         reference = event.get("order_ref", "")
         if reference.startswith("hedge-package:"):
@@ -560,8 +787,8 @@ class ExecutionManager:
         if not reference.startswith("hedge:"):
             return
         identifier = reference.removeprefix("hedge:")
-        rows = {r["id"]: r for r in self.store.intents(self.manifest.account)}
-        if identifier not in rows:
+        row = self.store.intent(identifier, self.manifest.account)
+        if row is None:
             self.paused = True
             self.store.record(
                 "alert",
@@ -569,7 +796,6 @@ class ExecutionManager:
                 {"severity": "error", "message": "Broker system order has no durable intent"},
             )
             return
-        row = rows[identifier]
         if event.get("order_type") == "LMT" and event.get("limit_price", 0) > 0:
             self.store.observe_limit(identifier, event["limit_price"])
         status = event.get("status")
@@ -627,20 +853,20 @@ class ExecutionManager:
             elif total and row["state"] not in TERMINAL:
                 self.store.transition(identifier, "PARTIALLY_FILLED")
             return
-        rows = [
-            r
-            for r in self.store.intents(self.manifest.account)
-            if r["id"] == execution.order_ref.removeprefix("hedge:")
-            or (not execution.order_ref and execution.perm_id and r["perm_id"] == execution.perm_id)
-        ]
+        if execution.order_ref.startswith("hedge:"):
+            found = self.store.intent(execution.order_ref.removeprefix("hedge:"), self.manifest.account)
+            rows = [found] if found else []
+        else:
+            rows = [
+                r
+                for r in self.store.intents(self.manifest.account)
+                if r["id"] == execution.order_ref
+                or (not execution.order_ref and execution.perm_id and r["perm_id"] == execution.perm_id)
+            ]
         if not rows:
             return
         row = rows[0]
-        fills = [
-            f
-            for f in self.store.effective_fills(self.manifest.account)
-            if f["order_ref"] == "hedge:" + row["id"]
-        ]
+        fills = self.store.fills_for_refs(self.manifest.account, ["hedge:" + row["id"]])
         quantity = sum(f["signed_quantity"] for f in fills)
         if quantity == row["signed_quantity"]:
             self.store.transition(row["id"], "FILLED")
@@ -732,6 +958,10 @@ class ExecutionManager:
                     for sibling in siblings:
                         self.store.transition(sibling["id"], "UNKNOWN")
                     self.paused = True
+                continue
+            if row.get("purpose") == "burn":
+                # IOC burn legs are never repriced or cancelled here: they end at the broker on
+                # their own and the burner sizes every exit from confirmed fills.
                 continue
             package_id = row.get("package_id")
             sent = self.sent_at.get(row["id"])
