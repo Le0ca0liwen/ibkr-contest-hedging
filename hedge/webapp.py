@@ -218,7 +218,8 @@ def create_app(service):
         except (TimeoutError, ConnectionError) as exc:
             raise HTTPException(
                 503,
-                "Broker reconciliation timed out or disconnected; activation blocked. Reconcile before retrying.",
+                "IBKR did not answer (TWS disconnected or busy); nothing was changed. "
+                "Check TWS (Paper) and try again.",
             ) from exc
 
     @app.post("/api/closes")

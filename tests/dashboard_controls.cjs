@@ -7,7 +7,7 @@ const posts=[];
 let reject=true,lastPath=null,lastBody=null;
 const response=(status,text)=>({status,ok:status>=200&&status<300,text:async()=>text,json:async()=>JSON.parse(text)});
 const context=vm.createContext({
-  console,Intl,Date,JSON,Error,AbortSignal,setInterval(){},
+  console,Intl,Date,JSON,Error,AbortSignal,setInterval(){},setTimeout(){},clearTimeout(){},
   DOMParser:class{parseFromString(){return{querySelector:()=>({content:'new-token'})};}},
   document:{querySelector:()=>({content:'old-token'}),querySelectorAll:()=>[],
     getElementById:id=>nodes.get(id)||null,addEventListener(){}},
@@ -57,6 +57,11 @@ vm.runInContext('refresh=async()=>{}',context);
   assert.match(nodes.get('burner-detail').innerHTML,/Instructor &lt;note&gt;/);
   assert.match(nodes.get('burner-status').textContent,/RESIDUAL/);
   assert.equal(nodes.get('burner-enable').disabled,true);
+  await vm.runInContext('renderBurner({mode:"off",configured_mode:"off"})',context);
+  assert.equal(nodes.get('burner-shadow').disabled,true);  // never offers a mode above the configuration
+  assert.match(nodes.get('burner-detail').innerHTML,/Just-in-time not evaluated/);
+  await vm.runInContext('control("autostart_paper")',context);
+  assert.match(nodes.get('notice').textContent,/Automatic paper start turned on/);
   await vm.runInContext('renderBurner({})',context);
   const before=posts.length;
   await vm.runInContext('control("burner_off")',context);

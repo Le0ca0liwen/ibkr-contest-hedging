@@ -260,7 +260,15 @@ class TradingService:
         self.recorder.flush()
         await self.broker.disconnect()
         if self.pg_lock:
+            # A pooled connection keeps session-level advisory locks: release it explicitly.
+            try:
+                from sqlalchemy import text
+
+                self.pg_lock.execute(text("SELECT pg_advisory_unlock_all()"))
+            except Exception:
+                pass
             self.pg_lock.close()
+            self.pg_lock = None
         if self.writer_file:
             fcntl.flock(self.writer_file, fcntl.LOCK_UN)
             self.writer_file.close()
@@ -1093,6 +1101,11 @@ class TradingService:
                 raise
             except (DataUnavailable, TimeoutError, ConnectionError) as exc:
                 message = str(exc) or type(exc).__name__
+                if isinstance(exc, ConnectionRefusedError) or "Connect call failed" in message:
+                    message = (
+                        f"Cannot reach TWS/IB Gateway on 127.0.0.1:{self.manifest.gateway_port}: "
+                        "open TWS (Paper) and enable the API on that port"
+                    )
                 self.ready = False
                 self.pending_target = self.pending_recovery = None
                 await self._wait_for_data(message)
