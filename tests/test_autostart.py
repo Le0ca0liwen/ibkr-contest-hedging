@@ -396,3 +396,26 @@ async def test_the_automatic_start_row_tells_whether_it_is_armed(launched):
     assert launched.autostart_pending
     launched._autostart_step([])
     assert launched.mode == "WAITING_DATA" and launched.data_wait["autostart"]
+
+
+def test_a_refused_control_names_the_reconciliation_cause_not_a_tws_outage(manifest, store):
+    from fastapi.testclient import TestClient
+
+    from hedge.webapp import create_app
+
+    service = TradingService(manifest, store, demo=True)  # not connected
+
+    async def unreachable():
+        raise ConnectionError("Not connected")
+
+    service.reconcile = unreachable
+    client = TestClient(create_app(service))
+    token = re.search(r'name="control-token" content="([^"]+)"', client.get("/").text).group(1)
+    headers = {"X-Control-Token": token}
+    assert client.post("/api/control", json={"action": "reconcile"}, headers=headers).status_code == 503
+    service.last_monitor_error = (
+        "Positions not in the contest configuration (close them in TWS): BA stock -1141 [4762]"
+    )
+    response = client.post("/api/control", json={"action": "reconcile"}, headers=headers)
+    assert response.status_code == 409 and "TWS answers" in response.json()["detail"]
+    assert "BA stock -1141" in response.json()["detail"]

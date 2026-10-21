@@ -217,6 +217,17 @@ def create_app(service):
         except (ValueError, RuntimeError) as exc:
             raise HTTPException(409, str(exc)) from exc
         except (TimeoutError, ConnectionError) as exc:
+            connected = (
+                service.broker.snapshot().connected if service.demo else service.broker.ib.isConnected()
+            )
+            if service.last_monitor_error and not connected:
+                # TWS answered, but the app refused the account (e.g. non-contest positions):
+                # restarting TWS would not help, so name the real cause.
+                raise HTTPException(
+                    409,
+                    "Nothing was changed. TWS answers, but the app's last connection attempt stopped "
+                    f"at: {service.last_monitor_error}",
+                ) from exc
             raise HTTPException(
                 503,
                 "IBKR did not answer (TWS disconnected or busy); nothing was changed. "

@@ -467,3 +467,29 @@ async def test_option_plan_blocked_only_by_the_stock_cooldown_is_resolved_soon(o
     # The full (option) solve is due when the 40 s left on the stock cooldown end, not in 15 min.
     clock[0] += service.manifest.policy.stock_seconds - 20
     assert clock[0] - service.last_optimization["OPT"] >= service.manifest.policy.option_seconds
+
+
+async def test_reconcile_keeps_a_started_plan_after_its_own_fill_but_not_after_a_foreign_change(operational):
+    service = operational
+    option = next(i for i, c in service.manifest.contract_map.items() if c.kind == "OPT")
+    stock = next(i for i, c in service.manifest.contract_map.items() if c.kind == "STK")
+    held = service.broker.snapshot().quantities()
+    plan = Target(
+        quantities={**held, option: held.get(option, 0) + 3},
+        expected_score=0,
+        current_score=1000,
+        uncertainty=0,
+        status="OPTIMAL",
+        snapshot_id="s",
+        scenario_id="x",
+        config_hash="h",
+    )
+    service.last_snapshot = service.broker.snapshot()
+    service.pending_target, service.active_plan_started, service.force_optimize = plan, True, False
+    service.execution.owned_inventory_ranges[option] = (held.get(option, 0), held.get(option, 0) + 1)
+    service.broker.positions[option] = held.get(option, 0) + 1  # the plan's first slice filled
+    await service.reconcile()
+    assert service.pending_target is plan and service.active_plan_started and not service.force_optimize
+    service.broker.positions[stock] = held.get(stock, 0) + 7  # a trade the app did not make
+    await service.reconcile()
+    assert service.pending_target is None and not service.active_plan_started and service.force_optimize

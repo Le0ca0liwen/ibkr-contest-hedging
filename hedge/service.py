@@ -953,8 +953,17 @@ class TradingService:
         self.last_snapshot = snapshot
         self.store.snapshot(snapshot)
         self.last_reconcile = time.monotonic()
+        current = snapshot.quantities()
+        # The app's own slice fills (within the ranges its orders own, as for position events)
+        # continue a started plan instead of restarting it into its own trade cooldown.
+        foreign = prior is None or any(
+            not (bounds := self.execution.owned_inventory_ranges.get(i))
+            or not bounds[0] <= current.get(i, 0) <= bounds[1]
+            for i in set(current) | set(prior)
+            if current.get(i, 0) != prior.get(i, 0)
+        )
         if (
-            snapshot.quantities() != prior
+            foreign
             or self.execution.unresolved()
             or any(not o.order_ref.startswith(("hedge:", "hedge-package:")) for o in snapshot.orders)
         ):
