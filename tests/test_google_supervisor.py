@@ -183,6 +183,12 @@ def test_prompt_and_context_follow_the_configured_scoring_rule():
     assert safe["session_clock"]["oldest_option_quote_age_s"] == 75.0
     assert safe["risk_reasons"] == ["Stale/future quote: 101"]
     assert "PRIVATE" not in json.dumps(safe) and "private" not in json.dumps(safe)
+    assert "importing that statement" in prompt and safe["api_close_official"] is None
+    # SPCX/RKLB/SPY contest: the IBKR API close is the official scoring close, never "import a statement".
+    official = {**calendar, "previous_close_provenance": "api", "api_close_official": True}
+    prompt = supervisor.instructions(official)
+    assert "official scoring close" in prompt and "import" not in prompt.lower()
+    assert Supervisor.context(official)["api_close_official"] is True
 
 
 @pytest.mark.asyncio

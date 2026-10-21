@@ -68,5 +68,26 @@ vm.runInContext('refresh=async()=>{}',context);
   assert.equal(posts.length,before+1);
   assert.equal(lastPath,'/api/burner');
   assert.equal(lastBody.mode,'off');
-  console.log('Dashboard controls: expired token refresh, server rejection, pause and shadow feedback passed.');
+  // Ask panel: AI and app text is escaped; the deterministic fallback is labelled as such.
+  await vm.runInContext('renderAsk({answer:"<img src=x>",relied_on:["<b>"],source:"ai",note:"<i>n</i>",point_to:"Reconcile"})',context);
+  assert.match(nodes.get('ask-answer').innerHTML,/&lt;img src=x&gt;/);
+  assert.doesNotMatch(nodes.get('ask-answer').innerHTML,/<img|<i>/);
+  assert.match(nodes.get('ask-answer').innerHTML,/\[AI · advice only\].*See: Reconcile/);
+  assert.equal(nodes.get('ask-refs').textContent,'Based on: <b>');  // textContent: never parsed as HTML
+  await vm.runInContext('renderAsk({answer:"Blocked by: IBKR",relied_on:[],source:"deterministic"})',context);
+  assert.match(nodes.get('ask-answer').innerHTML,/\[From the readiness checklist\]<\/strong> Blocked by: IBKR/);
+  assert.equal(nodes.get('ask-refs').textContent,'');
+  await vm.runInContext('renderAI({ai_enabled:false,ai_status:{model:"gemini-3.8-flash"},ai_features:{qa:{status:"AI off"}},qa_history:[{at:"2026-10-22T14:00:00Z",question:"<script>q</script>",answer:"<b>a</b>",source:"deterministic"}]})',context);
+  assert.match(nodes.get('ask-history').innerHTML,/&lt;script&gt;q/);
+  assert.doesNotMatch(nodes.get('ask-history').innerHTML,/<script>|<b>/);
+  assert.equal(nodes.get('ask-status').textContent,'AI off · checklist answers');
+  assert.match(nodes.get('ai-features').textContent,/Questions: AI off · One Enable AI switch governs all AI features/);
+  await vm.runInContext('askQuestion("Why is paper trading not on?")',context);
+  assert.equal(lastPath,'/api/ask');
+  assert.deepEqual(lastBody,{question:'Why is paper trading not on?'});
+  assert.equal(nodes.get('ask-submit').disabled,false);
+  // The API close is the official close for this contest: no "import the statement" prompt.
+  assert.equal(vm.runInContext('provenanceText({previous_close_provenance:"api",api_close_official:true})',context),"Today's closing target · IBKR API close (official)");
+  assert.match(vm.runInContext('provenanceText({previous_close_provenance:"api",api_close_official:false})',context),/import the IBKR statement NAV/);
+  console.log('Dashboard controls: expired token refresh, server rejection, pause, shadow and Ask panel feedback passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
+from .ai_qa import OperatorQA
 from .broker import IBKRBroker, SimBroker
 from .burner_service import ClosingBurner
 from .closing import CloseMarkRecorder, ClosingRecorder
@@ -62,6 +63,10 @@ class TradingService:
         self.recorder = QuoteRecorder()
         self.nav_tracker = NAVTracker(manifest)
         self.supervisor = Supervisor()
+        # AI operator features (advice only; docs/AI_OPERATOR_FEATURES.md): background AI work is
+        # tracked in ai_tasks so stop() cancels it; nothing on the trading path awaits it.
+        self.ai_tasks = set()
+        self.qa = OperatorQA(self)
         self.moomoo_data = MoomooData(manifest) if not demo else None
         if self.moomoo_data and manifest.market_data_provider == "moomoo":
             self.broker.external_quotes = self.moomoo_data.quotes
@@ -133,6 +138,7 @@ class TradingService:
 
     async def start(self):
         self.store.initialize()
+        self.qa.load()
         Path("data").mkdir(exist_ok=True)
         path = Path("data") / ("writer-" + digest(self.manifest.account)[:12] + ".lock")
         self.writer_file = path.open("a+")
@@ -267,9 +273,16 @@ class TradingService:
                     pass
             await self.burner.wait(1.0)
 
+    def spawn_ai(self, coroutine, name):
+        """Background AI work: tracked for stop(), exceptions swallowed (they land in feature status)."""
+        task = asyncio.create_task(coroutine, name=name)
+        self.ai_tasks.add(task)
+        task.add_done_callback(lambda t: (self.ai_tasks.discard(t), t.cancelled() or t.exception()))
+        return task
+
     async def stop(self):
         await self.execution.pause()
-        tasks = [*self.tasks, *([self.history_task] if self.history_task else [])]
+        tasks = [*self.tasks, *([self.history_task] if self.history_task else []), *self.ai_tasks]
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
@@ -2324,6 +2337,9 @@ class TradingService:
                 "ai": self._ai_reviews(),
                 "ai_enabled": self.supervisor.enabled,
                 "ai_status": self.supervisor.status(),
+                # In-memory caches only: no database reads added to the 2 s poll.
+                "ai_features": {"qa": self.qa.status()},
+                "qa_history": self.qa.history(),
                 "recovery": {**self.recovery.latest, "promotion": self.recovery.promotion_status()},
                 "burner": self.burner.state(),
                 "checklist": self.checklist(),

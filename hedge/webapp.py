@@ -12,9 +12,10 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from .ai_qa import QABusy, QALimit
 from .execution_quality import execution_quality
 
 
@@ -62,6 +63,11 @@ class BurnerSettings(BaseModel):
 class AutostartSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
     mode: Literal["off", "paper"]
+
+
+class Question(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    question: str = Field(min_length=1, max_length=500)
 
 
 class DailyRateImport(BaseModel):
@@ -113,6 +119,16 @@ def create_app(service):
             return result
         except ValueError as exc:
             raise HTTPException(400, str(exc)) from None
+
+    @app.post("/api/ask")
+    async def ask(body: Question):
+        # Advice only: reads the app's state (plus Google when AI is on) and records the answer.
+        try:
+            return await service.qa.ask(body.question)
+        except QALimit as exc:  # too soon after the previous question
+            raise HTTPException(429, str(exc)) from None
+        except QABusy as exc:
+            raise HTTPException(409, str(exc)) from None
 
     @app.post("/api/daily-cash-rate")
     async def daily_cash_rate(body: DailyRateImport):

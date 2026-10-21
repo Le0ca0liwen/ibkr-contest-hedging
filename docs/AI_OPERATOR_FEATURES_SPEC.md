@@ -1286,3 +1286,20 @@ meant. Plausible readings:
 Under either reading, no LLM output enters the loop. The model would be deterministic, versioned
 and auditable, and gated behind an operator approval like event caution. The day reports
 (section 5) provide the realized-vs-forecast evidence such a model needs.
+
+## 11. Build notes (deviations recorded during implementation)
+
+Commit 1 (section 1, section 2 and feature 4):
+
+- `Supervisor.close_instruction()` words the official-close sentence without "import" ("previous_close_provenance
+  'api' is final, not provisional; never advise replacing it with a statement NAV"), because the section 1 test
+  asserts that "import" is absent from the prompt.
+- `_ai_operator_loop` is not added yet: it has nothing to schedule until the day reports (feature 2) and the event
+  calendar (feature 3) exist. `ai_tasks`, `spawn_ai()` and their cancellation in `stop()` are in place.
+- `ai_features` holds only `qa` and the Q&A context has no `event_caution`/`day_report` keys yet; features 2 and 3
+  add them (and their `state_keys`). The Decisions line renders whatever `ai_features` contains.
+- `state_keys` also lists `ready`, `connected` and `profile`, which the context sends.
+- Rate-limit tests inject `RateLimit.clock` instead of monkeypatching `time.monotonic`, which would also move the
+  asyncio event-loop clock.
+- A `wait_for` timeout or any non-`ValueError` exception in `ask()` maps to the fixed texts "Google AI timed out" /
+  "Google AI unavailable; deterministic monitoring continues", so a context-building error also falls back.

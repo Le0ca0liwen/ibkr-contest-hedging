@@ -29,6 +29,14 @@ organizer's corrected IBKR statement revises the value and adjacent scores.
 
 ## Statement first
 
+For the SPCX/RKLB/SPY contest (`contest_rules: spcx_rklb_spy`) the operator's instruction of
+Oct 21 applies instead: the IBKR API closing NAV is the official close. Its API rows (bell capture
+and, when taken, the post-close observation) are final, not provisional: no statement import is
+needed, no import warning is raised, and the dashboard, readiness row and AI prompts call the API
+close official. A manual entry (Settings & alerts > Import an official closing NAV) only corrects a
+missed or wrong capture, and then wins over the API rows for that day. The rest of this section
+describes the statement-first behaviour that other contest configurations (e.g. practice) keep.
+
 The instructor scores the official IBKR Custom Statement NAV. The bell capture can
 differ from it by roughly $300-1,200: API account values refresh only about every
 three minutes and SPY options mark at their 16:15 close. Each ledger row is therefore

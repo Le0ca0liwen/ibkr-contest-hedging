@@ -69,6 +69,9 @@ reason in plain words. The badge counts the ✗ rows.
   to spend a forecast surplus (Overview > Closing surplus burner). **Do not pause
   or restart between 15:40 and 16:25.** To stop new burn trades only, press
   **Burner off**; any open round trip still sells back what it bought.
+- **Any time:** if paper trading is not on and the Today panel is unclear, type the
+  question in **Why isn't it trading? Ask the app** (Overview). The answer is advice;
+  the Today rows and the app's checks decide.
 - **16:00 and about 16:20:** the closing NAV is recorded automatically
   (Settings & alerts > Automatic closing NAV recorder) and is the official close. A
   DIVERGED warning means the 16:20 value differed from the 16:00 one; the 16:00 value is
@@ -81,9 +84,22 @@ official scores; no statement import is needed. Download the records with the
 "Export … ↗" links: scores and burn cycles on Overview, orders, fills and
 execution quality on Trades, decisions on Decisions.
 
+## AI operator features
+
+Optional and advice only: they never place, size, approve or block a trade and never
+change a setting. One switch, **Enable AI** (Decisions > AI supervisory review), turns
+all of them on or off; trading never waits for them.
+
+- **Why isn't it trading? Ask the app** (Overview, under Today): type a question, e.g.
+  "Why is paper trading not on?", and press **Ask**. With AI on, Google's model answers
+  from the app's own status (Today rows, mode, waiting reason, burner, alerts, latest
+  decisions, risk checks) and this guide, and shows what it relied on. With AI off, or if
+  Google fails or 60 questions were asked in the last hour, the answer comes straight from
+  the Today rows. One question every 10 seconds. Then do what the Today rows say.
+
 ## Where things are
 
-- **Overview:** Today, NAV and score cards, risk envelope, latest hedge decision,
+- **Overview:** Today, Ask the app, NAV and score cards, risk envelope, latest hedge decision,
   closing surplus burner, official scoring ledger.
 - **Positions & risk:** market data monitor, actual holdings, Greeks and risk checks.
 - **Trades:** execution quality, orders, fills and fees.
