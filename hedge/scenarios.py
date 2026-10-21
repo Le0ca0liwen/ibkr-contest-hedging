@@ -77,6 +77,9 @@ class ScenarioSet:
     iv_shocks: dict[str, np.ndarray] = field(default_factory=dict)
     # Spot/IV variance horizon of `changes` in trading days (calendar_days drives decay and carry).
     trading_days: float = 0.0
+    # Scenario symbol -> operator-approved event-caution factor applied to the forecast shocks
+    # (docs/AI_OPERATOR_FEATURES.md); empty when none. The stress grid never reads it.
+    event_caution: dict[str, float] = field(default_factory=dict)
 
     # Moomoo re-derives spot from the book mid and recalibrates IV on every read (time to expiry
     # shrinks each call), so exact equality fails on unchanged markets. Tolerate only changes
@@ -131,6 +134,9 @@ class ScenarioEngine:
         self.daily_mtime = self._daily_mtime() if self.daily_history is not None else None
         self.daily_cache = {}
         self.beta_cache = {}
+        # Forecast close date -> {symbol: factor}; the service wires EventRisk.factors_for (approved
+        # event caution). Must be total and cheap: it runs inside every build.
+        self.event_caution = lambda day: {}
 
     def _daily_mtime(self):
         try:
@@ -244,6 +250,20 @@ class ScenarioEngine:
             and not source.startswith("historical matched-clock")
         ):
             raise ValueError("Joint historical coverage required for a cross-underlying hedge universe")
+        close_day = end.astimezone(NY).date()
+        # Operator-approved event caution (docs/AI_OPERATOR_FEATURES.md): scales this session's
+        # FORECAST spot and IV shocks only (changes, next_changes, overnight_changes all reuse them).
+        # stress_matrix and market_stress never read shocks/iv_shocks, so the 3% cap is unchanged.
+        caution = {
+            s: float(f)
+            for s, f in sorted(self.event_caution(close_day).items())
+            if s in shocks and float(f) in (1.25, 1.5)
+        }
+        for s, f in caution.items():
+            shocks = {**shocks, s: shocks[s] * f}
+            iv_shocks = {**iv_shocks, s: iv_shocks[s] * f}
+        if caution:
+            source += "; event caution " + " ".join(f"{s} x{f:.2f}" for s, f in caution.items())
         changes = self._reprice(ids, quotes, forecast_start, end, shocks, iv_shocks)
         stress = self.stress_matrix(ids, quotes, now, max(end, now + timedelta(days=1)))
         betas, beta_source = self.market_betas(now, symbols)
@@ -267,7 +287,6 @@ class ScenarioEngine:
             i: self.valuation.rho(self.manifest.contract_map[i], quotes[i].spot, quotes[i].iv, now)
             for i in ids
         }
-        close_day = end.astimezone(NY).date()
         next_session = self.manifest.next_scored_session(close_day)
         next_changes = overnight_changes = None
         variance = 0.0
@@ -306,6 +325,7 @@ class ScenarioEngine:
                 "rhos": rhos,
                 "overnight": overnight_changes.tolist() if overnight_changes is not None else None,
                 "spot_vol_correlation": spot_vol,
+                **({"event_caution": caution} if caution else {}),  # default builds keep their identifier
             }
         )
         return ScenarioSet(
@@ -328,6 +348,7 @@ class ScenarioEngine:
             spot_vol,
             iv_shocks,
             horizon,
+            caution,
         )
 
     def _reprice(self, ids, quotes, start, finish, shocks, iv_shocks, scale=1.0):

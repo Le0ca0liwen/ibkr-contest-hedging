@@ -250,6 +250,12 @@ dashboard poll scan the whole history. No schema columns change. Instead:
    restores its inventory.
    The switch never changes the control epoch, so automatic data-wait resume is
    unaffected.
+5. **Event caution.** An approved event caution with "Burner off for this session"
+   (Overview > Event risk today; docs/AI_OPERATOR_FEATURES.md) turns new entries off for
+   that session only ("Burner off for this session (approved event caution)"). It only
+   lowers the mode, leaves the switch above untouched and still lets an open cycle sell
+   back. An approved caution also widens the forecast moves behind the median closing gap;
+   the burner waits for a forecast rebuilt with the approved factors before it acts.
 
 ## Configuration (`burner:`)
 

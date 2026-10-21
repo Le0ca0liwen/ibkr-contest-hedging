@@ -63,6 +63,10 @@ reason in plain words. The badge counts the ✗ rows.
   Nothing to import: yesterday's IBKR API closing NAV is the official close. Only if
   the Previous official close row says Missing, enter IBKR's closing NAV (Settings &
   alerts > Import an official closing NAV; "$1,234,567.89" is accepted as printed).
+- **About 08:45 ET:** with AI on, **Event risk today** (Overview) lists the day's known events
+  (earnings, Fed, CPI/jobs data, launches) with their sources and may propose a forecast caution.
+  Review it, then press **Approve caution** or leave it; nothing applies until you approve, and an
+  approval expires at that day's close.
 - **09:30 onward:** hedging resumes by itself. Watch the Today panel and
   Settings & alerts > Alerts & required actions.
 - **15:40-15:56 ET:** the closing surplus burner may buy and sell SPCX/RKLB shares
@@ -106,11 +110,21 @@ all of them on or off; trading never waits for them.
   the suggestions are never applied, so change a setting only with its own button.
   **Recompute now** picks up late commission reports or a corrected close; a large
   Unexplained line usually means an option was marked oddly or close marks are missing.
+- **Event risk today** (Overview, under the latest hedge decision): about 08:45 ET on session
+  days (or **Refresh event calendar**, at most 6 per day) Google Search lists known events for
+  SPCX, RKLB, SPY and the market until the next open, with links. The app proposes one caution per
+  symbol: ×1.25 or ×1.5 widens that symbol's modeled price and implied-vol moves for this session
+  (SPY also covers index ETF hedges), plus "Burner off for this session" for a late-day Fed or
+  similar event. Review the list, adjust the choices, then press **Approve caution** (it asks you
+  to confirm) or leave everything at ×1.0. Nothing applies until you approve; the approval ends at
+  the session close by itself, and **Clear caution** removes it earlier. The 3% stress limit and
+  every hard check are unchanged. With AI off no calendar is fetched; you can still approve by
+  hand.
 
 ## Where things are
 
 - **Overview:** Today, Ask the app, NAV and score cards, risk envelope, latest hedge decision,
-  closing surplus burner, official scoring ledger, day-end miss explanation.
+  event risk today, closing surplus burner, official scoring ledger, day-end miss explanation.
 - **Positions & risk:** market data monitor, actual holdings, Greeks and risk checks.
 - **Trades:** execution quality, orders, fills and fees.
 - **Decisions:** hedge decision history and the optional AI supervisor (advice only).

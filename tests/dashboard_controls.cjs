@@ -7,7 +7,7 @@ const posts=[];
 let reject=true,lastPath=null,lastBody=null;
 const response=(status,text)=>({status,ok:status>=200&&status<300,text:async()=>text,json:async()=>JSON.parse(text)});
 const context=vm.createContext({
-  console,Intl,Date,JSON,Error,AbortSignal,setInterval(){},setTimeout(){},clearTimeout(){},
+  console,Intl,Date,JSON,Error,AbortSignal,URL,setInterval(){},setTimeout(){},clearTimeout(){},
   DOMParser:class{parseFromString(){return{querySelector:()=>({content:'new-token'})};}},
   document:{querySelector:()=>({content:'old-token'}),querySelectorAll:()=>[],
     getElementById:id=>nodes.get(id)||null,addEventListener(){}},
@@ -112,5 +112,46 @@ vm.runInContext('refresh=async()=>{}',context);
   assert.match(nodes.get('notice').textContent,/Day-end report recomputed/);
   await vm.runInContext('control("day_report_explain")',context);
   assert.deepEqual(lastBody,{date:null,action:'explain'});
-  console.log('Dashboard controls: expired token refresh, server rejection, pause, shadow, Ask panel and day-end report passed.');
+  // Event risk: titles, reasons and sources are escaped; only https sources are links; focus keeps a choice.
+  const ev=`{ai_enabled:true,ai_features:{events:{status:'ok'}},event_risk:{session:'2026-10-22',symbols:['RKLB','SPCX','SPY'],levels:[1,1.25,1.5],pending_approval:true,in_effect:{},calls_today:1,calls_per_day:6,approval:null,latest_failure:{fetched_at:'2026-10-22T13:00:00Z',error:'Google AI request failed (HTTP 500)'},calendar:{id:'CAL1',session:'2026-10-22',status:'ok',trigger:'automatic',fetched_at:'2026-10-22T12:46:00Z',window_end:'2026-10-23T13:45:00Z',dropped:1,notes:'<b>n</b>',has_suggestions:true,proposal:{factors:{RKLB:1.5,SPCX:1.25,SPY:1.5},burner_off:true},events:[{date:'2026-10-22',timing:'after_close',symbols:['RKLB'],title:'<img src=x onerror=alert(1)>',type:'earnings',impact:'high',reason:'<script>r</script>',sources:[{url:'javascript:alert(1)',title:'<i>t</i>',cited:false},{url:'http://plain.example.com/x',title:'',cited:false},{url:'https://www.bls.gov/cpi/',title:'bls<b>',cited:true},{url:'https://u:p@evil.example.com/',cited:true}]}]}}}`;
+  await vm.runInContext(`renderEvents(${ev})`,context);
+  const er=nodes.get('events-rows').innerHTML;
+  assert.doesNotMatch(er,/<img|<script>|<i>|<b>|href="javascript|href="http:|href="https:\/\/u:p@/);
+  assert.match(er,/&lt;img src=x onerror=alert\(1\)&gt;/);
+  assert.match(er,/javascript:alert\(1\) <small>\(not confirmed by a Google citation\)/);
+  assert.match(er,/http:\/\/plain\.example\.com\/x <small>\(not confirmed/);
+  assert.match(er,/<a href="https:\/\/www\.bls\.gov\/cpi\/" target="_blank" rel="noopener noreferrer">bls&lt;b&gt;<\/a>/);
+  assert.match(er,/<br>https:\/\/u:p@evil\.example\.com\/<\/td>/);  // userinfo: shown as text, never a link
+  assert.equal(nodes.get('events-badge').textContent,'APPROVAL PENDING');
+  assert.match(nodes.get('events-status').textContent,/Note: <b>n<\/b> · Last refresh failed .*HTTP 500.*last good one · 1\/6 Google calls today/);
+  assert.match(nodes.get('events-sources-note').textContent,/Proposed from this calendar: RKLB ×1\.50, SPCX ×1\.25, SPY ×1\.50; burner off/);
+  assert.equal(nodes.get('events-suggestions').src,'/ai/search-suggestions/CAL1');
+  assert.equal(nodes.get('events-suggestions').hidden,false);
+  assert.match(nodes.get('caution-factors').innerHTML,/data-symbol="RKLB"[^]*value="1.5" selected/);
+  assert.equal(nodes.get('caution-burner-off').checked,true);
+  assert.match(nodes.get('caution-current').textContent,/No caution approved \(all 1\.0\) for 2026-10-22/);
+  nodes.get('caution-factors').innerHTML='KEEP';
+  context.document.activeElement={dataset:{symbol:'RKLB'}};
+  await vm.runInContext(`renderEvents(${ev.replace("id:'CAL1'","id:'CAL2'")})`,context);
+  assert.equal(nodes.get('caution-factors').innerHTML,'KEEP');  // a choice in progress is not reset by the poll
+  context.document.activeElement=null;
+  await vm.runInContext(`renderEvents(${ev.replace("id:'CAL1'","id:'CAL2'")})`,context);
+  assert.notEqual(nodes.get('caution-factors').innerHTML,'KEEP');
+  await vm.runInContext(`state=${ev.replace("id:'CAL1'","id:'CAL2'")}`,context);
+  nodes.get('caution-factors').querySelectorAll=()=>[{dataset:{symbol:'RKLB'},value:'1.5'},{dataset:{symbol:'SPY'},value:'1.25'},{dataset:{symbol:'XYZ'},value:'1.5'}];
+  nodes.get('caution-burner-off').checked=true;
+  assert.deepEqual(JSON.parse(JSON.stringify(vm.runInContext('cautionBody(false)',context))),{session:'2026-10-22',factors:{RKLB:1.5,SPCX:1,SPY:1.25},burner_off:true,calendar_id:'CAL2'});
+  assert.deepEqual(JSON.parse(JSON.stringify(vm.runInContext('cautionBody(true)',context))),{session:'2026-10-22',factors:{RKLB:1,SPCX:1,SPY:1},burner_off:false,calendar_id:null});
+  await vm.runInContext('control("event_caution_clear")',context);
+  assert.equal(lastPath,'/api/event-caution');
+  assert.deepEqual(lastBody,{session:'2026-10-22',factors:{RKLB:1,SPCX:1,SPY:1},burner_off:false,calendar_id:null});
+  await vm.runInContext('control("events_refresh")',context);
+  assert.equal(lastPath,'/api/events/refresh');
+  assert.deepEqual(lastBody,{});
+  await vm.runInContext(`renderEvents({ai_enabled:false,ai_features:{events:{}},event_risk:{session:'2026-10-23',symbols:['SPY'],levels:[1,1.25,1.5],pending_approval:false,in_effect:{SPY:1.5,IVV:1.5},calendar:null,approval:{session:'2026-10-23',factors:{SPY:1.5},burner_off:false,status:'in effect',approved_at:'x',expires_at:'2026-10-23T20:00:00Z'}}})`,context);
+  assert.equal(nodes.get('events-badge').textContent,'CAUTION IN EFFECT');
+  assert.match(nodes.get('caution-current').textContent,/In effect until .*SPY ×1\.50; burner unchanged\. Forecast in use now: SPY ×1\.50, IVV ×1\.50/);
+  assert.equal(nodes.get('events-refresh').disabled,true);
+  assert.equal(nodes.get('events-suggestions').hidden,true);
+  console.log('Dashboard controls: expired token refresh, server rejection, pause, shadow, Ask panel, day-end report and event risk passed.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

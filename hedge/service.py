@@ -18,6 +18,7 @@ from .continuity import DataUnavailable, data_only, quote_coverage
 from .data import QuoteRecorder
 from .day_report import DayReporter
 from .demo import demo_quotes
+from .event_risk import EventRisk
 from .execution import ExecutionManager
 from .execution_quality import execution_quality, timestamp
 from .models import digest, utcnow
@@ -134,6 +135,11 @@ class TradingService:
         self.monitor_wakeup = asyncio.Event()
         self.burner = ClosingBurner(self)
         self.day_reports = DayReporter(self)  # deterministic day-end attribution + optional AI text
+        # Event-risk calendar (AI, advice) and operator-approved event caution: the only AI-influenced
+        # trading input, bounded and applied to FORECAST scenarios only after the operator approves.
+        self.event_risk = EventRisk(self)
+        self.scenarios.event_caution = self.event_risk.factors_for
+        self.burner.event_off = self.event_risk.burner_off
 
     def now(self):
         return self.demo_start + timedelta(seconds=time.monotonic() - self.started) if self.demo else utcnow()
@@ -142,6 +148,7 @@ class TradingService:
         self.store.initialize()
         self.qa.load()
         self.day_reports.load()
+        self.event_risk.load()
         Path("data").mkdir(exist_ok=True)
         path = Path("data") / ("writer-" + digest(self.manifest.account)[:12] + ".lock")
         self.writer_file = path.open("a+")
@@ -285,23 +292,24 @@ class TradingService:
         return task
 
     async def _ai_operator_loop(self):
-        """Every 30 s: the day-end report schedule (deterministic; its AI text runs in spawn_ai
-        tasks). Never raises into the service and never awaits Google."""
+        """Every 30 s: the day-end report schedule and the morning event calendar (both synchronous;
+        their Google calls run in spawn_ai tasks). Never raises into the service and never awaits Google."""
         while True:
             await asyncio.sleep(30)
-            try:
-                self.day_reports.tick(self.now())
-            except asyncio.CancelledError:
-                raise
-            except Exception as exc:
+            for tick in (self.day_reports.tick, self.event_risk.tick):
                 try:
-                    self.alert(
-                        "warning",
-                        f"AI operator schedule failed: {type(exc).__name__}; trading is unaffected",
-                        key=("ai_loop", self.now().astimezone(NY).date().isoformat(), type(exc).__name__),
-                    )
-                except Exception:
-                    pass
+                    tick(self.now())
+                except asyncio.CancelledError:
+                    raise
+                except Exception as exc:
+                    try:
+                        self.alert(
+                            "warning",
+                            f"AI operator schedule failed: {type(exc).__name__}; trading is unaffected",
+                            key=("ai_loop", self.now().astimezone(NY).date().isoformat(), type(exc).__name__),
+                        )
+                    except Exception:
+                        pass
 
     async def stop(self):
         await self.execution.pause()
@@ -1373,6 +1381,8 @@ class TradingService:
                 or decision_epoch != self.control_epoch
                 # A completed burn round trip restores quantities while NAV and fees moved.
                 or burn_epoch != self.burner.burn_epoch
+                # An event-caution approval changed the forecast set this solve used.
+                or not self.event_risk.matches(scenarios)
             ):
                 self.last_target = None
                 self.force_optimize = True
@@ -1408,6 +1418,7 @@ class TradingService:
                 newest.quantities() != snap.quantities()
                 or newest.orders != snap.orders
                 or burn_epoch != self.burner.burn_epoch
+                or not self.event_risk.matches(scenarios)
             ):
                 self.force_optimize = True
                 return
@@ -1488,6 +1499,8 @@ class TradingService:
                     )
                 ),
                 "source": scenarios.source,
+                # Operator-approved forecast caution in this scenario set ({} when none); also in source.
+                "event_caution": dict(getattr(scenarios, "event_caution", None) or {}),
                 "profile": self.profile,
                 "at": now.isoformat(),
             }
@@ -2215,6 +2228,7 @@ class TradingService:
                     "calendar_days": scenarios.calendar_days,
                     "source": scenarios.source,
                     "identifier": scenarios.identifier,
+                    "event_caution": dict(getattr(scenarios, "event_caution", None) or {}),
                 },
                 "scenario_at": self.last_scenario_at,
                 "scenario_snapshot_id": self.last_scenario_snapshot_id,
@@ -2361,9 +2375,14 @@ class TradingService:
                 "ai_enabled": self.supervisor.enabled,
                 "ai_status": self.supervisor.status(),
                 # In-memory caches only: no database reads added to the 2 s poll.
-                "ai_features": {"qa": self.qa.status(), "day_report": self.day_reports.status()},
+                "ai_features": {
+                    "qa": self.qa.status(),
+                    "day_report": self.day_reports.status(),
+                    "events": self.event_risk.status(),
+                },
                 "qa_history": self.qa.history(),
                 "day_reports": self.day_reports.latest(),
+                "event_risk": self.event_risk.state(),
                 "recovery": {**self.recovery.latest, "promotion": self.recovery.promotion_status()},
                 "burner": self.burner.state(),
                 "checklist": self.checklist(),

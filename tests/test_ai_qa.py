@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel, ConfigDict, Field
 
 from hedge.ai_common import OTHER_ALERT, RateLimit, operator_text, safe_alerts
-from hedge.ai_qa import GUIDE_SECTIONS, UNCITED, QABusy, QALimit, guide_excerpt
+from hedge.ai_qa import GUIDE_LIMIT, GUIDE_SECTIONS, UNCITED, QABusy, QALimit, guide_excerpt
 from hedge.demo import demo_manifest
 from hedge.service import TradingService
 from hedge.storage import Store
@@ -408,5 +408,6 @@ def test_operator_text_and_alert_filter():
 def test_guide_excerpt_keeps_only_allowlisted_sections():
     excerpt = guide_excerpt()
     headings = re.findall(r"(?m)^## (.+)$", excerpt)
-    assert headings == list(GUIDE_SECTIONS) and len(excerpt) <= 6000
+    assert headings == list(GUIDE_SECTIONS) and len(excerpt) <= GUIDE_LIMIT
+    assert excerpt.rstrip().endswith("you can still approve by\n  hand.")  # nothing cut off
     assert "Start and stop" not in excerpt

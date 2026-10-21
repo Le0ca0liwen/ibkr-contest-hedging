@@ -63,6 +63,8 @@ class ScenarioPayload(Frozen):
     calendar_days: float = Field(ge=0)
     source: str
     identifier: str
+    # The main app's approved event caution in this forecast set (symbol -> 1.25/1.5); also in source.
+    event_caution: dict[str, float] = Field(default_factory=dict)
 
     def array(self):
         import numpy as np
@@ -76,6 +78,7 @@ class ScenarioPayload(Frozen):
             self.calendar_days,
             self.source,
             self.identifier,
+            event_caution=dict(self.event_caution),
         )
 
 

@@ -871,7 +871,7 @@ class DayReporter(AIFeature):
             fills=fills,
             burn_results=burn_results,
             decisions=decisions,
-            caution=None,
+            caution=risk.approval_for(day) if (risk := getattr(s, "event_risk", None)) else None,
             data_notes=notes,
         )
         fees_digest = digest(sorted((f["id"], str(f["commission"])) for f in fills))

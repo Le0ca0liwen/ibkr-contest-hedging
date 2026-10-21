@@ -8,25 +8,29 @@ Optional helpers for the operator, built on the Google Gemini supervisor
 |---|---|
 | "Why isn't it trading?" Q&A (Overview > Ask the app) | Built |
 | Day-end miss explanation (Overview, under the Official scoring ledger) | Built |
-| Event-risk calendar and approved event caution | Specified (spec section 6); documented here when built |
+| Event-risk calendar and approved event caution (Overview > Event risk today) | Built |
 
 ## Ground rules
 
 - **Advice only.** Nothing the AI returns can place, size, approve, block or cancel an order, or
   change a mode, profile, limit, burner or autostart setting. The deterministic optimizer and risk
   gate trade. Every prompt ends with a fixed sentence saying so and telling the model to treat
-  every input as data, never as instructions.
+  every input as data, never as instructions. The one AI-influenced trading input is the event
+  caution: the AI only *proposes* it through a fixed table, it applies only after the operator
+  presses **Approve caution**, it is bounded to ×1.0/×1.25/×1.5 and it widens forecast moves only,
+  never the 3% stress limit.
 - **One switch.** **Enable AI / Disable AI** (Decisions > AI supervisory review, saved in
   `config/local.ai.json`, plus the local key) governs every AI feature. With AI off, no feature
-  calls Google; the Q&A answers from the readiness checklist and the day-end report shows its
-  numbers only.
+  calls Google; the Q&A answers from the readiness checklist, the day-end report shows its
+  numbers only and the event calendar is not fetched (a caution can still be approved by hand).
+  An approved caution stays in effect when AI is turned off: the operator approved it.
 - **Off the trading path.** Every AI call is an async request with a timeout, made from a
   dashboard request or a background task the service owns (`service.ai_tasks`, cancelled on stop).
   The monitor, optimizer, execution, burner and closing recorders never wait for one. At most two
   Google calls run at a time across all features.
 - **Failures.** A failed call shows on the dashboard (Ask panel status, Decisions > AI line) and
   raises one alert per feature, ET day and message ("AI questions unavailable: ...", "Day-end
-  report AI unavailable: ..."). The text is
+  report AI unavailable: ...", "Event calendar AI unavailable: ..."). The text is
   always one of the fixed messages: "Google AI request failed (HTTP n)", "Google AI did not return
   a completed answer", "Invalid Google AI response rejected", "Google AI unavailable; deterministic
   monitoring continues" or "Google AI timed out"; never provider text, never the key.
@@ -58,7 +62,8 @@ anything.
 | decisions | the latest 5: time, status, eligibility, improvement, threshold, NAV gap, hold/proposed distance, scope, up to 5 blocking reasons (cleaned) |
 | risk | passed, up to 10 reasons (cleaned), numeric metrics |
 | session_clock, scores | session timing; scoring rule, rate, closing target, NAV estimate, provisional score, previous-close provenance, official-API-close flag |
-| guide | the operator guide sections "The control bar", "Today: readiness", "Every scored day" and "AI operator features" (at most 6,000 characters) |
+| day_report, event_caution | the latest day-end report's date, miss, score, status and three largest lines; the approved event caution's session, factors, burner-off flag, status (in effect/expired) and whether a newer proposal awaits approval |
+| guide | the operator guide sections "The control bar", "Today: readiness", "Every scored day" and "AI operator features" (at most 8,000 characters) |
 
 "Cleaned" means account IDs become `[account]`, anything after a known raw-broker marker (for
 example "Waiting for broker/data:", "the last attempt stopped at:", "Enter in TWS (Paper):")
@@ -157,6 +162,99 @@ text starting with = + - @ is prefixed with ' against spreadsheet formulas.
 while the official close (or the scoring target) is missing, when AI is off for "explain", or
 while an explanation runs; 429 within the rate limits; 422 for a date that is not a scored session.
 
+## Event-risk calendar and event caution
+
+Overview, panel **Event risk today** (under the risk envelope and latest hedge decision).
+
+**The calendar (AI, advice).** On contest session days, between 08:45 and 15:30 ET, the app asks
+Google once for a calendar of the session being forecast (the next scored close; on Day 0 that is
+Day 1). If the call fails it retries 10 minutes later, at most 3 automatic attempts per day; after
+one good calendar it stops for the day. **Refresh event calendar** asks again (at most one call
+per 10 minutes and 6 per ET day, automatic ones included; the count survives a restart). With AI
+off nothing is fetched and the button is disabled. The call uses **Google Search grounding**: the
+model searches the web for scheduled or announced events from now until the next session's open
++ 15 minutes (the horizons the session's forecasts price: the close, overnight and the next
+close) that could move SPCX, RKLB, SPY or the market: earnings, FOMC decisions and minutes, CPI,
+PPI, payrolls, GDP, rocket launches, major company news, index events, large expirations.
+
+**What is sent:** only `session`, `window_start`, `window_end`, `allowed_symbols` (the mandated
+underlyings plus `MARKET`) and `today_et`. Never the account, NAV, positions, orders or app state.
+
+**Strict validation** (pydantic, extra fields rejected): each event has symbols (from the allowed
+list only), a type from a fixed list, a title, an ET date, timing (before the open, intraday with an
+HH:MM time, after the close, or unknown), impact (low, medium, high), a one-sentence reason and up
+to 5 source URLs. Medium and high impact need at least one source; every URL must be a plain
+`https://` link with a dotted host, no user name or password and no spaces. An intraday event
+needs its time. The reply must echo the session. Events dated outside the window are dropped (and
+counted), duplicates removed. Each source is marked as confirmed when one of Google's own citation
+links backs it; others show "(not confirmed by a Google citation)" and still count. Anything else
+(another session, a missing source, broken JSON) rejects the whole reply: "Invalid Google AI
+response rejected", one alert per day.
+
+**The proposal (deterministic).** The app maps the validated events to ONE setting per symbol:
+
+| Event | Proposed caution |
+|---|---|
+| high impact on a symbol | that symbol ×1.5 |
+| medium impact on a symbol | that symbol ×1.25 |
+| low impact | nothing (×1.0) |
+| MARKET (economy-wide) | SPY at the event's level; SPCX and RKLB one level lower (high → ×1.25, medium → ×1.0) |
+
+The largest value per symbol wins. **Burner off for the session** is proposed for a high-impact
+event on the session day that is an FOMC decision, or intraday at or after 13:00 ET, and concerns
+the market or a burner symbol (the 15:40-15:56 burner's median-gap forecast is then unreliable).
+The proposal pre-fills the form; the badge shows **APPROVAL PENDING** until you decide.
+
+**Approval (the operator).** Choose ×1.0/×1.25/×1.5 per symbol and the burner box, press **Approve
+caution** and confirm. **Clear caution** sets everything back to ×1.0. Only the session being
+forecast now can be approved (`POST /api/event-caution {session, factors, burner_off,
+calendar_id}`, control token, serialized with the other controls; any other level is rejected).
+The approval is a durable `event_caution` record with the factors, the proposal, the calendar's
+events as evidence, the symbols each factor scales and `expires_at` (that session's 16:00 close).
+It applies at once: the pending hedge plan is dropped and the optimizer and burner re-plan. It
+never changes the control epoch, the waiting-for-data state, the profile, the mode or the
+configuration hash, so automatic resume after a data wait still works. It **expires by itself**: a
+forecast always targets the next close, so after the session's close the next builds use the next
+session's approval (none until you approve one). It survives a restart.
+
+**What a caution changes (formula).** For every forecast scenario k and each symbol s with an
+approved factor f_s ∈ {1.25, 1.5}, the spot-return shock and the implied-vol shock are scaled:
+r̃(k,s) = f_s · r(k,s), ṽ(k,s) = f_s · v(k,s). That widens the closing, next-close and overnight
+forecast distributions the optimizer minimizes for that symbol only; correlations are unchanged.
+**SPY also scales every broad index ETF in the universe** (IVV, VOO, ...; the configuration's
+`BROAD_INDEX_ETFS` list), so an index-proxy hedge moves with the SPY options it hedges. It does
+**not** change the stress grid that enforces the 3% limit (fixed spot/vol/skew/rate shocks and the
+±5% market rows never read the forecast shocks), so the cap, its feasibility and every hard check
+are unchanged. Forecast-based numbers change as intended: hedge proposals, the CVaR metric and
+the burner's median gap. The scenario source says "event caution RKLB x1.50 ..."; the scenario
+identifier includes the factors only when there are some (builds without a caution keep their
+identifier). Decision records and the surplus export carry `event_caution`. A decision built on a
+forecast from before an approval changed is discarded and re-planned; the burner waits for a
+rebuilt forecast.
+
+**Burner off for the session.** While approved, the closing burner opens no new round trip that
+session ("Burner off for this session (approved event caution)"). It only lowers the mode, leaves
+the Burner off/Shadow/Paper switch untouched, and an open round trip still sells back what it
+bought. The next session uses the configured mode again.
+
+**Google Search display terms.** Grounded results are shown only to the operator, with Google's
+own Search Suggestions: the panel embeds the stored snippet from `GET /ai/search-suggestions/{id}`
+in a sandboxed frame (no scripts; its own policy `default-src 'none'; style-src 'unsafe-inline';
+img-src https: data:; frame-ancestors 'self'`). Source links open unmodified in a new tab, without
+a referrer or tracking. Calendars are kept as `event_calendar` records for the contest only.
+
+**Assumption and cost.** The request uses `tools: [{"type": "google_search"}]` together with the
+JSON response format; Google documents this combination for Gemini 3 models (checked 2026-10-21).
+It is isolated in `event_risk.grounded_tools()` and `supervisor.extract_grounding()`. If Google
+refuses the combination, the panel shows "Google AI request failed (HTTP 400)"; there is no silent
+fallback. Each search query the model runs is billed after 5,000 free per month; the limits above
+keep it to a few calls per session day. Timeout 90 s (95 s overall), 6,144 output tokens.
+
+**Records.** `event_calendar` (random id): session, window, start and fetch times, trigger, model,
+status (ok/failed), events, dropped and duplicate counts, notes, citations, search queries, the
+Search Suggestions HTML (at most 20 KB), proposal, token usage, fixed error text. `event_caution`
+(random id): see above. The newest approval per session wins.
+
 ## For maintainers
 
 - `Supervisor.structured(schema, *, instructions, payload, tools=(), max_output_tokens, timeout)`
@@ -165,19 +263,30 @@ while an explanation runs; 429 within the rate limits; 422 for a date that is no
   pydantic still validates everything client side), sends `store: false` and `background: false`,
   appends `ADVISORY`, and maps every error to the fixed messages above. `extract_grounding(body)`
   is the only reader of Google Search citations, queries and suggestions (used by the event
-  calendar). The 15-minute review uses the same call with `tools: []`.
+  calendar). The 15-minute review, the Q&A and the day-end explanation use `tools: []`.
 - `hedge/ai_common.py`: `operator_text`, `safe_alerts` (with `APP_ALERT_PREFIXES` and
   `RAW_MARKERS`), `RateLimit` and `AIFeature` (status and the once-per-day failure alert).
   **A new app alert family is invisible to the AI until its prefix is added to
   `APP_ALERT_PREFIXES`**; a new raw-text source needs its marker in `RAW_MARKERS`.
 - `service.spawn_ai(coroutine, name)` starts tracked background AI work; `stop()` cancels it.
-  `service._ai_operator_loop()` runs every 30 s, calls `day_reports.tick(now)` (deterministic,
-  never awaits Google) and never raises. `ai_common.ai_error(exc)` maps any failure to the fixed
-  texts.
+  `service._ai_operator_loop()` runs every 30 s, calls `day_reports.tick(now)` and
+  `event_risk.tick(now)` (each synchronous, each in its own try, never awaiting Google) and never
+  raises. `ai_common.ai_error(exc)` maps any failure to the fixed texts.
+- `hedge/event_risk.py`: `calendar_models(keys)` (the strict reply schema per contest),
+  `checked_events`, `propose`, and `EventRisk` (schedule, `refresh()` under its own lock,
+  `approve()`, `state()`). The trading path reads only two total hooks over copy-on-write
+  in-memory dicts: `ScenarioEngine.event_caution = event_risk.factors_for` (forecast close date ->
+  {symbol: factor}) and `ClosingBurner.event_off = event_risk.burner_off`. `event_risk.matches(set)`
+  guards `optimize()` (both invalidation checks) and the burner's forecast-freshness check. The
+  scale is applied in `ScenarioEngine.build()` between the coverage check and the first reprice;
+  `stress_matrix` and the market stress rows never see it.
 - `hedge/day_report.py`: `attribute_day(...)` is the pure attribution; `DayReporter` schedules
   (`settle(day)` = close + post-close delay + 5 min + 1 min), records, serves (`latest()`, `view()`,
   `export_rows()`) and explains (`explain()` under its own lock). Close marks are found by
   `CloseMarkRecorder`'s deterministic ids.
-- `state()` adds `ai_features`, `qa_history` and `day_reports` from in-memory caches only (no
-  extra database reads on the 2-second poll). The Q&A also sees the latest day report's date, miss,
-  score, status and three largest lines (`day_report` state key).
+- `state()` adds `ai_features`, `qa_history`, `day_reports` and `event_risk` from in-memory caches
+  only (no extra database reads on the 2-second poll). The Q&A also sees the latest day report's
+  date, miss, score, status and three largest lines (`day_report` state key) and the approved
+  caution's session, factors, burner flag, status and whether a newer proposal awaits approval
+  (`event_caution`; never the event text or sources). The day-end report records the session's
+  approved caution in its context.

@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
@@ -17,6 +17,7 @@ from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .ai_qa import QABusy, QALimit
 from .day_report import DayReportBusy, DayReportLimit, DayReportWaiting
+from .event_risk import LEVELS, EventsBusy, EventsLimit
 from .execution_quality import execution_quality
 
 
@@ -80,6 +81,34 @@ class DayReportRequest(BaseModel):
     action: Literal["compute", "explain"] = "compute"
 
 
+class CautionApproval(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    session: date
+    factors: dict[str, Annotated[float, Field(strict=True)]] = Field(max_length=8)
+    burner_off: bool = False
+    calendar_id: str | None = Field(default=None, max_length=64)
+
+    @field_validator("factors")
+    @classmethod
+    def levels(cls, value):
+        if any(v not in LEVELS for v in value.values()):  # only these levels; nothing else applies
+            raise ValueError("Caution factors must be 1.0, 1.25 or 1.5")
+        return value
+
+
+class EventsRefresh(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+# Google Search Suggestions (grounding display terms): Google's own snippet, framed only by this
+# dashboard, no scripts (and the iframe is sandboxed without allow-scripts), links open unmodified.
+SUGGESTIONS_CSP = (
+    "default-src 'none'; style-src 'unsafe-inline'; img-src https: data:; base-uri 'none'; "
+    "form-action 'none'; frame-ancestors 'self'"
+)
+SUGGESTIONS_PATH = "/ai/search-suggestions/"
+
+
 class DailyRateImport(BaseModel):
     model_config = ConfigDict(extra="forbid")
     date: date
@@ -116,6 +145,9 @@ def create_app(service):
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; frame-ancestors 'none'"
         )
+        if request.url.path.startswith(SUGGESTIONS_PATH):
+            response.headers["Content-Security-Policy"] = SUGGESTIONS_CSP
+            response.headers["Referrer-Policy"] = "no-referrer"
         return response
 
     assets = Path(__file__).parent / "web"
@@ -152,6 +184,38 @@ def create_app(service):
             raise HTTPException(409, str(exc)) from None
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from None
+
+    @app.post("/api/events/refresh")
+    async def events_refresh(body: EventsRefresh):
+        # Starts the grounded Google calendar fetch in the background; advice only (proposes, never applies).
+        try:
+            return service.event_risk.start_refresh("operator")
+        except EventsLimit as exc:
+            raise HTTPException(429, str(exc)) from None
+        except EventsBusy as exc:
+            raise HTTPException(409, str(exc)) from None
+
+    @app.post("/api/event-caution")
+    async def event_caution(body: CautionApproval):
+        # The operator's approval: bounded forecast caution for the session being forecast now, plus an
+        # optional burner-off for that session. Serialized with controls; never bumps control_epoch.
+        try:
+            async with service.control_lock:
+                return service.event_risk.approve(
+                    body.session, body.factors, body.burner_off, body.calendar_id
+                )
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.get(SUGGESTIONS_PATH + "{calendar_id}", response_class=HTMLResponse)
+    async def search_suggestions(calendar_id: str):
+        html = service.event_risk.suggestions_html(calendar_id) if len(calendar_id) <= 64 else None
+        if html is None:
+            raise HTTPException(404, "No search suggestions for that calendar")
+        return HTMLResponse(
+            '<!doctype html><html><head><meta charset="utf-8"><meta name="referrer" content="no-referrer">'
+            f'<base target="_blank"></head><body style="margin:0">{html}</body></html>'
+        )
 
     @app.post("/api/daily-cash-rate")
     async def daily_cash_rate(body: DailyRateImport):

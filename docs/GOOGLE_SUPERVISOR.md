@@ -59,9 +59,17 @@ key and provider text never reach the dashboard, alerts or records.
 | 15-minute review (above) | scheduled | 30 s | 1,024 | one per 15 min | none (`tools: []`) |
 | "Why isn't it trading?" Q&A | per question | 20 s (25 s overall) | 2,048 | 1 per 10 s, 60 AI calls per hour, one at a time | none (`tools: []`) |
 | Day-end miss explanation | once per new report of the newest scored day (about 16:26 ET), or **Explain with AI** | 45 s (50 s overall) | 3,072 | button: 1 per 60 s, 20 per day; one at a time | none (`tools: []`) |
+| Event-risk calendar | about 08:45 ET on session days (up to 3 automatic attempts, 10 min apart), or **Refresh event calendar** | 90 s (95 s overall) | 6,144 | 1 per 10 min and 6 per ET day (automatic included); one at a time | Google Search grounding (`[{"type": "google_search"}]`) |
 
-Only the planned event calendar will use a tool (Google Search grounding); the review, the Q&A and
-the day-end explanation keep `tools: []`. The day-end explanation receives the app's finished
+Only the event calendar uses a tool: Google Search grounding, together with the JSON response
+format (documented for Gemini 3 models; if Google refuses the combination the panel shows "Google
+AI request failed (HTTP 400)"). The review, the Q&A and the day-end explanation keep `tools: []`.
+The calendar request contains only the session date, the time window, the allowed symbols and
+today's date. Google's grounding terms apply: the results are shown only to the operator with
+Google's Search Suggestions (embedded in a sandboxed frame), links are shown unmodified, and each
+search query is billed after 5,000 free per month. The calendar only *proposes* a bounded forecast
+caution; the operator's **Approve caution** applies it (forecast scenarios only, never the 3% stress
+limit), and it expires at the session close. The day-end explanation receives the app's finished
 attribution (numbers, driver and contract labels, app-written notes), never the account, positions,
 quantities, fills, order references or execution IDs; its suggested settings come from a fixed
 menu and are only displayed.
@@ -72,3 +80,6 @@ Official references checked October 6, 2026:
 - https://ai.google.dev/gemini-api/docs/api-key
 - https://ai.google.dev/gemini-api/docs/structured-output
 - https://ai.google.dev/api/interactions-api
+- https://ai.google.dev/gemini-api/docs/google-search (grounding tool and response shape, checked
+  October 21, 2026)
+- https://ai.google.dev/gemini-api/terms (grounding display requirements)

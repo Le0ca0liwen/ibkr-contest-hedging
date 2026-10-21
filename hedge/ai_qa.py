@@ -42,7 +42,7 @@ GUIDE_SECTIONS = (
     "Every scored day (Oct 22-23, Oct 26-30, Nov 2-4)",
     "AI operator features",
 )
-GUIDE_LIMIT = 6000
+GUIDE_LIMIT = 8000  # the four sections whole (about 6,600 characters with the event-risk text)
 GUIDE_PATH = Path(__file__).parents[1] / "docs/CONTEST_OPERATOR_GUIDE.md"
 DECISION_FIELDS = (
     "at",
@@ -118,6 +118,24 @@ def _day_report(reports):
         "score": _number(_float(official.get("score"))),
         "status": report.get("status"),
         "top_drivers": top_drivers(report),
+    }
+
+
+def _event_caution(risk):
+    """The approved event caution as symbols, levels and flags only (no event text or sources)."""
+    approval = (risk or {}).get("approval")
+    if not isinstance(approval, dict):
+        return None
+    return {
+        "session": approval.get("session"),
+        "factors": {
+            str(k)[:12]: v for k, v in (approval.get("factors") or {}).items() if _number(v) is not None
+        },
+        "burner_off": bool(approval.get("burner_off")),
+        "status": approval.get("status")
+        if approval.get("status") in ("in effect", "expired", "approved")
+        else None,
+        "pending_approval": bool((risk or {}).get("pending_approval")),
     }
 
 
@@ -225,6 +243,7 @@ class OperatorQA(AIFeature):
                 "api_close_official": state.get("api_close_official"),
             },
             "day_report": _day_report(state.get("day_reports")),
+            "event_caution": _event_caution(state.get("event_risk")),
         }
         keys = [
             "mode",

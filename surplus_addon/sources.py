@@ -24,6 +24,7 @@ def scenario_payload(scenarios):
         calendar_days=scenarios.calendar_days,
         source=scenarios.source,
         identifier=scenarios.identifier,
+        event_caution=dict(scenarios.event_caution),
     )
 
 

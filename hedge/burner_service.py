@@ -95,6 +95,9 @@ class ClosingBurner:
         self._monitor_wake_at = 0.0
         self._stats = None
         self._exit_refusal = None
+        # Session date -> True when an approved event caution turned the burner off for that session
+        # (service wires EventRisk.burner_off). Downgrade-only; exits_allowed() ignores it.
+        self.event_off = lambda day: False
 
     # ------------------------------------------------------------------ plumbing
     @property
@@ -168,7 +171,17 @@ class ClosingBurner:
         self.wake()
         return self.state()
 
+    def event_off_now(self):
+        """Approved event caution: burner off for today's session only (never raises)."""
+        try:
+            day = self.manifest.active_session(self.service.now())
+            return day is not None and bool(self.event_off(day))
+        except Exception:
+            return False
+
     def configured_mode(self):
+        if self.event_off_now():
+            return "off"  # can only lower the mode; the persistent override is untouched
         if self.override is None:
             return self.policy.mode
         return MODES[min(MODES.index(self.override), MODES.index(self.policy.mode))]
@@ -616,7 +629,12 @@ class ClosingBurner:
         mode = self.effective_mode()
         info = {"at": now.isoformat(), "mode": mode}
         if mode == "off":
-            self._set("OFF", "Burner disabled" + (" by operator" if self.override else " in configuration"))
+            self._set(
+                "OFF",
+                "Burner off for this session (approved event caution)"
+                if self.event_off_now()
+                else "Burner disabled" + (" by operator" if self.override else " in configuration"),
+            )
             return
         day = m.active_session(now)
         if day is None or day not in m.scoring_sessions:
@@ -650,6 +668,8 @@ class ClosingBurner:
             or s.last_scenario_at is None
             or s.last_scenario_revision != s.broker_event_revision
             or not 0 <= (now - s.last_scenario_at).total_seconds() <= SCENARIO_AGE_SECONDS
+            # Built before an event-caution approval changed: rebuild with the approved factors.
+            or not s.event_risk.matches(scenarios)
         ):
             self._request_scenarios()
             return self._wait("Waiting for a scenario forecast that includes the latest fills", info)
@@ -944,6 +964,7 @@ class ClosingBurner:
             "override": self.override,
             "configured_mode": self.configured_mode(),
             "effective_mode": self.effective_mode(),
+            "event_off": self.event_off_now(),
             "active": active,
             "state": self.state_name,
             "reason": self.reason,

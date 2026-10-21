@@ -1335,3 +1335,58 @@ Commit 2 (feature 2, day-end miss explanation):
 - `_ai_operator_loop` is added and started now; it calls only `day_reports.tick(now)` until feature 3 adds
   `event_risk.tick(now)`. `ai_features` gains `day_report`, `state()` gains `day_reports`, and the Q&A context gains the
   `day_report` key (date, miss, score, status, three largest lines).
+
+Commit 3 (feature 3, event-risk calendar and event caution):
+
+- **Grounding syntax re-checked** on 2026-10-21 against ai.google.dev/gemini-api/docs/google-search (tool
+  `{"type": "google_search"}`; `url_citation` annotations, `google_search_call.arguments.queries`,
+  `google_search_result.result[].search_suggestions`) and the structured-output page (Gemini 3 combines structured
+  output with built-in tools; `response_format` with `schema`). Unchanged from section 6.1. No real Google call was
+  made; tests use mocked transports.
+- **Factor validation.** `CautionApproval.factors` is `dict[str, strict float]` checked against `LEVELS`, not
+  `Literal[1.0, 1.25, 1.5]`: pydantic's literal match accepted JSON `true` as 1.0. Strings, booleans and 1.1 get 422;
+  JSON `1` is accepted as 1.0. `approve()` validates the levels again for direct callers.
+- **Limits on the service clock.** The 10-minute spacing and the 6-per-ET-day cap count every Google call (automatic
+  and operator) from `EventRisk.attempts` (start time, trigger), on `service.now()` instead of `RateLimit`'s rolling
+  monotonic window, so the cap resets at the ET date (the open issue from commit 1) and `load()` restores the day's
+  count from the `event_calendar` records after a restart. Automatic attempts are capped at 3 per ET day. Records add
+  `started_at`, `duplicates` (removed duplicate events, counted separately from out-of-window `dropped`) and `error`.
+- **Approval without a calendar** is allowed whether AI is on or off (Clear caution sends `calendar_id: null`); a
+  given `calendar_id` must be an `ok` calendar of the same session. Records add `calendar_fetched_at` and `seq`
+  (`time.time_ns()`, the tie-breaker when two approvals share a timestamp). `expires_at` is written in ET.
+- **Burner off ends at the session close**, not at midnight: `burner_off(day)` also requires `now < expires_at`, so the
+  panel does not show the burner off on the evening of the session. `configured_mode()` checks it through
+  `ClosingBurner.event_off_now()`, which never raises.
+- **`matches()`** compares the set's `event_caution` with `factors_for(...)` restricted to the set's own symbols
+  (`build()` keeps only symbols present in the shocks) and fails open on a malformed set, so a broken object can never
+  stall the optimizer in a discard loop.
+- **`pending_approval`** is true when the session's newest good calendar proposes something different from the
+  session's approval (all 1.0 / burner unchanged when none) and that approval was not made from this calendar, so
+  approving a different level than proposed clears the badge.
+- **The newest good calendar stays on screen** after a failed refresh; `state()` adds `latest_failure` and the panel
+  says the refresh failed. `state()` also adds `expands`, `calls_today` and `calls_per_day`.
+- **Proposal alert.** A good calendar whose proposal is not all 1.0 raises one info alert per session and distinct
+  proposal ("Event calendar for {session} proposes a forecast caution: ... nothing applies until you press Approve
+  caution"); approvals raise "Event caution approved for {session}: ...".
+- **Search-suggestions page** wraps Google's snippet in a minimal document with `<base target="_blank">` and
+  `<meta name="referrer" content="no-referrer">` (links open unmodified in a new tab, as the sandbox allows popups but
+  no navigation of the frame), sends `Referrer-Policy: no-referrer`, and returns 404 for ids over 64 characters.
+- **`_ai_operator_loop`** runs `day_reports.tick` and `event_risk.tick` each in its own try, so a failure in one does
+  not skip the other.
+- **Q&A.** `event_caution` also carries `pending_approval`. `GUIDE_LIMIT` is raised from 6,000 to 8,000 characters:
+  with the event-risk text the four allowlisted guide sections are about 6,600 characters, and 6,000 cut the new
+  bullet off.
+- **Day-end report** context gets the session's approval (`factors, burner_off, approved_at, calendar_id`) through
+  `event_risk.approval_for(day)`; the report id is unchanged (approvals precede the close they apply to).
+- **Panel.** Badge states add "EVENTS LISTED" (events, nothing to approve) and keep "NO CALENDAR" as the default; Clear
+  caution is disabled while no caution is in effect. The confirmation body is captured when the dialog opens, so a poll
+  cannot change what is approved. The SPY expansion follows section 6.6 literally: every `BROAD_INDEX_ETFS` symbol in
+  the universe (IVV, VOO, SPLG, and also QQQ/IWM/DIA if they were ever added).
+- **Surplus add-on.** The surplus export's `scenarios` gains `event_caution` (section 6.7), and the add-on reads that
+  export with extra fields forbidden, so `surplus_addon/models.py` `ScenarioPayload` gains an optional `event_caution`
+  (default `{}`) that it passes into its `ScenarioSet`, and `surplus_addon/sources.py` copies it. Without this the
+  add-on rejected every export.
+- **Certification at the measured candidate count.** `test_optimizer_certifies_at_measured_candidate_counts` builds the
+  documented contest universe (7 mandated legs, 12 tradable candidates, `primary_band` 20, overnight weight 0.5) and
+  checks that the full solve returns OPTIMAL within the certified band, with and without ×1.5 on all three symbols,
+  and that the certified hedge passes the unchanged 3% stress check (about 2-4 s per solve on the test machine).
