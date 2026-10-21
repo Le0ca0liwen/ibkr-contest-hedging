@@ -247,10 +247,13 @@ def main():
                 pd.read_parquet(args.history) if args.history else None,
                 rehearsal=args.rehearsal,
             )
-            # Closing the launcher's Terminal window sends SIGHUP, which uvicorn ignores: turn it
-            # into SIGTERM so shutdown pauses trading, cancels working app orders and frees locks.
-            signal.signal(signal.SIGHUP, lambda *_: os.kill(os.getpid(), signal.SIGTERM))
-            uvicorn.run(create_app(service), host="127.0.0.1", port=args.port, log_level="info")
+            server = uvicorn.Server(
+                uvicorn.Config(create_app(service), host="127.0.0.1", port=args.port, log_level="info")
+            )
+            # Closing the launcher's Terminal window sends SIGHUP, which uvicorn ignores: shut down
+            # gracefully instead (pause trading, cancel working app orders, free locks; exit 0).
+            signal.signal(signal.SIGHUP, lambda *_: setattr(server, "should_exit", True))
+            server.run()
         elif args.command == "import-closes":
             manifest = load_manifest(args.config)
             store = Store(args.database or os.environ.get("HEDGE_DATABASE_URL", "sqlite:///data/shadow.db"))

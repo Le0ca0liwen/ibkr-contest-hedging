@@ -30,6 +30,8 @@ class ScoreLedger:
             raise ValueError("Report day is not in the contest")
         if not nav.is_finite() or not source.strip():
             raise ValueError("Finite official NAV and report provenance required")
+        if nav <= 0:
+            raise ValueError("Official NAV must be positive")
         with self.store.transaction() as session:
             session.add(
                 ClosingNAV(

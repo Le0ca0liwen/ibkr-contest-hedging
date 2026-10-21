@@ -152,14 +152,7 @@ class TradingService:
         if not self.demo and self.manifest.market_data_provider == "moomoo":
             self._write_collector_codes()
         if not self.demo and Path("config/local.moomoo-codes.json").exists():
-            self.market_data_log = Path("data/moomoo-collector.log").open("a")
-            self.market_data_process = await asyncio.create_subprocess_exec(
-                str(Path(".runtime/moomoo-env/bin/python").absolute()),
-                "ops/record_moomoo.py",
-                stdout=self.market_data_log,
-                stderr=self.market_data_log,
-                env={k: v for k, v in os.environ.items() if k in ("HOME", "PATH", "TMPDIR", "LANG")},
-            )
+            await self._start_collector()
         if not self.demo and self.manifest.market_data_provider == "moomoo":
             # The collector subscribes only listed codes; anything missing silently has no quotes.
             if missing := missing_codes(self.manifest):
@@ -191,7 +184,53 @@ class TradingService:
             asyncio.create_task(self.close_marks.run()),
             asyncio.create_task(self._burner_loop()),
             asyncio.create_task(self._daily_history_loop()),
+            asyncio.create_task(self._collector_loop()),
         ]
+
+    async def _start_collector(self):
+        """Quote-only Moomoo collector (never trades). A missing environment is an alert on the
+        dashboard, not a startup crash."""
+        python = Path(".runtime/moomoo-env/bin/python")
+        if not python.exists():
+            self.alert(
+                "error",
+                "Moomoo quote environment .runtime/moomoo-env is missing: no quotes. "
+                "See docs/MOOMOO_MARKET_DATA.md",
+                key=("collector_env_missing",),
+            )
+            return False
+        if self.market_data_log is None:
+            self.market_data_log = Path("data/moomoo-collector.log").open("a")
+        self.market_data_process = await asyncio.create_subprocess_exec(
+            str(python.absolute()),
+            "ops/record_moomoo.py",
+            stdout=self.market_data_log,
+            stderr=self.market_data_log,
+            env={k: v for k, v in os.environ.items() if k in ("HOME", "PATH", "TMPDIR", "LANG")},
+        )
+        return True
+
+    async def _collector_loop(self):
+        """Restart a quote collector that exited (5 s, 15 s, then every 60 s) and say so."""
+        delays, failures = (5, 15, 60), 0
+        while True:
+            await asyncio.sleep(5)
+            process = self.market_data_process
+            if process is None or process.returncode is None:
+                if process is not None and failures:
+                    failures = 0
+                continue
+            self.alert(
+                "warning",
+                f"Moomoo quote collector stopped (exit {process.returncode}); restarting it. "
+                "If this repeats, check that Moomoo OpenD is open and logged in",
+            )
+            await asyncio.sleep(delays[min(failures, len(delays) - 1)])
+            failures += 1
+            try:
+                await self._start_collector()
+            except OSError as exc:
+                self.alert("error", f"Could not restart the Moomoo quote collector: {exc}")
 
     async def _burner_loop(self):
         """Event-driven (1 s fallback) burner steps; a burner fault never hard-stops hedging."""
@@ -496,7 +535,10 @@ class TradingService:
                     output = b"Timed out after 180 s"
                 text = output.decode(errors="replace").strip()
                 log.write(f"--- {now.isoformat()} {reason}\n{text}\n")
-            last = text.splitlines()[-1] if text else ""
+            # The Moomoo SDK logs to the same stream ("2026-10-21 02:26:56,884 | pid | ..."); report
+            # the script's own last line.
+            lines = [line for line in text.splitlines() if line.strip() and " | " not in line[:40]]
+            last = lines[-1] if lines else (text.splitlines()[-1] if text else "")
             ok = process.returncode == 0
             self.history_status = {
                 "status": "ok" if ok else "failed",
@@ -563,7 +605,15 @@ class TradingService:
             )
         connected = self.broker.snapshot().connected if self.demo else self.broker.ib.isConnected()
         qualified = getattr(self.broker, "qualified", True)
-        if not connected:
+        leftovers = self.last_monitor_error and "contracts unavailable" in self.last_monitor_error
+        if leftovers:
+            item(
+                "IBKR",
+                "fail",
+                "TWS answers, but the app stops at reconciliation because of non-contest "
+                "positions (see Account holdings)",
+            )
+        elif not connected:
             item(
                 "IBKR",
                 "fail",
@@ -577,12 +627,14 @@ class TradingService:
             )
         else:
             item("IBKR", "ok", f"Connected to {m.account} (port {m.gateway_port})")
-        if self.last_monitor_error and "contracts unavailable" in self.last_monitor_error:
+        if leftovers:
+            names = self._position_labels()
+            ids = [x.strip() for x in self.last_monitor_error.split(":", 1)[-1].split(";") if x.strip()]
             item(
                 "Account holdings",
                 "fail",
-                "Close the non-contest positions in TWS (IBKR conIds): "
-                + self.last_monitor_error.split(":", 2)[-1].strip(),
+                "Close these non-contest positions in TWS: "
+                + "; ".join(names.get(int(i), f"conId {i}") if i.isdigit() else i for i in ids),
             )
         legs = m.mandatory.items()
         held = snap.quantities() if snap else {}
@@ -604,7 +656,8 @@ class TradingService:
             "ok" if confirmed else "fail",
             "Confirmed"
             if confirmed
-            else "Not confirmed: review the seven legs and press Confirm configuration",
+            else "Not confirmed: review the seven legs and press Confirm contest configuration "
+            "(available once IBKR has verified the contracts)",
         )
         live = sum(
             1 for q in self.last_quotes.values() if q.data_type == ("synthetic" if self.demo else "live")
@@ -612,14 +665,10 @@ class TradingService:
         item(
             "Quotes",
             "ok" if self.last_quotes and live == len(self.last_quotes) else "warn",
-            f"{live} of {len(self.last_quotes)} quotes live"
-            + (
-                ""
-                if live
-                else " (quotes are read once IBKR is connected and the contracts are verified)"
-                if not connected or not qualified
-                else " (Moomoo quotes are live 09:30-16:00 ET)"
-            ),
+            "No quotes yet (they are read once IBKR is connected and the contracts are verified)"
+            if not self.last_quotes
+            else f"{live} of {len(self.last_quotes)} quotes live"
+            + ("" if live else " (Moomoo quotes are live 09:30-16:00 ET)"),
         )
         if not self.demo and m.daily_stock_history:
             last = self.history_last_date()
@@ -647,7 +696,7 @@ class TradingService:
         auto = self.autostart_mode()
         item(
             "Automatic paper start",
-            "ok" if auto == "paper" else "warn",
+            "ok" if auto == "paper" and not self.last_monitor_error and not self.pause_reason else "warn",
             ("On" if auto == "paper" else "Off")
             + (
                 " · waiting: " + self.health
@@ -664,6 +713,22 @@ class TradingService:
             }.get(self.mode, f"{self.mode.title()}: " + self.health),
         )
         return items
+
+    def _position_labels(self):
+        """Best effort: readable names for IBKR positions (for the leftover-positions hint)."""
+        labels = {}
+        try:
+            for position in self.broker.ib.positions(self.manifest.account):
+                c = position.contract
+                name = (
+                    c.symbol
+                    if c.secType == "STK"
+                    else f"{c.symbol} {c.lastTradeDateOrContractMonth} {c.strike:g}{c.right}"
+                )
+                labels[c.conId] = f"{name} ({position.position:g})"
+        except Exception:
+            pass
+        return labels
 
     def restore_autostart(self):
         """At launch: re-apply the dashboard switch and arm the automatic paper start."""
@@ -1036,7 +1101,8 @@ class TradingService:
                 next_connection = time.monotonic() + 15
                 await asyncio.sleep(self.manifest.policy.risk_seconds)
             except Exception as exc:
-                message = f"{type(exc).__name__}: {exc}"
+                # Operator-facing text: a ValueError already explains itself.
+                message = str(exc) if isinstance(exc, ValueError) else f"{type(exc).__name__}: {exc}"
                 self.last_monitor_error = message
                 if self.data_wait and self.data_wait.get("autostart"):
                     # Paper never started: keep the launch-time automatic start armed.
@@ -1360,6 +1426,7 @@ class TradingService:
             return
         corrective = not self.gate.engine.evaluate(snapshot, quotes, scenario_for_plan, actual).passed
         if not self.active_plan_started and not corrective:
+            remaining = {}
             for i in changed:
                 kind = self.manifest.contract_map[i].kind
                 cooldown = (
@@ -1367,8 +1434,24 @@ class TradingService:
                     if kind == "OPT"
                     else self.manifest.policy.stock_seconds
                 )
-                if time.monotonic() - self.last_trade[kind] < cooldown:
-                    return
+                left = cooldown - (time.monotonic() - self.last_trade[kind])
+                if left > 0:
+                    remaining[kind] = max(left, remaining.get(kind, 0.0))
+            if remaining:
+                # Never park a plan through its cooldown: a parked target blocks every
+                # re-optimization, including stock-only hedges. Drop it, keep re-optimizing,
+                # and schedule the next full (option) solve for when the cooldown ends.
+                self.pending_target = None
+                if "OPT" in remaining:
+                    self.last_optimization["OPT"] = (
+                        time.monotonic() - self.manifest.policy.option_seconds + remaining["OPT"]
+                    )
+                wait = max(remaining.values())
+                self.health = (
+                    f"New plan waits for the trade cooldown ({wait / 60:.1f} min left); "
+                    "stock hedging keeps re-optimizing meanwhile"
+                )
+                return
         day = self.manifest.active_session(self.now())
         previous = self.ledger.previous_close(day) if day != self.manifest.day_zero else snapshot.nav
         if previous is None:
@@ -1673,8 +1756,13 @@ class TradingService:
             elif action in ("paper", "setup", "arm_setup"):
                 if self.manifest.scoring_rule == "pending_interest_adjustment":
                     raise ValueError("Instructor's revised scoring formula required before activation")
-                if not self.contest_confirmed() or not self.broker.qualified:
-                    raise ValueError("Confirm contest configuration and broker contract identities first")
+                if not self.contest_confirmed():
+                    raise ValueError("Confirm the contest configuration first (Today panel)")
+                if not self.broker.qualified:
+                    raise ValueError(
+                        "IBKR contracts are not verified yet: connect TWS (Paper) and close any "
+                        "non-contest positions"
+                    )
                 if not self.demo and self.store.engine.dialect.name != "postgresql":
                     raise ValueError(
                         "Automatic IBKR paper trading requires PostgreSQL; SQLite is for demo/research"

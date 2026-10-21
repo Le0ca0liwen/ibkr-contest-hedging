@@ -70,7 +70,7 @@ async def test_automatic_start_keeps_every_paper_activation_check(launched):
     launched.broker.qualified = False  # e.g. IBKR contract identities not verified yet
     await launched._resume_after_data_wait()
     assert launched.mode == "WAITING_DATA" and launched.execution.paused
-    assert "Confirm contest configuration" in launched.health
+    assert "contracts are not verified" in launched.health
 
 
 @pytest.mark.parametrize("action", ["pause", "shadow"])
@@ -162,6 +162,12 @@ async def test_readiness_checklist_names_what_blocks_paper(launched):
     assert legs["status"] == "fail" and "Enter in TWS (Paper): BUY" in legs["detail"]
     state = launched.state()
     assert state["checklist"] and state["mandatory_legs"] and state["config_hash"]
+    # Leftover positions: the IBKR row names the real cause instead of "open TWS".
+    launched.last_monitor_error = "Required holding/order contracts unavailable: 4762; 15547841"
+    rows = {i["label"]: i for i in launched.checklist()}
+    assert "non-contest positions" in rows["IBKR"]["detail"]
+    assert rows["Account holdings"]["detail"].endswith("conId 4762; conId 15547841")
+    assert rows["Automatic paper start"]["status"] == "warn"
 
 
 def test_close_import_accepts_the_statement_figure_as_printed():

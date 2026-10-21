@@ -40,10 +40,7 @@ def main():
     print("\n== Start the local PostgreSQL database (hedge_contest)", flush=True)
     env = start_database("hedge_contest")
     print("PostgreSQL database hedge_contest ready (migrations applied)", flush=True)
-    step(
-        "Write the Moomoo quote-collector list",
-        [PYTHON, "-m", "hedge.cli", "moomoo-codes", "--config", CONFIG],
-    )
+    # The service writes the Moomoo quote list from this configuration when it starts.
     if manifest.market_data_provider == "moomoo" and manifest.daily_stock_history:
         symbols = sorted(
             {c.symbol for c in manifest.contracts if c.kind == "STK"} | {manifest.beta_benchmark}

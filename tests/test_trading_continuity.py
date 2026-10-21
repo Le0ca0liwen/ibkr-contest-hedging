@@ -399,3 +399,34 @@ async def test_operator_pause_during_package_preview_prevents_submission(manifes
     assert not result["submitted"] and "paused during preflight" in result["reason"]
     assert not s.broker.positions and not s.broker.orders and not s.broker.package_orders
     assert all(row["state"] == "REJECTED" for row in store.intents(manifest.account))
+
+
+async def test_cooldown_never_parks_a_plan_and_blocks_stock_hedging(operational, monkeypatch):
+    service = operational
+    clock = [5000.0]
+    monkeypatch.setattr("hedge.service.time.monotonic", lambda: clock[0])
+    option = next(i for i, c in service.manifest.contract_map.items() if c.kind == "OPT")
+    held = service.broker.snapshot().quantities()
+    service.pending_target = Target(
+        quantities={**held, option: held.get(option, 0) + 1},
+        expected_score=0,
+        current_score=1000,
+        uncertainty=0,
+        status="OPTIMAL",
+        snapshot_id="s",
+        scenario_id="x",
+        config_hash="h",
+    )
+    service.active_plan_started = False
+    service.last_trade["OPT"] = clock[0] - 60  # an option plan started a minute ago
+    service.last_optimization = {"STK": clock[0], "OPT": clock[0] - 60}
+    await service._execute_pending()
+    assert service.pending_target is None and not service.broker.orders
+    assert "trade cooldown" in service.health
+    clock[0] += service.manifest.policy.stock_seconds
+    assert service.optimization_due()  # stock re-optimization is not blocked
+    # The next full solve falls due exactly when the option cooldown ends.
+    left = service.manifest.policy.option_seconds - 60
+    assert service.last_optimization["OPT"] == pytest.approx(
+        5000.0 - service.manifest.policy.option_seconds + left
+    )

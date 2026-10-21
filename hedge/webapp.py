@@ -224,6 +224,18 @@ def create_app(service):
     @app.post("/api/closes")
     async def import_close(body: CloseImport):
         try:
+            if body.date in service.manifest.scoring_sessions or body.date == service.manifest.day_zero:
+                if service.now() < service.manifest.session_close(body.date):
+                    raise ValueError("That session has not closed yet (16:00 ET)")
+            # Guard against a typo (a missing digit moves every later target and risk limit).
+            reference = service.ledger.close_records().get(body.date, {}).get("nav") or (
+                service.last_snapshot.nav if service.last_snapshot else None
+            )
+            if reference and abs(body.nav / Decimal(str(reference)) - 1) > Decimal("0.2"):
+                raise ValueError(
+                    f"{body.nav:,.2f} differs by more than 20% from {Decimal(str(reference)):,.2f} "
+                    "(recorded or current NAV); check the statement figure"
+                )
             result = service.ledger.import_close(body.date, body.nav, body.source, body.account)
             service.force_optimize = True
             service.pending_target = None
