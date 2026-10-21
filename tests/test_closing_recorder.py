@@ -459,7 +459,7 @@ async def test_submit_rejects_unqualified_contract_even_with_ready_account(manif
 
 
 def test_close_marks_keep_last_pre_close_capture_and_one_post_close(store, manifest):
-    from hedge.closing import CloseMarkRecorder
+    from hedge.closing import CloseMarkRecorder, post_close_window
 
     store.initialize()
     day = manifest.scoring_sessions[0]
@@ -482,13 +482,21 @@ def test_close_marks_keep_last_pre_close_capture_and_one_post_close(store, manif
     rows = store.records("close_marks", manifest.account)
     assert [r["phase"] for r in rows] == ["pre_close"]
     assert rows[0]["at"] == (close - timedelta(seconds=1)).isoformat()  # last capture before the bell
-    for offset in (40, 60):
-        time[0] = close + timedelta(seconds=offset)
+    # Post-close marks wait for the post-close NAV observation (16:20-16:25 by default): IBKR's marks
+    # then include SPY options' 16:15 close, as the official post-close NAV does.
+    start, end = post_close_window(manifest, day)
+    assert (start, end) == (close + timedelta(minutes=20), close + timedelta(minutes=25))
+    for moment in (
+        close + timedelta(seconds=40),
+        start - timedelta(seconds=1),
+        start,
+        start + timedelta(minutes=1),
+    ):
+        time[0] = moment
         recorder.tick()
-    assert sorted(r["phase"] for r in store.records("close_marks", manifest.account)) == [
-        "post_close",
-        "pre_close",
-    ]
+    rows = store.records("close_marks", manifest.account)
+    assert sorted(r["phase"] for r in rows) == ["post_close", "pre_close"]
+    assert next(r for r in rows if r["phase"] == "post_close")["at"] == start.isoformat()
     # A restarted recorder cannot duplicate the session's captures.
     again = CloseMarkRecorder(manifest, store, lambda: time[0], collect, lambda *x: None)
     again.tick()
@@ -521,12 +529,12 @@ async def test_service_close_marks_include_quotes_greeks_and_risk(tmp_path, monk
 
 
 def test_close_marks_wait_for_data_instead_of_recording_an_empty_capture(store, manifest):
-    from hedge.closing import CloseMarkRecorder
+    from hedge.closing import CloseMarkRecorder, post_close_window
 
     store.initialize()
     day = manifest.scoring_sessions[0]
-    close = manifest.session_close(day)
-    time = [close + timedelta(seconds=40)]  # service (re)started just after the bell
+    start, end = post_close_window(manifest, day)
+    time = [start + timedelta(seconds=40)]  # service (re)started inside the post-close window
     ready = [False]
 
     def collect(now, session, phase):
@@ -535,10 +543,34 @@ def test_close_marks_wait_for_data_instead_of_recording_an_empty_capture(store, 
     recorder = CloseMarkRecorder(manifest, store, lambda: time[0], collect, lambda *x: None)
     recorder.tick()
     assert not store.records("close_marks", manifest.account)
-    ready[0], time[0] = True, close + timedelta(seconds=55)
+    ready[0], time[0] = True, start + timedelta(seconds=55)
     recorder.tick()
     rows = store.records("close_marks", manifest.account)
-    assert [r["at"] for r in rows] == [(close + timedelta(seconds=55)).isoformat()]
+    assert [r["at"] for r in rows] == [(start + timedelta(seconds=55)).isoformat()]
+    time[0] = end + timedelta(seconds=1)  # one capture per session
+    recorder.tick()
+    assert len(store.records("close_marks", manifest.account)) == 1
+
+
+def test_post_close_marks_follow_the_bell_when_late_capture_is_off(store, manifest):
+    from hedge.closing import CloseMarkRecorder, post_close_window
+
+    store.initialize()
+    m = manifest.model_copy(
+        update={"closing_capture": manifest.closing_capture.model_copy(update={"late_capture_minutes": 0})}
+    )
+    day = m.scoring_sessions[0]
+    close = m.session_close(day)
+    assert post_close_window(m, day) == (close + timedelta(seconds=30), close + timedelta(seconds=300))
+    time = [close + timedelta(seconds=20)]
+    recorder = CloseMarkRecorder(
+        m, store, lambda: time[0], lambda now, d, phase: {"at": now.isoformat()}, print
+    )
+    recorder.tick()
+    assert not store.records("close_marks", m.account)
+    time[0] = close + timedelta(seconds=45)
+    recorder.tick()
+    assert [r["at"] for r in store.records("close_marks", m.account)] == [time[0].isoformat()]
 
 
 async def test_post_close_reading_far_from_the_bell_keeps_the_bell_value(store, manifest):

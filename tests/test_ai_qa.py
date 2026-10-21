@@ -2,7 +2,8 @@ import asyncio
 import json
 import re
 import time
-from datetime import timedelta
+from datetime import datetime, timedelta
+from pathlib import Path
 
 import httpx
 import pytest
@@ -10,7 +11,8 @@ from fastapi.testclient import TestClient
 from pydantic import BaseModel, ConfigDict, Field
 
 from hedge.ai_common import OTHER_ALERT, RateLimit, operator_text, safe_alerts
-from hedge.ai_qa import GUIDE_LIMIT, GUIDE_SECTIONS, UNCITED, QABusy, QALimit, guide_excerpt
+from hedge.ai_qa import GUIDE_LIMIT, GUIDE_SECTIONS, POINT_TO, UNCITED, QABusy, QALimit, guide_excerpt
+from hedge.config import NY
 from hedge.demo import demo_manifest
 from hedge.service import TradingService
 from hedge.storage import Store
@@ -411,3 +413,152 @@ def test_guide_excerpt_keeps_only_allowlisted_sections():
     assert headings == list(GUIDE_SECTIONS) and len(excerpt) <= GUIDE_LIMIT
     assert excerpt.rstrip().endswith("you can still approve by\n  hand.")  # nothing cut off
     assert "Start and stop" not in excerpt
+
+
+RAW = "IBKR-RAW-WARNING: order may be routed to a different exchange (reqId 42)"
+
+
+@pytest.mark.asyncio
+async def test_execution_and_burner_reasons_never_send_broker_text(tmp_path, monkeypatch):
+    sent = []
+
+    def handler(request):
+        sent.append(json.loads(request.content))
+        return httpx.Response(200, json=reply())
+
+    service = service_for(tmp_path, monkeypatch, handler, enabled=True)
+    service.qa.interval = RateLimit()
+    # Exactly as execution.py, service.py and burner_service.py write them after an IBKR what-if refusal.
+    service.health = f"Credit/risk preflight blocked: Broker credit preview warning: {RAW}"
+    service.burner.reason = (
+        f"Entry not transmitted: Burn credit preview blocked: Broker credit preview warning: {RAW}"
+    )
+    message = f"Closing burner cycle abcd1234 ended RESIDUAL: Burn credit preview blocked: {RAW}; 0 BA left"
+    service.alert("error", message, key=("residual",))
+    await service.qa.ask("Why isn't it trading?")
+    service.burner.state_name, service.burner.reason = "ERROR", f"RuntimeError: {RAW}"  # _burner_loop
+    service.health = f"Fresh execution validation: {RAW}"
+    await service.qa.ask("And the burner?")
+    assert len(sent) == 2
+    for body in sent:
+        assert "IBKR-RAW" not in body["input"] and "reqId" not in body["input"]
+    first, second = (json.loads(body["input"])["state"] for body in sent)
+    assert first["health"] == "Credit/risk preflight blocked: [details on the dashboard]"
+    assert first["burner"]["reason"] == (
+        "Entry not transmitted: Burn credit preview blocked: [details on the dashboard]"
+    )
+    assert "Closing burner cycle abcd1234 ended RESIDUAL: [details on the dashboard]" in [
+        a["text"] for a in first["alerts"]
+    ]
+    assert second["health"] == "Fresh execution validation: [details on the dashboard]"
+    assert second["burner"]["reason"] == "Closing burner step failed: [details on the dashboard]"
+
+
+@pytest.mark.asyncio
+async def test_a_reply_after_ai_is_turned_off_is_dropped(tmp_path, monkeypatch):
+    holder = []
+
+    def handler(request):
+        holder[0].supervisor.configure(enabled=False)  # the operator presses Disable AI meanwhile
+        return httpx.Response(200, json=reply(answer="AI text that must not be shown"))
+
+    service = service_for(tmp_path, monkeypatch, handler, enabled=True)
+    holder.append(service)
+    result = await service.qa.ask("Why isn't it trading?")
+    assert not service.supervisor.enabled
+    assert result["source"] == "deterministic" and "AI text" not in result["answer"]
+    assert result["note"].startswith("AI is off") and service.qa.status()["last_error"] is None
+    assert not service.store.records("alert", service.manifest.account, 10)
+
+
+def qa_state(mode, checklist, decisions=(), clock=None, health="Monitoring: no qualifying trade"):
+    return {
+        "mode": mode,
+        "health": health,
+        "checklist": checklist,
+        "decisions": list(decisions),
+        "continuity": {},
+        "session_clock": clock
+        or {
+            "session": "2026-10-22",
+            "minutes_to_close": 200.0,
+            "options_tradable": True,
+            "stocks_tradable": True,
+        },
+    }
+
+
+FAILS = [
+    {"label": "IBKR", "status": "fail", "detail": "Not connected: open TWS (Paper)"},
+    {"label": "Previous official close", "status": "fail", "detail": "Missing: enter the closing NAV"},
+    {"label": "Quotes", "status": "warn", "detail": "No quotes yet"},
+]
+
+
+def decision(at, reason="Modeled improvement $3.10 does not exceed threshold $100.00"):
+    return {"at": at.isoformat(), "trade_eligible": False, "blocking_reasons": [reason]}
+
+
+def test_fallback_names_failing_rows_first_and_only_recent_decisions(tmp_path, monkeypatch):
+    service = service_for(tmp_path, monkeypatch)
+    now = datetime(2026, 10, 22, 11, 0, tzinfo=NY)
+    service.now = lambda: now
+    qa = service.qa
+    # PAPER with ✗ rows and yesterday's decision: the ✗ rows lead; the old decision is not blamed.
+    result = qa.fallback(qa_state("PAPER", FAILS, [decision(now - timedelta(days=1))]))
+    assert result["answer"].startswith(
+        "Paper trading is on, but these checks fail: IBKR: Not connected: open TWS (Paper); "
+        "Previous official close: Missing: enter the closing NAV. Also check: Quotes: No quotes yet."
+    )
+    assert "decision" not in result["answer"]
+    assert {"checklist.IBKR", "checklist.Previous official close"} <= set(result["relied_on"])
+    assert "decisions" not in result["relied_on"]
+    ok_rows = [{"label": "IBKR", "status": "ok", "detail": "Connected"}]
+    recent = qa.fallback(qa_state("PAPER", ok_rows, [decision(now - timedelta(minutes=2))]))
+    assert recent["answer"].startswith("The latest decision (Oct 22 10:58 ET) did not trade: Modeled")
+    assert "decisions" in recent["relied_on"]
+    old = qa.fallback(qa_state("PAPER", ok_rows, [decision(now - timedelta(minutes=20))]))
+    assert old["answer"].startswith(
+        "Paper trading is on; no hedge decision in the last 5 minutes (the last one: Oct 22 10:40 ET)."
+    )
+    # After the bell nothing is tradable: say so first, never blame the 15:56 decision.
+    now = datetime(2026, 10, 22, 16, 40, tzinfo=NY)
+    closed = {
+        "session": "2026-10-22",
+        "minutes_to_close": -40.0,
+        "options_tradable": False,
+        "stocks_tradable": False,
+    }
+    late = qa.fallback(qa_state("PAPER", ok_rows, [decision(now - timedelta(minutes=44))], closed))
+    assert late["answer"].startswith("The market is closed for today") and "15:56" not in late["answer"]
+    assert "session_clock" in late["relied_on"]
+    now = datetime(2026, 10, 22, 8, 0, tzinfo=NY)
+    early = {**closed, "minutes_to_close": 480.0}
+    assert qa.fallback(qa_state("PAUSED", FAILS, clock=early))["answer"].startswith(
+        "The market is not open yet: hedge orders start after the open. Paper trading is blocked by: IBKR"
+    )
+
+
+def test_fallback_says_health_once_with_full_stops(tmp_path, monkeypatch):
+    service = service_for(tmp_path, monkeypatch)
+    health = "Connected; paper execution remains disabled until explicitly enabled"
+    rows = [
+        {"label": "Quotes", "status": "warn", "detail": "No quotes yet"},
+        {"label": "Trading", "status": "warn", "detail": f"Paused: {health}"},
+    ]
+    answer = service.qa.fallback(qa_state("PAUSED", rows, health=health))["answer"]
+    assert answer == f"Paused: {health}. Also check: Quotes: No quotes yet."
+    other = service.qa.fallback(qa_state("PAUSED", rows[:1], health="Monitoring"))["answer"]
+    assert other == "Paused: Monitoring. Also check: Quotes: No quotes yet."
+
+
+def test_point_to_names_places_the_dashboard_shows():
+    page = (Path(__file__).parents[1] / "hedge/web/index.html").read_text()
+    for place in (
+        "Event risk today",
+        "Day-end miss explanation",
+        "Closing surplus burner",
+        "Today: readiness",
+    ):
+        assert place in POINT_TO and f"<h3>{place}</h3>" in page
+    assert "Day-end report" not in POINT_TO and "Event risk" not in POINT_TO

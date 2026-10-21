@@ -32,7 +32,7 @@ from hedge.service import TradingService
 from hedge.storage import Store
 from hedge.supervisor import ADVISORY
 from hedge.valuation import ValuationEngine
-from hedge.webapp import SUGGESTIONS_CSP, create_app
+from hedge.webapp import SUGGESTIONS_CSP, RecoverySettings, create_app
 from surplus_addon.models import Input
 
 SECRET = "test-credential-4242"
@@ -935,3 +935,138 @@ async def test_invalid_replies_are_rejected_and_alerted_once(tmp_path, monkeypat
     ]
     assert len(alerts) == 1
     assert service.state()["event_risk"]["pending_approval"] is False
+
+
+@pytest.mark.asyncio
+async def test_approval_drops_the_plan_with_its_recovery_context(operational):
+    s = operational
+    # A recovery plan with slices working: optimize() sets both together.
+    s.pending_target = object()
+    s.pending_recovery = {
+        "reference": {},
+        "scenarios": s.last_scenarios,
+        "generated_at": s.now(),
+        "model_hash": "x",
+    }
+    s.active_plan_started = True
+    checks = s.execution.recovery_checks = lambda *args: []
+    async with s.control_lock:
+        s.event_risk.approve(D1, {"BA": 1.5})
+    assert s.pending_target is None and s.pending_recovery is None and not s.active_plan_started
+    assert s.execution.recovery_checks is checks  # still governs a recovery order working at the broker
+    assert s.surplus_snapshot()["execution_busy"] is False  # the surplus add-on is not held back
+    # A later recovery-mode change sees no live recovery plan: paper hedging keeps running.
+    route = next(r for r in create_app(s).routes if getattr(r, "path", "") == "/api/recovery")
+    await route.endpoint(RecoverySettings(mode="off"))
+    assert s.mode == "PAPER" and not s.execution.paused and not s.execution.pause_requested
+
+
+def ba_calendar_handler(holder=None):
+    body = calendar_body(events=[event(symbols=["BA"], title="BA earnings")])
+
+    def handler(request):
+        if holder:
+            holder[0].supervisor.configure(enabled=False)  # the operator presses Disable AI meanwhile
+        return httpx.Response(200, json=google(body, ["https://investors.rocketlabusa.com/news/q3"]))
+
+    return handler
+
+
+@pytest.mark.asyncio
+async def test_clear_is_a_decision_on_the_calendar_shown(tmp_path, monkeypatch, manifest):
+    service = make_service(
+        tmp_path, monkeypatch, manifest, ba_calendar_handler(), enabled=True, now=et(D1, 9)
+    )
+    risk = service.event_risk
+    calendar = await risk.refresh("operator", et(D1, 9), D1)
+    assert calendar["proposal"]["factors"] == {"BA": 1.5} and risk.state()["pending_approval"]
+    risk.approve(D1, {"BA": 1.5}, False, calendar["id"])
+    assert not risk.state()["pending_approval"]
+    risk.approve(D1, {"BA": 1.0}, False, calendar["id"])  # Clear caution names the calendar shown
+    state = risk.state()
+    assert not state["pending_approval"] and state["approval"]["factors"] == {"BA": 1.0}
+    assert risk.factors_for(D1) == {}
+    risk.approve(D1, {"BA": 1.0}, False, None)  # an older page: decided after the calendar was fetched
+    assert not risk.state()["pending_approval"]
+    service.now = lambda: et(D1, 9, 30)
+    newer = await risk.refresh("operator", et(D1, 9, 30), D1)
+    assert (
+        newer["id"] != calendar["id"] and risk.state()["pending_approval"]
+    )  # a newer calendar is new advice
+
+
+@pytest.mark.asyncio
+async def test_a_calendar_reply_after_ai_is_turned_off_is_dropped(tmp_path, monkeypatch, manifest):
+    holder = []
+    service = make_service(
+        tmp_path, monkeypatch, manifest, ba_calendar_handler(holder), enabled=True, now=et(D1, 9)
+    )
+    holder.append(service)
+    service.event_risk.start_refresh()
+    await asyncio.gather(*list(service.ai_tasks))
+    assert not service.supervisor.enabled
+    state = service.state()["event_risk"]
+    assert state["calendar"]["status"] == "failed" and state["calendar"]["proposal"] is None
+    assert not state["pending_approval"] and state["approval"] is None
+    assert state["status"]["last_error"] is None and "turned off" in state["status"]["status"]
+    assert not [a for a in service.store.records("alert", manifest.account, 10) if "Event" in a["message"]]
+
+
+def test_calendar_window_is_by_moment_not_only_date():
+    _, reply_model = calendar_models(KEYS)
+    today, tomorrow = date(2026, 10, 27), date(2026, 10, 28)
+    rows = [  # (title, date, timing, time_et, kept) for a 14:30 refresh; window ends at the next open + 15 min
+        ("CPI print", today, "pre_open", "08:30", False),  # already out
+        ("Morning note", today, "pre_open", None, False),  # the market has opened
+        ("Fed speaker", today, "intraday", "14:00", False),
+        ("Treasury auction", today, "intraday", "15:00", True),
+        ("RKLB earnings", today, "after_close", None, True),
+        ("SPCX launch window", today, "unknown", None, True),
+        ("Jobless claims", tomorrow, "pre_open", "08:30", True),
+        ("Opening auction", tomorrow, "intraday", "09:40", True),
+        ("FOMC decision", tomorrow, "intraday", "14:00", False),  # after the window end
+        ("SPCX earnings", tomorrow, "after_close", None, False),
+        ("Company update", tomorrow, "unknown", None, False),
+    ]
+    reply = reply_model.model_validate(
+        calendar_body(
+            session=today,
+            events=[
+                event(symbols=["MARKET"], type="other", title=t, date=str(d), timing=timing, time_et=at)
+                for t, d, timing, at, _ in rows
+            ],
+        )
+    )
+    events, dropped, _ = checked_events(reply, today, et(today, 14, 30), et(tomorrow, 9, 45), [], KEYS)
+    assert [e["title"] for e in events] == [t for t, *_, kept in rows if kept] and dropped == 6
+    # The day-after FOMC and after-close earnings never drive the current session's caution.
+    late = reply_model.model_validate(
+        calendar_body(
+            session=today,
+            events=[
+                event(
+                    symbols=["MARKET"],
+                    type="fomc",
+                    title="FOMC",
+                    date=str(tomorrow),
+                    timing="intraday",
+                    time_et="14:00",
+                ),
+                event(title="RKLB Q3 earnings", date=str(tomorrow)),
+            ],
+        )
+    )
+    kept, dropped, _ = checked_events(late, today, et(today, 8, 45), et(tomorrow, 9, 45), [], KEYS)
+    assert kept == [] and dropped == 2
+    assert propose(kept, today, KEYS, ())["factors"] == {k: 1.0 for k in KEYS}
+
+
+def test_non_finite_caution_factor_is_a_422_not_a_500(tmp_path, monkeypatch, manifest):
+    service = make_service(tmp_path, monkeypatch, manifest, now=et(D1, 10))
+    client = TestClient(create_app(service), raise_server_exceptions=False)
+    headers = {"X-Control-Token": token_of(client), "Content-Type": "application/json"}
+    for raw in ("NaN", "Infinity", "-Infinity"):
+        body = f'{{"session": "{D1}", "factors": {{"BA": {raw}}}}}'
+        response = client.post("/api/event-caution", content=body, headers=headers)
+        assert response.status_code == 422 and "Caution factors must be" in response.text
+    assert service.store.records("event_caution", manifest.account) == []

@@ -43,9 +43,10 @@ DRIVERS = (  # display order; the first 11 are the attributed lines
     ("burner", "Closing burner (fills and fees)"),
     ("interest", "Cash interest (modeled)"),
     ("unexplained", "Unexplained / marking residual"),
-    ("nav_change", "= Official NAV change"),
+    # Totals are bold on the dashboard; no leading "=", which the CSV export would guard with "'".
+    ("nav_change", "Official NAV change (total)"),
     ("benchmark_growth", "− Benchmark growth (target − previous close)"),
-    ("miss", "= Miss (official close − target); score = |miss|"),
+    ("miss", "Miss (official close − target); score = |miss|"),
 )
 ATTRIBUTED = tuple(k for k, _ in DRIVERS[:11])
 POSITION_KEYS = ("delta", "gamma", "vega", "theta", "higher_order", "mark_basis")
@@ -56,21 +57,18 @@ SYMBOL_LABELS = {
     "fees": "Commissions (hedge and manual)",
     "total": "Symbol total",
 }
+# Per-contract rows for Google: today's quote and marks only. A contract's P&L (or its higher-order or
+# mark-basis line) with both closes' marks gives its quantity back (pnl / multiplier / mark change).
 CONTRACT_FIELDS = (
     "label",
     "kind",
     "mark_source",
     "bid",
     "ask",
-    "mid_prev",
     "mid_close",
-    "ibkr_prev",
     "ibkr_close",
     "iv_prev",
     "iv_close",
-    "pnl",
-    "higher_order",
-    "mark_basis",
 )
 # Deterministic anomaly rules (spec section 5.3).
 RESIDUAL_FLOOR, RESIDUAL_SHARE = 500.0, 0.25
@@ -643,7 +641,9 @@ def top_drivers(report, count=3):
 
 def ai_payload(report, account):
     """The allowlisted report for Google: app-computed numbers, labels and app-written notes only;
-    never the account, positions, quantities, fills, order references or execution ids."""
+    never the account, positions, quantities, fills, order references or execution ids. Contract
+    rows carry no P&L and no previous-close marks, so no quantity can be derived from them; P&L
+    stays at symbol level (by_symbol)."""
 
     def text(value, limit=300):
         return operator_text(value, account, limit)
@@ -992,6 +992,8 @@ class DayReporter(AIFeature):
                     ),
                     50,
                 )
+                if not s.supervisor.enabled:  # turned off while Google answered: the reply is dropped
+                    raise ValueError("AI disabled")
                 output = reply.output
                 if output.date.isoformat() != report["date"]:
                     raise ValueError("Invalid Google AI response rejected")  # wrong day echoed
@@ -1009,6 +1011,9 @@ class DayReporter(AIFeature):
                 self.ok(f"Explained {report['date']}; advice only")
             except Exception as exc:  # CancelledError (shutdown) still propagates
                 annex["error"] = ai_error(exc)
+                if annex["error"] == "AI disabled":  # the operator turned AI off: nothing shown or alerted
+                    self.ok("AI turned off: explanation discarded; numbers only")
+                    return None
                 self.fail(annex["error"], "The day-end report numbers are unaffected")
             annex["at"] = s.now().isoformat()
             identifier = digest(("day_report_ai", report_id, attempt))[:32]
@@ -1096,6 +1101,12 @@ class DayReporter(AIFeature):
             if self.lock.locked()
             else "No AI explanation yet: press Explain with AI",
         }
+
+    def closed_sessions(self):
+        """Scored sessions whose close has passed, newest first (last 10): the day selector also offers
+        those without a report yet, so Recompute now can reach a new or failed day."""
+        m, now = self.manifest, self.service.now()
+        return [str(d) for d in reversed(m.scoring_sessions) if m.session_close(d) <= now][:10]
 
     def latest(self):
         """Newest report per date for the last 10 dates (newest first), from memory only."""

@@ -12,6 +12,18 @@ POST_CLOSE = "post-close observation"
 POST_CLOSE_WINDOW = timedelta(minutes=5)
 
 
+def post_close_window(manifest, day):
+    """When post-close marks are taken: with the post-close NAV observation (close + late capture,
+    for POST_CLOSE_WINDOW), so marks and the official NAV share SPY options' 16:15 close; 30-300 s
+    after the bell when late capture is off (the bell NAV is then the official close)."""
+    close = manifest.session_close(day)
+    late = manifest.closing_capture.late_capture_minutes
+    if late:
+        start = close + timedelta(minutes=late)
+        return start, start + POST_CLOSE_WINDOW
+    return close + timedelta(seconds=30), close + timedelta(seconds=300)
+
+
 class ClosingRecorder:
     """Records API NetLiquidation at the bell, then once more after the options close.
 
@@ -244,8 +256,10 @@ class CloseMarkRecorder:
     """Durable per-session close marks for score attribution (quotes, Greeks, IBKR marks, risk).
 
     During the final two minutes the latest capture is held in memory; the last one taken
-    before the bell is written once the session closes, plus one post-close capture 30-300 s
-    after the bell. Record ids are deterministic, so restarts never duplicate a session.
+    before the bell is written once the session closes, plus one post-close capture in the
+    post-close NAV observation's window (post_close_window): IBKR's marks then include SPY
+    options' 16:15 close, as the official post-close NAV does. Record ids are deterministic, so
+    restarts never duplicate a session.
     """
 
     def __init__(self, manifest, store, clock, collect, alert):
@@ -276,7 +290,8 @@ class CloseMarkRecorder:
             if self.pending and self.pending[0] == day:
                 self._write(day, "pre_close", self.pending[1])
                 self.pending = None
-            if -300 <= seconds <= -30 and (day, "post_close") not in self.written:
+            start, end = post_close_window(self.manifest, day)
+            if start <= now <= end and (day, "post_close") not in self.written:
                 if (payload := self.collect(now, day, "post_close")) is not None:
                     self._write(day, "post_close", payload)
 

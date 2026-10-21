@@ -2382,6 +2382,7 @@ class TradingService:
                 },
                 "qa_history": self.qa.history(),
                 "day_reports": self.day_reports.latest(),
+                "day_report_sessions": self.day_reports.closed_sessions(),
                 "event_risk": self.event_risk.state(),
                 "recovery": {**self.recovery.latest, "promotion": self.recovery.promotion_status()},
                 "burner": self.burner.state(),

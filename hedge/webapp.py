@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import io
+import math
 import secrets
 from contextlib import asynccontextmanager
 from datetime import date
@@ -10,7 +11,9 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse, Response
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
@@ -116,6 +119,18 @@ class DailyRateImport(BaseModel):
     source: str
 
 
+def json_safe(value):
+    """NaN/Infinity as text: Python's JSON parser accepts them in a request, but a 422 body that
+    echoes them cannot be encoded (FastAPI's default handler then fails with HTTP 500)."""
+    if isinstance(value, float) and not math.isfinite(value):
+        return str(value)
+    if isinstance(value, dict):
+        return {k: json_safe(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [json_safe(v) for v in value]
+    return value
+
+
 def create_app(service):
     token = secrets.token_urlsafe(32)
 
@@ -149,6 +164,10 @@ def create_app(service):
             response.headers["Content-Security-Policy"] = SUGGESTIONS_CSP
             response.headers["Referrer-Policy"] = "no-referrer"
         return response
+
+    @app.exception_handler(RequestValidationError)
+    async def invalid_request(request: Request, exc: RequestValidationError):
+        return JSONResponse({"detail": json_safe(jsonable_encoder(exc.errors()))}, status_code=422)
 
     assets = Path(__file__).parent / "web"
     app.mount("/static", StaticFiles(directory=assets), name="static")

@@ -108,10 +108,26 @@ vm.runInContext('refresh=async()=>{}',context);
   assert.match(nodes.get('day-report-ai').innerHTML,/unavailable: Google AI request failed \(HTTP 500\)\. The numbers above are unaffected/);
   await vm.runInContext('control("day_report_compute")',context);
   assert.equal(lastPath,'/api/day-report');
-  assert.deepEqual(lastBody,{date:null,action:'compute'});
+  assert.deepEqual(lastBody,{date:'2026-10-22',action:'compute'});
   assert.match(nodes.get('notice').textContent,/Day-end report recomputed/);
   await vm.runInContext('control("day_report_explain")',context);
-  assert.deepEqual(lastBody,{date:null,action:'explain'});
+  assert.deepEqual(lastBody,{date:'2026-10-22',action:'explain'});
+  // A closed scored session without a report (new, or its automatic compute failed) is offered and
+  // selected as the newest, so Recompute now reaches it; the operator's choice stays until a newer day closes.
+  const dayState=`{ai_enabled:true,ai_features:{day_report:{}},day_report_sessions:['2026-10-23','2026-10-22'],day_reports:[{date:'2026-10-22',status:'complete',official:{},drivers:[]}]}`;
+  await vm.runInContext(`renderDayReport(${dayState})`,context);
+  assert.match(nodes.get('day-report-date').innerHTML,/value="2026-10-23">2026-10-23 \(not computed yet\)<\/option><option value="2026-10-22">2026-10-22<\/option>/);
+  assert.equal(nodes.get('day-report-date').value,'2026-10-23');
+  assert.match(nodes.get('day-report-summary').textContent,/No day-end report for 2026-10-23 yet.*press Recompute now/);
+  assert.equal(nodes.get('day-report-explain').disabled,true);
+  await vm.runInContext('control("day_report_compute")',context);
+  assert.deepEqual(lastBody,{date:'2026-10-23',action:'compute'});
+  nodes.get('day-report-date').value='2026-10-22';
+  await vm.runInContext(`renderDayReport(${dayState})`,context);
+  assert.equal(nodes.get('day-report-date').value,'2026-10-22');
+  assert.match(nodes.get('day-report-summary').textContent,/^2026-10-22 /);
+  await vm.runInContext(`renderDayReport(${dayState.replace("['2026-10-23'","['2026-10-26','2026-10-23'")})`,context);
+  assert.equal(nodes.get('day-report-date').value,'2026-10-26');
   // Event risk: titles, reasons and sources are escaped; only https sources are links; focus keeps a choice.
   const ev=`{ai_enabled:true,ai_features:{events:{status:'ok'}},event_risk:{session:'2026-10-22',symbols:['RKLB','SPCX','SPY'],levels:[1,1.25,1.5],pending_approval:true,in_effect:{},calls_today:1,calls_per_day:6,approval:null,latest_failure:{fetched_at:'2026-10-22T13:00:00Z',error:'Google AI request failed (HTTP 500)'},calendar:{id:'CAL1',session:'2026-10-22',status:'ok',trigger:'automatic',fetched_at:'2026-10-22T12:46:00Z',window_end:'2026-10-23T13:45:00Z',dropped:1,notes:'<b>n</b>',has_suggestions:true,proposal:{factors:{RKLB:1.5,SPCX:1.25,SPY:1.5},burner_off:true},events:[{date:'2026-10-22',timing:'after_close',symbols:['RKLB'],title:'<img src=x onerror=alert(1)>',type:'earnings',impact:'high',reason:'<script>r</script>',sources:[{url:'javascript:alert(1)',title:'<i>t</i>',cited:false},{url:'http://plain.example.com/x',title:'',cited:false},{url:'https://www.bls.gov/cpi/',title:'bls<b>',cited:true},{url:'https://u:p@evil.example.com/',cited:true}]}]}}}`;
   await vm.runInContext(`renderEvents(${ev})`,context);
@@ -141,10 +157,11 @@ vm.runInContext('refresh=async()=>{}',context);
   nodes.get('caution-factors').querySelectorAll=()=>[{dataset:{symbol:'RKLB'},value:'1.5'},{dataset:{symbol:'SPY'},value:'1.25'},{dataset:{symbol:'XYZ'},value:'1.5'}];
   nodes.get('caution-burner-off').checked=true;
   assert.deepEqual(JSON.parse(JSON.stringify(vm.runInContext('cautionBody(false)',context))),{session:'2026-10-22',factors:{RKLB:1.5,SPCX:1,SPY:1.25},burner_off:true,calendar_id:'CAL2'});
-  assert.deepEqual(JSON.parse(JSON.stringify(vm.runInContext('cautionBody(true)',context))),{session:'2026-10-22',factors:{RKLB:1,SPCX:1,SPY:1},burner_off:false,calendar_id:null});
+  // Clear names the calendar shown: the server then treats its proposal as decided (no APPROVAL PENDING).
+  assert.deepEqual(JSON.parse(JSON.stringify(vm.runInContext('cautionBody(true)',context))),{session:'2026-10-22',factors:{RKLB:1,SPCX:1,SPY:1},burner_off:false,calendar_id:'CAL2'});
   await vm.runInContext('control("event_caution_clear")',context);
   assert.equal(lastPath,'/api/event-caution');
-  assert.deepEqual(lastBody,{session:'2026-10-22',factors:{RKLB:1,SPCX:1,SPY:1},burner_off:false,calendar_id:null});
+  assert.deepEqual(lastBody,{session:'2026-10-22',factors:{RKLB:1,SPCX:1,SPY:1},burner_off:false,calendar_id:'CAL2'});
   await vm.runInContext('control("events_refresh")',context);
   assert.equal(lastPath,'/api/events/refresh');
   assert.deepEqual(lastBody,{});

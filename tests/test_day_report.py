@@ -9,7 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from hedge.config import NY
-from hedge.day_report import DayReportBusy, attribute_day
+from hedge.day_report import CONTRACT_FIELDS, DayReportBusy, ai_payload, attribute_day
 from hedge.models import Execution, digest
 from hedge.service import TradingService
 from hedge.storage import Store
@@ -549,3 +549,52 @@ def test_export_day_reports_csv(tmp_path, monkeypatch, manifest):
         header
     )
     assert "Portfolio" in text and ",BA," in text and ",AI," in text
+    # The report's own total lines are not formula-guarded: no visible apostrophe.
+    assert (
+        ",Official NAV change (total)," in text and ",Miss (official close − target); score = |miss|," in text
+    )
+    assert "'= " not in text
+
+
+def test_ai_payload_rows_never_give_quantities_back(tmp_path, monkeypatch, manifest):
+    service = make_service(tmp_path, monkeypatch, manifest)
+    seed(service)
+    report, _ = service.day_reports.compute(D, "operator")
+    assert any(row["pnl"] for row in report["contracts"])  # the recorded report keeps per-contract P&L
+    data = json.loads(json.dumps(ai_payload(report, service.manifest.account), default=str))
+    assert data["contracts"] and data["by_symbol"]["BA"]["total"] is not None  # P&L at symbol level only
+    for row in data["contracts"]:
+        # pnl / (multiplier x mark change) would give the quantity: no P&L and no previous-close marks.
+        assert set(row) == set(CONTRACT_FIELDS)
+        assert not {"pnl", "higher_order", "mark_basis", "ibkr_prev", "mid_prev"} & set(row)
+
+
+async def test_an_explanation_after_ai_is_turned_off_is_dropped(tmp_path, monkeypatch, manifest):
+    holder = []
+
+    def handler(request):
+        holder[0].supervisor.configure(enabled=False)  # the operator presses Disable AI meanwhile
+        return httpx.Response(200, json=reply())
+
+    service = make_service(tmp_path, monkeypatch, manifest, handler, enabled=True)
+    holder.append(service)
+    seed(service)
+    report, _ = service.day_reports.compute(D, "operator")
+    assert await service.day_reports.explain(report["id"], "operator") is None
+    assert service.store.records("day_report_ai", service.manifest.account, 5) == []
+    view = service.day_reports.latest()[0]
+    assert view["ai"] is None and view["ai_note"] == "AI off: numbers only"
+    status = service.day_reports.status()
+    assert status["last_error"] is None and "turned off" in status["status"]
+    assert not [
+        a for a in service.store.records("alert", service.manifest.account, 10) if "AI" in a["message"]
+    ]
+
+
+def test_day_selector_offers_closed_sessions_without_a_report(tmp_path, monkeypatch, manifest):
+    service = make_service(tmp_path, monkeypatch, manifest)
+    service.now = lambda: et(D, 16, 5)  # D closed; its automatic report comes at 16:26
+    state = service.state()
+    assert state["day_reports"] == [] and state["day_report_sessions"] == [str(D), str(P)]
+    service.now = lambda: et(D, 15, 59)
+    assert service.state()["day_report_sessions"] == [str(P)]

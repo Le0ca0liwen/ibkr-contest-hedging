@@ -44,6 +44,8 @@ EVENT_TYPES = (
 )
 TIMINGS = ("pre_open", "intraday", "after_close", "unknown")
 TIME_ET = re.compile(r"^([01]\d|2[0-3]):[0-5]\d$")
+# Latest possible time of day (ET) of an event without its own time_et (intraday always has one).
+LATEST = {"pre_open": clock(9, 30), "after_close": clock(23, 59), "unknown": clock(23, 59)}
 BURNER_EVENT_TIME = "13:00"  # a high-impact event at or after this time makes the 15:40 burner unreliable
 MORNING, AFTERNOON = clock(8, 45), clock(15, 30)  # automatic fetch window (ET, session days)
 AUTO_ATTEMPTS, SPACING, PER_DAY = 3, timedelta(minutes=10), 6  # Google Search is billed per query
@@ -162,17 +164,30 @@ def _clean(text):
     return " ".join(CONTROL.sub(" ", str(text)).split())
 
 
+def in_window(event, start, end):
+    """Whether an event can fall inside [start, end] (ET), by its date and time of day: on the first
+    date an event known to be over (its time, or pre-open once the market has opened) is out; on the
+    last date only one known to come by `end` (pre-open, or its time at or before end) is in, so a
+    14:00 FOMC or after-close earnings the day after never drive the current session's caution."""
+    first, last = start.astimezone(NY), end.astimezone(NY)
+    if not first.date() <= event.date <= last.date():
+        return False
+    latest = clock.fromisoformat(event.time_et) if event.time_et else LATEST[event.timing]
+    if event.date == first.date() and latest < first.time().replace(second=0, microsecond=0):
+        return False
+    return event.date != last.date() or latest <= last.time()
+
+
 def checked_events(reply, session, start, end, citations, keys):
-    """Post-validation: the reply must echo the session; events dated outside the window are dropped
-    (counted), duplicates removed, and each URL flagged `cited` when a Google url_citation backs it."""
+    """Post-validation: the reply must echo the session; events outside the window (in_window) are
+    dropped (counted), duplicates removed, and each URL flagged `cited` when a Google url_citation backs it."""
     if reply.session != session:
         raise ValueError("Invalid Google AI response rejected")  # a calendar for another day
     cited = {c["url"]: c.get("title") or "" for c in citations}
-    first, last = start.astimezone(NY).date(), end.astimezone(NY).date()
     order = {k: i for i, k in enumerate((*keys, MARKET))}
     events, seen, dropped, duplicates = [], set(), 0, 0
     for event in reply.events:
-        if not first <= event.date <= last:
+        if not in_window(event, start, end):
             dropped += 1
             continue
         symbols = sorted(set(event.symbols), key=order.get)
@@ -242,6 +257,14 @@ def propose(events, session, keys, burner_symbols):
         "reasons": {k: v for k, v in reasons.items() if v},
         "burner_reason": burner_reason,
     }
+
+
+def _not_before(later, earlier):
+    """ISO instants: later >= earlier (False when either is missing or unreadable)."""
+    try:
+        return datetime.fromisoformat(str(later)) >= datetime.fromisoformat(str(earlier))
+    except (TypeError, ValueError):
+        return False
 
 
 def caution_text(factors, burner_off=None):
@@ -484,6 +507,8 @@ class EventRisk(AIFeature):
                     ),
                     95,
                 )
+                if not s.supervisor.enabled:  # turned off while Google answered: the reply is dropped
+                    raise ValueError("AI disabled")
                 events, dropped, duplicates = checked_events(
                     reply.output, session, start, end, reply.citations, self.keys
                 )
@@ -508,7 +533,12 @@ class EventRisk(AIFeature):
                 )
             except Exception as exc:  # CancelledError (shutdown) still propagates
                 record["error"] = ai_error(exc)
-                self.fail(record["error"], "The approved event caution (if any) is unchanged")
+                if record["error"] == "AI disabled":  # the operator turned AI off: no proposal, no alert
+                    self.ok(
+                        "AI turned off: calendar reply discarded; the approved caution (if any) is unchanged"
+                    )
+                else:
+                    self.fail(record["error"], "The approved event caution (if any) is unchanged")
             record["fetched_at"] = s.now().isoformat()
             identifier = uuid4().hex
             try:
@@ -523,7 +553,7 @@ class EventRisk(AIFeature):
                         "info",
                         f"Event calendar for {session} proposes a forecast caution: "
                         f"{caution_text(proposal['factors'], proposal['burner_off'])}. Review it under Event "
-                        "risk on Overview; nothing applies until you press Approve caution",
+                        "risk today on Overview; nothing applies until you press Approve caution",
                         key=("event_calendar", str(session), digest(proposal)[:16]),
                     )
                 except Exception:
@@ -578,7 +608,11 @@ class EventRisk(AIFeature):
         self.last_approval = prepared
         self.epoch += 1
         # Re-plan against the new forecast set; never touches control_epoch, data_wait, profile or mode.
-        s.pending_target = None
+        # The plan goes with its recovery context (as on a data wait): a leftover would keep the surplus
+        # add-on "busy" and make a recovery-mode change pause paper. execution.recovery_checks stays: it
+        # still governs a recovery order working at the broker.
+        s.pending_target = s.pending_recovery = None
+        s.active_plan_started = False
         s.force_optimize = True
         s.monitor_wakeup.set()
         s.burner.wake()
@@ -644,9 +678,15 @@ class EventRisk(AIFeature):
             if current
             else ({k: 1.0 for k in self.keys}, False)
         )
+        # The operator decided on this calendar when the session's approval (or Clear) names it or
+        # came after it was fetched: its proposal is no longer pending, whatever was chosen.
+        decided = bool(current and calendar) and (
+            current.get("calendar_id") == calendar.get("id")
+            or _not_before(current.get("approved_at"), calendar.get("fetched_at"))
+        )
         pending = bool(
             proposal
-            and (current is None or current.get("calendar_id") != calendar["id"])
+            and not decided
             and (
                 {k: float(proposal["factors"].get(k, 1.0)) for k in self.keys} != approved[0]
                 or bool(proposal["burner_off"]) != approved[1]

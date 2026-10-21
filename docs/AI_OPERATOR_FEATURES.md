@@ -24,6 +24,10 @@ Optional helpers for the operator, built on the Google Gemini supervisor
   calls Google; the Q&A answers from the readiness checklist, the day-end report shows its
   numbers only and the event calendar is not fetched (a caution can still be approved by hand).
   An approved caution stays in effect when AI is turned off: the operator approved it.
+  **Disable AI** works at once, even while a review or another AI call is running (only a model
+  change waits for a running review). A call still waiting for a Google slot is not sent, and a
+  reply that arrives after AI was turned off is dropped without an alert: no calendar proposal, no
+  explanation, and the Q&A answers from the checklist.
 - **Off the trading path.** Every AI call is an async request with a timeout, made from a
   dashboard request or a background task the service owns (`service.ai_tasks`, cancelled on stop).
   The monitor, optimizer, execution, burner and closing recorders never wait for one. At most two
@@ -66,8 +70,10 @@ anything.
 | guide | the operator guide sections "The control bar", "Today: readiness", "Every scored day" and "AI operator features" (at most 8,000 characters) |
 
 "Cleaned" means account IDs become `[account]`, anything after a known raw-broker marker (for
-example "Waiting for broker/data:", "the last attempt stopped at:", "Enter in TWS (Paper):")
-becomes "[details on the dashboard]", control characters are removed and the text is shortened.
+example "Waiting for broker/data:", "the last attempt stopped at:", "Enter in TWS (Paper):", and
+the execution and burner reasons that end in IBKR's credit-preview warning or an exception, such as
+"Credit/risk preflight blocked:", "Burn credit preview blocked:" or "ended RESIDUAL:") becomes
+"[details on the dashboard]"; a burner in ERROR sends only "Closing burner step failed:", control characters are removed and the text is shortened.
 Never sent: the account, positions, orders, fills, quotes, contract labels, market-data errors,
 unavailable instruments, the last monitor error, setup data, mandated legs, decision narratives,
 and the raw text of any alert, Today row or health message. The question itself is cleaned the
@@ -78,10 +84,12 @@ The reply must be JSON with `answer` (at most 1,500 characters), `relied_on` (1-
 `relied_on` entries that are not keys of the sent state are dropped; if none remain the answer is
 still shown with "The AI did not cite the app's state; treat with care."
 
-**Deterministic answer** (AI off, failed, timed out, or 60 AI calls in the last hour): in paper
-mode, the latest decision and its first three blocking reasons; otherwise every ✗ row; otherwise,
-while waiting for data, the waiting reason; otherwise the Trading row. Then up to three ! rows and
-the health line.
+**Deterministic answer** (AI off, failed, timed out, or 60 AI calls in the last hour): first "The
+market is closed" (or "not open yet", or the final minutes before the close) when nothing can trade
+now; then every ✗ row, in every mode; then, in paper mode, the latest decision and its first three
+blocking reasons only if it is from the last 5 minutes of this session (otherwise "no hedge
+decision in the last 5 minutes"); while waiting for data, the waiting reason; otherwise the
+Trading row. Then up to three ! rows and the health line, unless a row already says it.
 
 **Limits.** One question every 10 seconds (HTTP 429 "Please wait n s"), one at a time (HTTP 409),
 at most 60 AI calls per rolling hour (then deterministic answers with a note). The provider
@@ -103,7 +111,8 @@ date list keeps the last 10 days; the newest report per day is shown.
 
 **The numbers (always shown, AI or not)** come only from what the app recorded: the official
 closes (for this contest the IBKR API closing NAV; a manual entry overrides it), the close marks
-recorded at the bell and after the close, the day's fills and commissions, and the burner's cycle
+recorded at the bell and with the post-close NAV observation (16:20-16:25 ET by default, after SPY
+options' 16:15 close, so the marks match the official post-close NAV), the day's fills and commissions, and the burner's cycle
 results. Each line is in dollars, rounded to cents:
 
 | Line | Meaning |
@@ -119,7 +128,7 @@ results. Each line is in dollars, rounded to cents:
 | Closing burner (fills and fees) | the burner's fills marked to the close, plus their commissions |
 | Cash interest (modeled) | the app's cash/borrow/financing model, not IBKR's accrual |
 | Unexplained / marking residual | official NAV change minus all lines above, so everything adds up exactly |
-| = Official NAV change, − Benchmark growth, = Miss | miss = official close − target; score = \|miss\|, the same as the ledger |
+| Official NAV change (total), − Benchmark growth, Miss | miss = official close − target; score = \|miss\|, the same as the ledger |
 
 The marks are IBKR's position marks where IBKR marked the contract at every close at which it was
 held, otherwise the quote midpoints. The Greeks are taken at the previous close. A per-symbol table
@@ -142,8 +151,9 @@ $100.
 **With AI on**, the newest day's report is explained once automatically; **Explain with AI** asks
 again for the selected day (one per 60 s, 20 per day). Google receives only the finished report:
 the date, official closes, target, miss and score, the driver and per-symbol amounts, the checks,
-items worth checking and notes (cleaned like the Q&A text), per-contract labels and prices (no
-quantities), the decision counts and most common blocking reasons, burner totals, and the fixed
+items worth checking and notes (cleaned like the Q&A text), per-contract labels with today's
+quote, marks and implied volatilities only (no per-contract P&L and no previous-close marks, which
+together would give each quantity back), the decision counts and most common blocking reasons, burner totals, and the fixed
 settings menu. Never sent: the account, positions or quantities, fills, order references,
 execution IDs or the manual close's provenance text. The reply must echo the date and contains a
 plain-language explanation (at most 2,000 characters), up to 6 items to check and up to 3
@@ -185,8 +195,12 @@ list only), a type from a fixed list, a title, an ET date, timing (before the op
 HH:MM time, after the close, or unknown), impact (low, medium, high), a one-sentence reason and up
 to 5 source URLs. Medium and high impact need at least one source; every URL must be a plain
 `https://` link with a dotted host, no user name or password and no spaces. An intraday event
-needs its time. The reply must echo the session. Events dated outside the window are dropped (and
-counted), duplicates removed. Each source is marked as confirmed when one of Google's own citation
+needs its time. The reply must echo the session. Events outside the window are dropped (and
+counted), by date and time of day: on the first day an event already over (its time has passed, or
+"before the open" once the market has opened) is dropped; on the window's last day only events
+before the open or with a time at or before the window end are kept (after-close, unknown-time and
+later intraday events that day are dropped, so they never drive the current session's caution).
+Duplicates are removed. Each source is marked as confirmed when one of Google's own citation
 links backs it; others show "(not confirmed by a Google citation)" and still count. Anything else
 (another session, a missing source, broken JSON) rejects the whole reply: "Invalid Google AI
 response rejected", one alert per day.
@@ -206,7 +220,8 @@ the market or a burner symbol (the 15:40-15:56 burner's median-gap forecast is t
 The proposal pre-fills the form; the badge shows **APPROVAL PENDING** until you decide.
 
 **Approval (the operator).** Choose ×1.0/×1.25/×1.5 per symbol and the burner box, press **Approve
-caution** and confirm. **Clear caution** sets everything back to ×1.0. Only the session being
+caution** and confirm. **Clear caution** sets everything back to ×1.0 and counts as your decision
+on the calendar shown: its proposal is no longer marked APPROVAL PENDING (a newer calendar is). Only the session being
 forecast now can be approved (`POST /api/event-caution {session, factors, burner_off,
 calendar_id}`, control token, serialized with the other controls; any other level is rejected).
 The approval is a durable `event_caution` record with the factors, the proposal, the calendar's
@@ -259,7 +274,7 @@ Search Suggestions HTML (at most 20 KB), proposal, token usage, fixed error text
 
 - `Supervisor.structured(schema, *, instructions, payload, tools=(), max_output_tokens, timeout)`
   in `hedge/supervisor.py` is the one Google call. It refuses with "AI disabled" unless AI is
-  enabled, inlines the pydantic schema (`inline_schema`; Google does not document `$defs`, and
+  enabled (checked again once a slot is free; each feature re-checks after the reply), inlines the pydantic schema (`inline_schema`; Google does not document `$defs`, and
   pydantic still validates everything client side), sends `store: false` and `background: false`,
   appends `ADVISORY`, and maps every error to the fixed messages above. `extract_grounding(body)`
   is the only reader of Google Search citations, queries and suggestions (used by the event

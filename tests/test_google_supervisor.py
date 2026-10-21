@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from hedge.demo import demo_manifest
 from hedge.service import TradingService
 from hedge.storage import Store
-from hedge.supervisor import MODELS, Supervisor
+from hedge.supervisor import MODELS, Recommendation, Supervisor
 from hedge.webapp import create_app
 
 
@@ -217,3 +217,32 @@ async def test_review_is_not_stale_when_only_the_snapshot_timestamp_moves(tmp_pa
         assert service._ai_reviews()[0]["stale"] is True  # account changed after the review
     finally:
         await service.stop()
+
+
+@pytest.mark.asyncio
+async def test_turning_ai_off_never_waits_for_a_queued_review(tmp_path, monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "test-credential")
+    release, calls = asyncio.Event(), []
+
+    async def handler(request):
+        calls.append(1)
+        await release.wait()  # slow feature calls (an event calendar may take up to 95 s)
+        return httpx.Response(500)
+
+    supervisor = Supervisor(transport=httpx.MockTransport(handler), settings_path=tmp_path / "ai.json")
+    features = [
+        asyncio.create_task(supervisor.structured(Recommendation, instructions="x", payload={}, timeout=90))
+        for _ in range(2)
+    ]
+    await asyncio.sleep(0.05)
+    review = asyncio.create_task(supervisor.review(state()))  # holds its lock, queued for a Google slot
+    await asyncio.sleep(0.05)
+    assert supervisor.lock.locked() and not review.done() and len(calls) == 2
+    with pytest.raises(ValueError, match="before changing the model"):
+        supervisor.configure(MODELS[1], True)  # a model change still waits for the review
+    assert supervisor.configure(MODELS[0], True)["enabled"] is True  # unchanged settings: no wait
+    assert supervisor.configure(MODELS[1], False)["enabled"] is False  # Disable AI: never refused
+    release.set()
+    results = await asyncio.gather(*features, review, return_exceptions=True)
+    assert results[2] is None and len(calls) == 2  # the queued review never went out
+    assert supervisor.last_status == "AI turned off; review skipped"

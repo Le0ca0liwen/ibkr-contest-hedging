@@ -25,6 +25,17 @@ RAW_MARKERS = (  # app text that is followed by raw broker/exception text: cut a
     "Unsupported actual broker positions",
     "Automatic resume waiting for full preflight:",
     "automatic preflight retry:",
+    # Execution/burner reasons (health, burner.reason, checklist rows, RESIDUAL alerts) that end in
+    # IBKR what-if warningText or an ib_insync exception.
+    "Credit/risk preflight blocked:",
+    "Burn credit preview blocked:",
+    "Broker credit preview warning:",
+    "Fresh execution validation:",
+    "Fresh burn validation:",
+    "Protected setup preflight:",
+    "Protected package submission uncertain; reconcile, never resend:",
+    "Broker or data unavailable:",
+    "ended RESIDUAL:",
 )
 APP_ALERT_PREFIXES = (  # app-authored alert families that may be summarized for the AI
     "Closing NAV capture missed",

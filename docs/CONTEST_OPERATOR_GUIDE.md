@@ -108,8 +108,9 @@ all of them on or off; trading never waits for them.
   lines add up to the official numbers. The numbers are always shown. With AI on, a short
   explanation, items worth checking and up to three suggested settings appear below them;
   the suggestions are never applied, so change a setting only with its own button.
-  **Recompute now** picks up late commission reports or a corrected close; a large
-  Unexplained line usually means an option was marked oddly or close marks are missing.
+  **Recompute now** picks up late commission reports or a corrected close, and computes a
+  day shown as "(not computed yet)" in the date list; a large Unexplained line usually means
+  an option was marked oddly or close marks are missing.
 - **Event risk today** (Overview, under the latest hedge decision): about 08:45 ET on session
   days (or **Refresh event calendar**, at most 6 per day) Google Search lists known events for
   SPCX, RKLB, SPY and the market until the next open, with links. The app proposes one caution per

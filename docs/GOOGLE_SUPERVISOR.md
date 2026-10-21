@@ -48,6 +48,8 @@ project access; passing mocked tests is not that verification.
 
 The operator features in [AI_OPERATOR_FEATURES.md](AI_OPERATOR_FEATURES.md) share this key, the
 model selector and the one Enable/Disable AI switch; with AI disabled none of them calls Google.
+Disable AI is never refused (only a model change waits for a running review); a reply that
+arrives after AI was turned off is dropped.
 They use the same interactions request (`store: false`, `background: false`, structured JSON
 validated with pydantic, a fixed advisory sentence appended to every system instruction) through
 `Supervisor.structured()`, at most two Google calls at a time across all features. Errors are the

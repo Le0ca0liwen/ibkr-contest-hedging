@@ -244,7 +244,7 @@ Each commit ends with the two attribution lines and keeps these checks green:
 POINT_TO = ("none", "Today: readiness", "Enable paper trading", "Pause trading", "Reconcile",
             "Start shadow", "Auto paper", "Confirm contest configuration", "Refresh price history now",
             "Closing surplus burner", "Import an official closing NAV", "Alerts & required actions",
-            "Event risk", "Day-end report", "TWS (Paper)", "Moomoo OpenD")
+            "Event risk today", "Day-end miss explanation", "TWS (Paper)", "Moomoo OpenD")
 
 class QAAnswer(BaseModel):
     model_config = ConfigDict(extra="forbid")

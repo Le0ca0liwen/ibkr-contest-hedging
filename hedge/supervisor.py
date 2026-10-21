@@ -169,8 +169,10 @@ class Supervisor:
             raise ValueError("Unsupported supervisor model")
         if enabled is True and not self._key():
             raise ValueError("Set the Google key locally with Setup Google AI.command first")
-        if self.lock.locked():
-            raise ValueError("Wait for the current AI review before changing settings")
+        # Only a model change waits for a running review (it can queue for minutes behind feature calls
+        # on the shared Google slots); turning AI off never waits.
+        if self.lock.locked() and model not in (None, self.model) and enabled is not False:
+            raise ValueError("Wait for the current AI review before changing the model")
         selected = model or self.model
         active = self.active if enabled is None else enabled
         self.settings_path.parent.mkdir(parents=True, exist_ok=True)
@@ -291,6 +293,8 @@ class Supervisor:
         if not self.enabled:
             raise ValueError("AI disabled")
         async with self.calls:
+            if not self.enabled:  # turned off while this call waited for a slot: never sent
+                raise ValueError("AI disabled")
             model = self.model
             try:
                 async with httpx.AsyncClient(timeout=timeout, transport=self.transport) as client:
@@ -378,6 +382,9 @@ class Supervisor:
                 }
             except ValueError as exc:
                 message = str(exc) if type(exc) is ValueError else "Invalid Google AI response rejected"
+                if message == "AI disabled":  # turned off while the review waited for a Google slot
+                    self.last_status = "AI turned off; review skipped"
+                    return None
                 self.last_status = message
                 raise ValueError(message) from None
             except Exception:
