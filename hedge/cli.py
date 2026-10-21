@@ -224,13 +224,17 @@ def main():
                 if args.demo
                 else load_manifest(args.config)
             )
-            database = args.database or os.environ.get(
-                "HEDGE_DATABASE_URL",
-                f"sqlite:///data/rehearsal-{uuid4().hex[:8]}.db"
-                if args.rehearsal
-                else "sqlite:///data/demo.db"
+            # The synthetic demo never uses HEDGE_DATABASE_URL: it must not write simulated
+            # fills or closes into the contest database.
+            database = args.database or (
+                "sqlite:///data/demo.db"
                 if args.demo
-                else "sqlite:///data/shadow.db",
+                else os.environ.get(
+                    "HEDGE_DATABASE_URL",
+                    f"sqlite:///data/rehearsal-{uuid4().hex[:8]}.db"
+                    if args.rehearsal
+                    else "sqlite:///data/shadow.db",
+                )
             )
             if args.rehearsal and (args.database or os.environ.get("HEDGE_DATABASE_URL")):
                 parser.error("Rehearsal uses a fresh isolated synthetic database; unset HEDGE_DATABASE_URL")

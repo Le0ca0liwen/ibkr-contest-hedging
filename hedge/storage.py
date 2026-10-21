@@ -113,6 +113,11 @@ def burn_leg_prefix(cycle_id):
     return cycle_id[:24]
 
 
+def utc_iso(value):
+    """Record times are stored in UTC; SQLite returns them naive, so label them explicitly."""
+    return (value if value.tzinfo else value.replace(tzinfo=UTC)).isoformat()
+
+
 def burn_leg_id(cycle_id):
     """32 hex characters like every intent id (orderRef stays 'hedge:' + 32), cycle-prefixed."""
     if len(cycle_id) < 24 or any(c not in "0123456789abcdef" for c in cycle_id[:24]):
@@ -180,7 +185,7 @@ class Store:
                 .order_by(Record.at.desc())
                 .limit(limit)
             ).all()
-            return [{"id": r.id, "at": r.at.isoformat(), **r.payload} for r in rows]
+            return [{"id": r.id, "at": utc_iso(r.at), **r.payload} for r in rows]
 
     def snapshot(self, snap: PortfolioSnapshot):
         self.record("snapshot", snap.account, snap, snap.version)
@@ -206,7 +211,7 @@ class Store:
                 query = query.where(Record.at >= since)
             rows = session.scalars(query).all()
             for row in rows:
-                grouped[row.category].append({"id": row.id, "at": row.at.isoformat(), **row.payload})
+                grouped[row.category].append({"id": row.id, "at": utc_iso(row.at), **row.payload})
         return grouped
 
     def create_intent(self, request):

@@ -13,7 +13,7 @@ closing_capture:
   enabled: true
   window_seconds: 180
   retry_seconds: 15
-  late_capture_minutes: 20   # 0 disables; otherwise 16-60
+  late_capture_minutes: 20   # 0 disables; otherwise 18-60
 ```
 
 The recorder requests a fresh account summary and requires a new NAV event for

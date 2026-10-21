@@ -221,11 +221,13 @@ dashboard poll scan the whole history. No schema columns change. Instead:
 
 ## Operating it
 
-1. **Shadow first.** Configure `burner:` in the contest config (the template has a
-   commented block) with `mode: shadow` and `symbols: [SPCX, RKLB]`. Review the
-   `burn_decision` records and the dashboard panel during a session.
-2. **Then paper.** Switch to `mode: paper` with the recorded `admissibility_source`.
-   Changing the burner changes `config_hash`, as any configuration change does.
+1. **Configure.** The template's `burner:` block is set to `mode: paper` with
+   `symbols: [SPCX, RKLB]` and the recorded `admissibility_source`. It trades only
+   while the app itself is in paper (see automatic paper start in
+   CONTEST_RESTRICTIONS.md). To watch first without trading, use the panel's
+   "Shadow burner" button (or `mode: shadow`) and review the `burn_decision` records.
+2. **Changing the configuration** changes `config_hash`, as any configuration
+   change does.
 3. **Dashboard panel.** "Closing surplus burner" shows mode, state and reason, the
    window, target, NAV estimate, gap statistics, the JIT pacing, the open cycle,
    today's totals (cycles, realized cost, pending fees, turnover, mean cycle time) and

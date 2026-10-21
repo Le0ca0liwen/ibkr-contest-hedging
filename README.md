@@ -9,6 +9,15 @@ A local, paper-only options hedging system and browser dashboard for the IBKR co
 
 The code includes American-option repricing, integer scenario optimization, an independent risk gate, durable order intents, reconciliation, a quote-based replay engine, and an optional advisory AI supervisor. **No actual IBKR connection, contest activation, or empirical performance claim is implied by running the demo.**
 
+## Contest: start here
+
+Double-click **`Start Contest.command`**. It starts the local PostgreSQL
+database, refreshes Moomoo codes and daily history, keeps the Mac awake and opens
+the dashboard; with `autostart: paper` (template default) paper trading then
+starts by itself once the seven legs are held and every activation check passes.
+Everything else is on the dashboard. Details: [contest restrictions and
+launch](docs/CONTEST_RESTRICTIONS.md#launching-the-contest-dashboard-only).
+
 ## Practice setup
 
 For the separate SPCX/RKLB/SPY contest, use the

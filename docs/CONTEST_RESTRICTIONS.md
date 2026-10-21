@@ -82,8 +82,8 @@ source and never trades. Before Day 0:
 1. With TWS/Gateway on the paper account (Read-Only API is enough), qualify the
    three stocks and seven legs from the final strikes (the handout says strikes
    are set shortly before trading):
-   `python -m hedge.cli prepare-contest --spcx 130 145 160 --rklb 45 55 --spy 770 --port 4002`
-   (7497 for TWS). It writes `config/local.contest.yaml` with
+   `python -m hedge.cli prepare-contest --spcx 130 145 160 --rklb 45 55 --spy 770 --port 7497`
+   (7497 is TWS paper; 4002 is IB Gateway). It writes `config/local.contest.yaml` with
    `market_data_provider: moomoo` and `confirmed: false`; set `initial_nav` to the
    verified Day 0 NAV (`python -m hedge.cli probe-ibkr` shows it).
 2. Fetch joint daily history (SPY is required for beta even though its shares are
@@ -104,9 +104,36 @@ source and never trades. Before Day 0:
 4. Optional: record verified shortable shares in `stock_borrow` with
    `stock_borrow_source`; Moomoo has no borrow data, so new stock shorts are
    otherwise disabled (options can still hedge).
-5. `python -m hedge.cli validate config/local.contest.yaml`, start the service in
-   shadow mode, and check the dashboard: provider "moomoo (data only)", no
-   "not subscribed" alert, `unquoted_tradable_contracts` empty.
+5. `python -m hedge.cli validate config/local.contest.yaml`. Set `confirmed: true`
+   once the seven legs, account and dates are checked; paper trading refuses an
+   unconfirmed configuration.
+
+## Launching the contest (dashboard only)
+
+Double-click **Start Contest.command**. It validates `config/local.contest.yaml`,
+starts the project-local PostgreSQL database `hedge_contest` (automatic paper
+trading refuses SQLite), rewrites the Moomoo collector list from the
+configuration, refreshes the daily price history from Moomoo (quote-only), keeps
+the Mac awake while the service runs, and opens http://127.0.0.1:8765. Control
+the rest from the dashboard.
+
+- **Automatic paper start** (`autostart: paper`, the template default; the
+  dashboard "Auto paper" switch overrides it and is remembered). After launch the
+  service waits until the seven mandated legs are held, then hands over to the
+  same checks as "Enable paper trading": confirmed configuration, IBKR contract
+  identities, PostgreSQL, a clean reconcile, live quotes, the previous official
+  close, the risk limits and the order window. Before the open it waits for the
+  trading window; if a check fails it retries every 15 s and the health line
+  names the cause. Any operator control (Pause, Start shadow, Enable paper
+  trading) cancels a pending automatic start; "Auto paper: ON" turns it back on
+  after a confirmation.
+- The seven legs are bought by hand in TWS (automatic contest setup is not
+  supported). Close any non-contest positions first: reconciliation refuses
+  holdings that are not defined in the configuration.
+- The TWS API must not be Read-Only for paper trading.
+- The closing burner is configured for paper in the template; it trades only
+  while the app is in paper, only from close-20 to close-4 min on scored days.
+  The burner panel can step it down to shadow or off at any time.
 
 Risk notes: the seven fixed legs are reported as `mandated_gross_notional` and
 are outside the discretionary 3x gross cap (the SPY straddle alone is ~$3.85M of

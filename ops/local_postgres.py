@@ -15,7 +15,7 @@ SOCKET = ROOT / "data/postgres-socket"
 PORT = 55432
 
 
-def start_database():
+def start_database(database="hedge"):
     if not (BIN / "pg_ctl").exists():
         raise RuntimeError("Install the project-local PostgreSQL runtime or provide HEDGE_DATABASE_URL")
     password_file = ROOT / ".runtime/db-password"
@@ -60,9 +60,9 @@ def start_database():
     with psycopg.connect(
         host="127.0.0.1", port=PORT, dbname="postgres", user="hedge", password=password, autocommit=True
     ) as connection:
-        if not connection.execute("SELECT 1 FROM pg_database WHERE datname='hedge'").fetchone():
-            connection.execute("CREATE DATABASE hedge")
-    url = f"postgresql+psycopg://hedge:{quote(password, safe='')}@127.0.0.1:{PORT}/hedge"
+        if not connection.execute("SELECT 1 FROM pg_database WHERE datname=%s", (database,)).fetchone():
+            connection.execute(f'CREATE DATABASE "{database}"')
+    url = f"postgresql+psycopg://hedge:{quote(password, safe='')}@127.0.0.1:{PORT}/{database}"
     env = os.environ.copy()
     env["HEDGE_DATABASE_URL"] = url
     subprocess.run(

@@ -48,6 +48,11 @@ class BurnerSettings(BaseModel):
     mode: Literal["off", "shadow", "paper"]
 
 
+class AutostartSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    mode: Literal["off", "paper"]
+
+
 class DailyRateImport(BaseModel):
     model_config = ConfigDict(extra="forbid")
     date: date
@@ -153,6 +158,16 @@ def create_app(service):
         try:
             async with service.control_lock:
                 return service.burner.set_mode(body.mode)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.post("/api/autostart")
+    async def autostart_settings(body: AutostartSettings):
+        # Persisted switch: 'paper' starts paper trading automatically once every activation
+        # check passes (now from PAUSED, and after each launch); 'off' cancels a pending start.
+        try:
+            async with service.control_lock:
+                return service.set_autostart(body.mode)
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
 

@@ -236,6 +236,10 @@ class Manifest(Frozen):
     risk: RiskLimits = RiskLimits()
     policy: TradingPolicy = TradingPolicy()
     burner: BurnerPolicy = BurnerPolicy()
+    # "paper": after launch the service starts paper trading by itself once the mandated book is
+    # held and every paper activation check passes (the same checks as "Enable paper trading").
+    # The dashboard switch overrides it; any operator control cancels a pending automatic start.
+    autostart: Literal["off", "paper"] = "off"
     gateway_host: Literal["127.0.0.1"] = "127.0.0.1"
     gateway_port: Literal[4002, 7497] = 4002
     client_id: int = Field(default=71, gt=0)

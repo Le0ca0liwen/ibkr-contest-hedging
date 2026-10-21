@@ -16,7 +16,7 @@ from .continuity import DataUnavailable, data_only, quote_coverage
 from .data import QuoteRecorder
 from .demo import demo_quotes
 from .execution import ExecutionManager
-from .execution_quality import execution_quality
+from .execution_quality import execution_quality, timestamp
 from .models import digest, utcnow
 from .moomoo_data import MoomooData, missing_codes
 from .optimizer import HedgeOptimizer, execution_cost
@@ -101,6 +101,8 @@ class TradingService:
         self.setup_pairs = {}
         self.setup_decision_id = None
         self.auto_hedge_after_setup = False
+        self.autostart_override = None  # dashboard choice; None = configuration
+        self.autostart_pending = False
         self.execution.score_context = lambda snapshot, qs, now: (
             self.closing_target(snapshot, now),
             self.nav_tracker.estimate(snapshot, qs, self.manifest.contract_map),
@@ -142,6 +144,7 @@ class TradingService:
                 raise RuntimeError("Another PostgreSQL execution owner already holds this account")
         self.store.record("configuration", self.manifest.account, self.manifest, self.manifest.config_hash)
         self.burner.restore_setting()
+        self.restore_autostart()
         if not self.demo and Path("config/local.moomoo-codes.json").exists():
             self.market_data_log = Path("data/moomoo-collector.log").open("a")
             self.market_data_process = await asyncio.create_subprocess_exec(
@@ -319,8 +322,10 @@ class TradingService:
                 "alert", self.manifest.account, {"severity": severity, "message": message}, identifier
             )
             return
-        recent = self.store.records("alert", self.manifest.account, 1)
-        if not recent or recent[0].get("message") != message:
+        # A retry loop repeats the same few messages: skip one already raised in the last 15 min.
+        cutoff = self.store.now() - timedelta(minutes=15)
+        recent = self.store.records("alert", self.manifest.account, 10)
+        if not any(r.get("message") == message and timestamp(r["at"]) >= cutoff for r in recent):
             self.store.record("alert", self.manifest.account, {"severity": severity, "message": message})
 
     def _warn_api_previous_close(self, day, record):
@@ -359,6 +364,72 @@ class TradingService:
         self.broker.readonly = True
         self.pending_target = self.pending_recovery = None
         self.active_plan_started = False
+
+    def restore_autostart(self):
+        """At launch: re-apply the dashboard switch and arm the automatic paper start."""
+        for record in self.store.records("autostart_setting", self.manifest.account, 1):
+            self.autostart_override = record.get("override")
+        self.autostart_pending = self.autostart_mode() == "paper"
+
+    def autostart_mode(self):
+        return self.manifest.autostart if self.autostart_override is None else self.autostart_override
+
+    def set_autostart(self, mode):
+        """Dashboard switch, persisted across restarts. 'paper' starts paper trading automatically
+        now (from PAUSED) and after every launch once all activation checks pass; 'off' cancels a
+        pending automatic start but never stops paper trading that is already running."""
+        if mode not in ("off", "paper"):
+            raise ValueError("Automatic start must be off or paper")
+        self.autostart_override = None if mode == self.manifest.autostart else mode
+        self.store.record(
+            "autostart_setting",
+            self.manifest.account,
+            {"override": self.autostart_override, "mode": mode, "config_hash": self.manifest.config_hash},
+        )
+        if mode == "paper":
+            self.autostart_pending = self.mode == "PAUSED"
+        else:
+            self.autostart_pending = False
+            if self.mode == "WAITING_DATA" and self.data_wait and self.data_wait.get("autostart"):
+                self._hard_stop("Automatic paper start cancelled by operator")
+        return self.state()
+
+    def _autostart_step(self, mandate_errors):
+        """Launch-time automatic paper start. It only hands over to the automatic-resume path
+        (WAITING_DATA -> control('paper', _automatic=True)), so every paper activation check,
+        trading-window check and live-data check still applies; any operator control cancels it."""
+        if not self.autostart_pending or self.mode != "PAUSED":
+            return
+        if mandate_errors:
+            self.health = "Automatic paper start waits for the mandated holdings: " + "; ".join(
+                mandate_errors
+            )
+            return
+        self.autostart_pending = False
+        self.data_wait = {
+            "resume_mode": "PAPER",
+            "reason": "Automatic paper start at launch",
+            "since": self.now().isoformat(),
+            "config_hash": self.manifest.config_hash,
+            "profile": self.profile,
+            "epoch": self.control_epoch,
+            "autostart": True,
+        }
+        self.resume_next_at = 0.0
+        self.mode, self.ready = "WAITING_DATA", False
+        self.execution.paused = True
+        self.broker.readonly = True
+        self.pending_target = self.pending_recovery = None
+        self.health = "Automatic paper start: waiting for the full paper activation checks"
+        self.store.record(
+            "continuity",
+            self.manifest.account,
+            {
+                **self.data_wait,
+                "status": "AUTOSTART",
+                "snapshot_id": self.last_snapshot.version if self.last_snapshot else None,
+            },
+        )
 
     def _enter_data_wait(self, reason):
         if self.mode in ("PAPER", "SETUP"):
@@ -480,7 +551,9 @@ class TradingService:
                             self.mode = "WAITING_SETUP"
                         if self.mode != "WAITING_DATA":
                             self.health = (
-                                "Connected; paper execution remains disabled until explicitly enabled"
+                                "Connected; automatic paper start pending its activation checks"
+                                if self.autostart_pending
+                                else "Connected; paper execution remains disabled until explicitly enabled"
                             )
                     else:
                         await asyncio.sleep(1)
@@ -531,6 +604,7 @@ class TradingService:
                         await self.execution.pause()
                     if self.mode != "SETUP":
                         self.alert("error", self.health)
+                self._autostart_step(mandate_errors)
                 if self.last_quotes:
                     ids = screen_snapshot(self.manifest, self.last_quotes, self.last_snapshot)
                     scenario_at = self.now()
@@ -662,6 +736,9 @@ class TradingService:
                 await asyncio.sleep(self.manifest.policy.risk_seconds)
             except Exception as exc:
                 message = f"{type(exc).__name__}: {exc}"
+                if self.data_wait and self.data_wait.get("autostart"):
+                    # Paper never started: keep the launch-time automatic start armed.
+                    self.autostart_pending = True
                 if self.mode in ("PAPER", "SETUP", "WAITING_DATA"):
                     self._hard_stop(message)
                     await self.execution.pause()
@@ -1250,6 +1327,7 @@ class TradingService:
         ):
             raise ValueError("Profile not validated for this contest")
         if not _automatic and action in ("pause", "shadow", "profile", "paper", "setup", "arm_setup"):
+            self.autostart_pending = False  # an operator decision supersedes the launch-time start
             self.control_epoch += 1
             self.data_wait = None
             if action in ("pause", "shadow", "profile"):
@@ -1699,6 +1777,13 @@ class TradingService:
                 "ai_status": self.supervisor.status(),
                 "recovery": {**self.recovery.latest, "promotion": self.recovery.promotion_status()},
                 "burner": self.burner.state(),
+                "autostart": {
+                    "mode": self.autostart_mode(),
+                    "configured": self.manifest.autostart,
+                    "source": "configuration" if self.autostart_override is None else "dashboard",
+                    "pending": self.autostart_pending,
+                    "active": bool(self.data_wait and self.data_wait.get("autostart")),
+                },
                 "profile": self.profile,
                 "profiles": list(PROFILES if self.demo else self.supervisor.allowed_profiles),
                 "pause_pending": self.execution.pause_requested and not self.execution.pause_complete(),
