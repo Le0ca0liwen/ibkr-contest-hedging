@@ -958,7 +958,7 @@ class TradingService:
         # continue a started plan instead of restarting it into its own trade cooldown.
         foreign = (
             prior is None
-            or not (self.active_plan_started and self.pending_target)
+            or (current != prior and not (self.active_plan_started and self.pending_target))
             or any(
                 not (bounds := self.execution.owned_inventory_ranges.get(i))
                 or not bounds[0] <= current.get(i, 0) <= bounds[1]
@@ -1076,6 +1076,9 @@ class TradingService:
                             self.now(),
                             corrective=not self.last_risk.passed,
                             day_zero=self.mode == "SETUP",
+                            # Hard-stop only when working orders worsen or add a breach; one the
+                            # market caused is the optimizer's to correct, not a reason to stop.
+                            require_improvement=False,
                         )
                         if not projected_check.passed:
                             message = "Working-order check: " + "; ".join(projected_check.reasons)
@@ -1466,10 +1469,9 @@ class TradingService:
             await self._execute_pending_plan()
         finally:
             if self.pending_target is None:
-                # A dropped or finished plan takes its recovery context with it (a stale one
-                # would show 'Hedge plan pending' and block the closing burner).
+                # A dropped or finished plan takes its recovery context with it. Its execution
+                # checks stay: they still govern a recovery order working at the broker.
                 self.pending_recovery = None
-                self.execution.recovery_checks = None
 
     async def _execute_pending_plan(self):
         if self.execution.burn_open():
@@ -1595,7 +1597,8 @@ class TradingService:
             if not self.execution.unresolved():
                 self.pending_target = None
                 self.active_plan_started = False
-                self.force_optimize = True
+                # An unchanged book re-solves to the same un-sliceable plan: keep the cadence.
+                self.force_optimize = not result["reason"].startswith("No economical execution slice")
 
     def _setup_quantities(self, snapshot, quotes):
         plan = self.setup_planner.plan(snapshot, quotes, self.last_scenarios, self.now())

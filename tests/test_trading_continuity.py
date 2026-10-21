@@ -530,3 +530,82 @@ async def test_reconcile_restarts_when_no_plan_is_running_even_inside_an_old_own
     service.broker.positions[stock] = held + 50  # e.g. a trade entered by hand in TWS
     await service.reconcile()
     assert service.force_optimize
+
+
+async def test_an_unchanged_book_at_reconcile_keeps_plans_and_the_option_cadence(operational):
+    service = operational
+    service.last_snapshot = service.broker.snapshot()
+    service.pending_target, service.active_plan_started, service.force_optimize = None, False, False
+    await service.reconcile()  # the routine 60 s download, nothing changed
+    assert not service.force_optimize
+
+
+def test_working_orders_need_not_cure_a_breach_the_market_caused(operational, monkeypatch):
+    from hedge.models import RiskResult
+
+    service = operational
+    snap, quotes = service.broker.snapshot(), service.broker.quotes()
+    held = snap.quantities()
+    metrics = {
+        "budget": 1_000_000.0,
+        "stress_loss": 0.0,
+        "gross_notional": 0.0,
+        "delta:SPY": 101_000.0,
+        "excess_liquidity_estimate": 900_000.0,
+    }
+    worse = {**metrics, "delta:SPY": 102_000.0}
+
+    def evaluate(snapshot, quotes, scenarios, quantities, costs=0):
+        result = worse if quantities.get(10, 0) != held.get(10, 0) else metrics
+        return RiskResult(passed=False, reasons=("Residual delta cap: SPY",), metrics=result)
+
+    monkeypatch.setattr(service.gate.engine, "evaluate", evaluate)
+
+    def check(quantities, require_improvement):
+        return service.gate.validate(
+            snap,
+            quotes,
+            service.last_scenarios,
+            quantities,
+            service.now(),
+            corrective=True,
+            require_improvement=require_improvement,
+        ).passed
+
+    assert not check(held, True)  # an activation must improve the breach
+    assert check(held, False)  # unrelated working orders leave it unchanged: no hard stop
+    assert not check({**held, 10: held.get(10, 0) + 100}, False)  # but never make it worse
+
+
+async def test_a_target_on_the_liquidity_boundary_passes_the_gate_that_charges_twice_its_cost(operational):
+    from decimal import Decimal as D
+
+    service = operational
+    snapshot = service.broker.snapshot
+    budget = min(service.optimizer.baseline_nav, float(snapshot().nav))
+    floor = service.manifest.risk.liquidity_buffer * budget
+    tight = None
+    for slack in (50, 200, 1000, 5000, 20000):  # find an excess liquidity at which the solve binds
+        service.broker.snapshot = lambda slack=slack: snapshot().model_copy(
+            update={"excess_liquidity": D(str(floor + slack))}
+        )
+        service.last_snapshot, service.force_optimize, service.pending_target = (
+            service.broker.snapshot(),
+            True,
+            None,
+        )
+        await service.optimize()
+        target = service.last_target
+        if target is not None and target.status == "OPTIMAL" and target.estimated_cost > 0:
+            tight = target
+            break
+    assert tight is not None
+    result = service.gate.validate(
+        service.broker.snapshot(),
+        service.broker.quotes(),
+        service.last_scenarios,
+        tight.quantities,
+        service.now(),
+        2 * tight.estimated_cost,
+    )
+    assert not any("excess liquidity" in r for r in result.reasons), result.reasons

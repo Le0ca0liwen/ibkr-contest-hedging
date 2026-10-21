@@ -54,6 +54,7 @@ EXIT_CONFIRMATIONS = 2
 # An exit waits for an ordinary spread (the entry's execution spread limits) until this long
 # before its deadline, then sells at the bid regardless rather than carry the inventory.
 EXIT_SPREAD_GRACE_SECONDS = 30
+EXIT_SPREAD_WAIT_SECONDS = 20  # a wide book that lasts longer is the market, not a glitch
 SCENARIO_AGE_SECONDS = 20
 DECISION_RECORD_SECONDS = 15
 MODES = ("off", "shadow", "paper")
@@ -85,6 +86,7 @@ class ClosingBurner:
         self.verified = set()  # short-filled legs whose fills a later reconcile confirmed
         self.confirmations = {}  # downloads made for a short-filled leg
         self.finished_legs = {}  # leg id -> label of a final cycle (late fills are alerted)
+        self.exit_wait_since = None  # first wide-book refusal of the current exit
         self.quiet_seconds = QUIET_SECONDS
         self.loaded = False
         self.burn_epoch = 0
@@ -412,13 +414,17 @@ class ClosingBurner:
                 collar_ticks=collar,
                 reserve=c["expected_loss"],
                 deadline=deadline,
-                # Wait out a momentarily wide book, but never carry the inventory past the window.
-                spread_guard=(deadline - now).total_seconds() > EXIT_SPREAD_GRACE_SECONDS,
+                # Wait out a momentarily wide book (at most EXIT_SPREAD_WAIT_SECONDS), and never
+                # carry the inventory into the last seconds of the window.
+                spread_guard=(deadline - now).total_seconds() > EXIT_SPREAD_GRACE_SECONDS
+                and (now - self.exit_wait_since).total_seconds() < EXIT_SPREAD_WAIT_SECONDS
+                if self.exit_wait_since is not None
+                else (deadline - now).total_seconds() > EXIT_SPREAD_GRACE_SECONDS,
             )
         if result.get("intent_id"):
             self.leg_ids.add(result["intent_id"])
         if result["submitted"]:
-            self._exit_refusal = None
+            self._exit_refusal = self.exit_wait_since = None
             self._event(
                 c,
                 "EXIT_SUBMITTED",
@@ -433,6 +439,8 @@ class ClosingBurner:
             self._event(c, "EXIT_UNCERTAIN", intent_id=result["intent_id"], reason=result["reason"])
             self._set("HALTED", result["reason"])
         else:
+            if "spread wider" in result["reason"] and self.exit_wait_since is None:
+                self.exit_wait_since = now
             if self._exit_refusal != result["reason"]:
                 self._exit_refusal = result["reason"]
                 self._event(c, "EXIT_REFUSED", attempt=attempts, reason=result["reason"])
@@ -515,12 +523,16 @@ class ClosingBurner:
             # The block is released: the hedger and RiskGate now treat it as ordinary inventory.
             s.pending_target = None
             s.force_optimize = True
-            position = s.broker.snapshot().quantities().get(c["con_id"], 0) - c["original_quantity"]
+            try:
+                position = s.broker.snapshot().quantities().get(c["con_id"], 0) - c["original_quantity"]
+                shown = f"the broker position shows {position:+d} against the cycle start"
+            except Exception:  # e.g. disconnected: the alert must still go out, once
+                position, shown = None, "the broker position is unavailable right now"
             s.alert(
-                "error" if result["residual"] or position else "warning",
+                "error" if result["residual"] or position != 0 else "warning",
                 f"Closing burner cycle {c['cycle_id'][:8]} ended RESIDUAL: {reason}; "
                 f"{result['residual']} {c['label']} left as ordinary inventory by the recorded fills "
-                f"(the broker position shows {position:+d} against the cycle start)",
+                f"({shown})",
                 key=("burner_residual", c["session"], c["cycle_id"]),
             )
         self.cycle, self.leg_ids, self.mismatch = None, set(), None
@@ -529,7 +541,7 @@ class ClosingBurner:
         self.verified.clear()
         self.confirmations.clear()
         self._stats = None
-        self._exit_refusal = None
+        self._exit_refusal = self.exit_wait_since = None
         self._set(status, reason)
         self._load_open_cycle()
 
@@ -571,7 +583,8 @@ class ClosingBurner:
                 bool(snapshot.orders or self.store.intents(self.account, True)),
                 "Working orders or intents open",
             ),
-            (s.pending_target is not None or s.pending_recovery is not None, "Hedge plan pending"),
+            # A recovery context without a target is a leftover of a dropped plan, not a plan.
+            (s.pending_target is not None, "Hedge plan pending"),
             (s.last_risk is None or not s.last_risk.passed, "Current risk check not passed"),
             (s.decision_lock.locked(), "Hedge optimization in progress"),
             (ex.burn_open(), "A burn cycle without a final result is still open"),

@@ -135,7 +135,16 @@ class RiskGate:
         self.engine = RiskEngine(manifest)
 
     def validate(
-        self, snapshot, quotes, scenarios, quantities, now, costs=0, corrective=False, day_zero=False
+        self,
+        snapshot,
+        quotes,
+        scenarios,
+        quantities,
+        now,
+        costs=0,
+        corrective=False,
+        day_zero=False,
+        require_improvement=True,
     ):
         reasons = []
         if snapshot.account != self.manifest.account:
@@ -262,7 +271,7 @@ class RiskGate:
                 structural = [
                     r for r in proposed.reasons if "quantity" in r or "cardinality" in r or "Missing" in r
                 ]
-                if not no_worse or not no_new or not improved or structural:
+                if not no_worse or not no_new or (require_improvement and not improved) or structural:
                     reasons.extend(proposed.reasons)
             else:
                 reasons.extend(proposed.reasons)

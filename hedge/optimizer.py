@@ -11,6 +11,9 @@ from .config import NY
 from .models import Target
 from .order_policy import spread_error
 
+DELTA_HEADROOM = 0.9  # target share of the residual-delta cap for symbols without tradable shares
+LIQUIDITY_CUSHION = 0.0002  # of budget, on top of risk.liquidity_buffer
+
 
 def execution_cost(manifest, quotes, identifiers, delta):
     """Fixed, executable slice model; no freely adjustable cost variables."""
@@ -565,8 +568,10 @@ class HedgeOptimizer:
             ]
         )
         constraints += [
-            margin_rates @ increment + costs
-            <= float(snapshot.excess_liquidity) - m.risk.liquidity_buffer * budget
+            # The same 2x cost reserve the RiskGate charges, or every target on this boundary fails it,
+            # plus a small cushion for the newer snapshot the gate re-checks on.
+            margin_rates @ increment + 2 * costs
+            <= float(snapshot.excess_liquidity) - (m.risk.liquidity_buffer + LIQUIDITY_CUSHION) * budget
         ]
         symbols = sorted({m.contract_map[i].symbol for i in ids})
         delta_vectors = {}
@@ -580,7 +585,15 @@ class HedgeOptimizer:
                 ]
             )
             delta_vectors[symbol] = delta_vector
-            constraints += [cp.abs(delta_vector @ total_h) <= m.risk.residual_delta * budget]
+            cap = m.risk.residual_delta * budget
+            if not any(
+                m.contract_map[i].symbol == symbol and m.contract_map[i].kind == "STK" for i in candidates
+            ):
+                # Without tradable shares (SPY shares are forbidden) a breach can only be cured with
+                # options: keep headroom so an ordinary move does not create one, without forcing a
+                # trade when the book already sits closer to the cap.
+                cap = min(cap, max(DELTA_HEADROOM * cap, abs(float(delta_vector @ quantities))))
+            constraints += [cp.abs(delta_vector @ total_h) <= cap]
             stock_vector = np.array(
                 [
                     quotes[i].spot
