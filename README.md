@@ -15,7 +15,8 @@ Double-click **`Start Contest.command`**. It starts the local PostgreSQL
 database, refreshes Moomoo codes and daily history, keeps the Mac awake and opens
 the dashboard; with `autostart: paper` (template default) paper trading then
 starts by itself once the seven legs are held and every activation check passes.
-Everything else is on the dashboard. Details: [contest restrictions and
+Everything else is on the dashboard: see the [contest operator
+guide](docs/CONTEST_OPERATOR_GUIDE.md). Details: [contest restrictions and
 launch](docs/CONTEST_RESTRICTIONS.md#launching-the-contest-dashboard-only).
 
 ## Practice setup
