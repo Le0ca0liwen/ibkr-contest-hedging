@@ -122,10 +122,12 @@ IDLE -> ENTRY: IOC buy q at the ask (tick-rounded with broker.price_tick)
         filled count), and broker position == original + f (bounded 5 s wait,
         then one reconcile; a failed reconcile is retried, never counted)
      -> an IOC that ended short of its quantity is confirmed first: wait 1 s, then
-        download executions, completed orders and positions once
+        download executions, completed orders and positions (an entry once, an exit
+        twice before another exit is sized)
      -> f == 0: CLOSED (nothing to exit)
      -> EXIT: IOC sell f at the bid minus exit_collar_ticks[attempt] ticks, retried with
-        the next collar until the net residual is 0
+        the next collar until the net residual is 0; while the book is wider than the
+        execution spread limits the exit waits, except in its last 30 s
      -> CLOSED, or RESIDUAL when exit attempts are exhausted or the stock order window is
         about to close (close - stock_cutoff - 15 s)
 ```
@@ -137,10 +139,20 @@ IDLE -> ENTRY: IOC buy q at the ask (tick-rounded with broker.price_tick)
   last known `filled` (often 0) and can deliver that before the execution report and
   the position update. Without the confirmation step above, the burner would close an
   entry as "unfilled" while shares land, or send a second exit and go short. Every
-  short-filled IOC (entry or exit) is therefore confirmed by one broker download before
-  the burner decides CLOSED or another exit attempt. If the download fails, it retries;
-  at the close the cycle becomes RESIDUAL.
-- **RESIDUAL.** A once-only alert is raised (key `burner_residual/session/cycle`), the
+  short-filled entry is therefore confirmed by one broker download, and a short-filled
+  exit by two, before the burner decides CLOSED or another exit attempt. If a download
+  fails, it retries; at the close the cycle becomes RESIDUAL. A fill that still arrives
+  after its cycle ended raises an error alert (it is ordinary inventory then).
+- **Never past the close.** A leg that is still not final, or a settle download that keeps
+  failing, finishes the cycle RESIDUAL at the close (after one download), so the hedger is
+  never blocked into the next session. An uncertain leg from an earlier session that a
+  clean reconcile no longer finds at the broker is closed as ABANDONED.
+- **Wide books.** Entries and exits refuse a book wider than the execution spread limits
+  (`execution.stock_spread_absolute/relative`), so a momentary gap cannot turn a planned
+  few-dollar round trip into a large loss. An exit stops waiting 30 s before its deadline
+  and sells at the bid rather than carry the inventory.
+- **RESIDUAL.** A once-only alert (key `burner_residual/session/cycle`) states the residual
+  by the recorded fills and the broker position change since the cycle started; the
   final result releases the hedge block, `pending_target` is cleared and
   `force_optimize` is set. The hedger and RiskGate then treat the leftover as ordinary
   inventory. The burner never liquidates silently.
@@ -255,7 +267,7 @@ dashboard poll scan the whole history. No schema columns change. Instead:
 | jit_headroom / jit_reserve_minutes | 0.5 / 1 | Just-in-time pacing (headroom <= 1) |
 | assumed_cycle_seconds | 20 | Minimum assumed cycle time (measurements only lengthen it) |
 | minimum_improvement | 0.25 | USD modeled improvement per cycle |
-| daily_expense_cap | null | Optional USD cap on realized burn per session |
+| daily_expense_cap | null | Optional USD cap on realized burn per session (commissions not yet reported count at their estimate) |
 | max_cycles_per_day / max_exit_attempts | 300 / 4 | Transmitted cycles; exit legs per cycle |
 | exit_collar_ticks | 0,1,2,5 | Ticks below the bid per exit attempt (non-decreasing) |
 | quote_age_seconds | 3 | Maximum quote age for any burn leg |
