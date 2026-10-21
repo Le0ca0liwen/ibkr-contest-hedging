@@ -8,8 +8,10 @@ seven mandated legs and any leftover non-contest positions, both done in TWS).
 
 - **Start:** double-click **Start Contest.command**. It checks the contest
   configuration, starts the local PostgreSQL database, refreshes the daily price
-  history from Moomoo (quote-only), keeps the Mac awake and opens the dashboard.
-  Leave its window open; you may minimize it.
+  history from Moomoo (quote-only; skipped after 2.5 minutes if OpenD does not
+  answer, and during 15:35-16:10 ET), keeps the Mac awake and opens the dashboard.
+  Leave its window open; you may minimize it. If it says port 8765 is in use,
+  close the other window (Start Practice or an earlier Start Contest) first.
 - **Stop:** close that window (or press Control-C in it). The app pauses
   trading, cancels its own working orders and shuts down cleanly. Filled
   positions stay in the account.

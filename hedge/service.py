@@ -107,6 +107,7 @@ class TradingService:
         self.autostart_next_at = 0.0
         self.autostart_recorded_at = float("-inf")
         self.history_lock = asyncio.Lock()
+        self.history_task = None  # dashboard-started download (cancelled on stop)
         self.history_status = {"status": "unknown", "message": "", "at": None, "as_of": None}
         self.last_monitor_error = None
         self.execution.score_context = lambda snapshot, qs, now: (
@@ -217,22 +218,39 @@ class TradingService:
         delays, failures = (5, 15, 60), 0
         while True:
             await asyncio.sleep(5)
-            process = self.market_data_process
-            if process is None or process.returncode is None:
-                if process is not None and failures:
-                    failures = 0
-                continue
-            self.alert(
-                "warning",
-                f"Moomoo quote collector stopped (exit {process.returncode}); restarting it. "
-                "If this repeats, check that Moomoo OpenD is open and logged in",
-            )
-            await asyncio.sleep(delays[min(failures, len(delays) - 1)])
-            failures += 1
             try:
+                process = self.market_data_process
+                if process is None or process.returncode is None:
+                    if process is not None and failures:
+                        failures = 0
+                    continue
+                if process.returncode == 75:  # ops/record_moomoo.py LOCKED
+                    try:
+                        holder = Path("data/moomoo/collector.lock").read_text().strip() or "unknown"
+                    except OSError:
+                        holder = "unknown"
+                    self.alert(
+                        "error",
+                        f"Another Moomoo quote collector (pid {holder}) from an earlier start still "
+                        "holds the quote feed; it normally exits within seconds. If this repeats, "
+                        f"quit process {holder} in Activity Monitor",
+                    )
+                else:
+                    self.alert(
+                        "warning",
+                        f"Moomoo quote collector stopped (exit {process.returncode}); restarting it. "
+                        "If this repeats, check that Moomoo OpenD is open and logged in",
+                    )
+                await asyncio.sleep(delays[min(failures, len(delays) - 1)])
+                failures += 1
                 await self._start_collector()
-            except OSError as exc:
-                self.alert("error", f"Could not restart the Moomoo quote collector: {exc}")
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:  # supervision must outlive any single failure
+                try:
+                    self.alert("error", f"Could not restart the Moomoo quote collector: {exc}")
+                except Exception:
+                    pass
 
     async def _burner_loop(self):
         """Event-driven (1 s fallback) burner steps; a burner fault never hard-stops hedging."""
@@ -251,9 +269,10 @@ class TradingService:
 
     async def stop(self):
         await self.execution.pause()
-        for task in self.tasks:
+        tasks = [*self.tasks, *([self.history_task] if self.history_task else [])]
+        for task in tasks:
             task.cancel()
-        await asyncio.gather(*self.tasks, return_exceptions=True)
+        await asyncio.gather(*tasks, return_exceptions=True)
         if self.market_data_process and self.market_data_process.returncode is None:
             self.market_data_process.terminate()
             await self.market_data_process.wait()
@@ -507,7 +526,7 @@ class TradingService:
         if self.history_status.get("status") == "running":
             raise ValueError("A price history download is already running")
         self.history_status = {**self.history_status, "status": "running", "message": reason}
-        task = asyncio.create_task(self.refresh_daily_history(reason))
+        task = self.history_task = asyncio.create_task(self.refresh_daily_history(reason))
         task.add_done_callback(lambda t: t.cancelled() or t.exception())  # errors land in status
         return self.history_status
 
@@ -544,6 +563,10 @@ class TradingService:
                 except TimeoutError:
                     process.kill()
                     output = b"Timed out after 180 s"
+                except BaseException:
+                    if process.returncode is None:
+                        process.kill()  # a cancelled refresh (shutdown) leaves no download behind
+                    raise
                 text = output.decode(errors="replace").strip()
                 log.write(f"--- {now.isoformat()} {reason}\n{text}\n")
             # The Moomoo SDK logs to the same stream ("2026-10-21 02:26:56,884 | pid | ..."); report
@@ -740,7 +763,12 @@ class TradingService:
                 "trading, or turn Auto paper off and on",
             )
         else:
-            item("Automatic paper start", "warn", "Off: press Enable paper trading to start")
+            item(
+                "Automatic paper start",
+                "warn",
+                ("Off: once the ✗ rows above are fixed, press" if blocked else "Off: press")
+                + " Enable paper trading to start, or turn Auto paper on",
+            )
         item(
             "Trading",
             "ok" if self.mode == "PAPER" else "warn",

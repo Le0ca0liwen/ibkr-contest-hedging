@@ -5,6 +5,8 @@ import csv
 import fcntl
 import gzip
 import json
+import os
+import sys
 import threading
 import time
 from datetime import datetime, timezone
@@ -14,6 +16,7 @@ from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 ARCHIVE_DAILY_BYTES = 750_000_000
+LOCKED = 75  # another collector holds the lock (the app reports the holder's pid)
 NEW_YORK = ZoneInfo("America/New_York")
 
 
@@ -23,6 +26,16 @@ def archive_path(directory, now):
     if local.weekday() >= 5 or not clock(9, 25) <= local.time() <= clock(16, 10):
         return None
     return Path(directory) / f"raw-{local:%Y%m%d}.jsonl.gz"
+
+
+def exit_with_parent(parent):
+    """Quit when the app that started this collector is gone (crash or force quit), so a
+    leftover collector never keeps the lock or serves an old code list."""
+    while True:
+        time.sleep(5)
+        if os.getppid() != parent:
+            print("The app that started this quote collector stopped; exiting.", flush=True)
+            os._exit(0)
 
 
 def make_handlers(sdk, lock, securities, rights, stamp, bars=None):
@@ -89,8 +102,19 @@ def main():
     codes = json.loads(Path(args.codes).read_text())
     path = Path("data/moomoo/latest.json")
     path.parent.mkdir(parents=True, exist_ok=True)
-    with (path.parent / "collector.lock").open("a") as owner:
-        fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    with (path.parent / "collector.lock").open("a+") as owner:
+        try:
+            fcntl.flock(owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            owner.seek(0)
+            holder = owner.read().strip() or "unknown"
+            print(f"Another quote collector (pid {holder}) holds {owner.name}", flush=True)
+            sys.exit(LOCKED)
+        owner.seek(0)
+        owner.truncate()
+        owner.write(str(os.getpid()))
+        owner.flush()
+        threading.Thread(target=exit_with_parent, args=(os.getppid(),), daemon=True).start()
         import moomoo as sdk
 
         while True:
