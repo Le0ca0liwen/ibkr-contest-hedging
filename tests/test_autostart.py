@@ -387,7 +387,7 @@ async def test_the_automatic_start_row_tells_whether_it_is_armed(launched):
 
     assert row()["status"] == "ok" and row()["detail"].startswith("On")
     await launched.control("shadow")
-    assert row()["status"] == "warn" and "cancelled by an operator action" in row()["detail"]
+    assert row()["status"] == "warn" and "On, but cancelled" in row()["detail"]
     trading = {i["label"]: i for i in launched.checklist()}["Trading"]
     assert "Enable paper trading" in trading["detail"] or "rows above" not in trading["detail"]
     # Turning the switch off and on again arms it from shadow too.
@@ -419,3 +419,50 @@ def test_a_refused_control_names_the_reconciliation_cause_not_a_tws_outage(manif
     response = client.post("/api/control", json={"action": "reconcile"}, headers=headers)
     assert response.status_code == 409 and "TWS answers" in response.json()["detail"]
     assert "BA stock -1141" in response.json()["detail"]
+
+
+async def test_auto_paper_off_during_a_refused_enable_does_not_bring_the_automatic_start_back(launched):
+    launched._autostart_step([])
+    launched.broker.qualified = False
+    reconcile = launched.reconcile
+
+    async def switch_off_meanwhile():
+        launched.set_autostart("off")
+        return await reconcile()
+
+    launched.broker.qualified = True
+    launched.reconcile = switch_off_meanwhile
+    launched.last_scenarios = None  # the Enable is refused after its reconcile
+    with pytest.raises(ValueError):
+        await launched.control("paper")
+    assert launched.mode == "PAUSED" and launched.data_wait is None and not launched.autostart_pending
+
+
+async def test_paper_that_runs_no_longer_carries_a_pending_automatic_start(launched):
+    launched.set_autostart("paper")  # pressed while PAUSED, just before Enable
+    assert launched.autostart_pending
+    assert risk_now(launched).passed
+    await launched.control("paper")
+    assert launched.mode == "PAPER" and not launched.autostart_pending
+
+
+async def test_a_refused_enable_from_shadow_keeps_the_automatic_start_armed(launched):
+    await launched.control("shadow")
+    launched.set_autostart("off")
+    launched.set_autostart("paper")
+    launched.broker.qualified = False
+    with pytest.raises(ValueError):
+        await launched.control("paper")
+    assert launched.mode == "SHADOW" and launched.autostart_pending
+
+
+async def test_a_refused_shadow_while_paper_runs_shows_the_stop(launched, monkeypatch):
+    launched._autostart_step([])
+    assert risk_now(launched).passed
+    await launched._resume_after_data_wait()
+    assert launched.mode == "PAPER"
+    monkeypatch.setattr(launched.store, "intents", lambda *args, **kwargs: [{"state": "CANCEL_PENDING"}])
+    with pytest.raises(ValueError, match="pending cancellations"):
+        await launched.control("shadow")
+    assert launched.mode == "PAUSED" and "Shadow requested" in launched.health
+    assert launched.execution.paused and launched.broker.readonly

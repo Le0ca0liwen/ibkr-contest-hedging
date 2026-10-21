@@ -759,8 +759,8 @@ class TradingService:
             item(
                 "Automatic paper start",
                 "warn",
-                "On, but cancelled by an operator action until the next launch: press Enable paper "
-                "trading, or turn Auto paper off and on",
+                (f"On, but stopped ({self.pause_reason})" if self.pause_reason else "On, but cancelled")
+                + " until the next launch: press Enable paper trading, or turn Auto paper off and on",
             )
         else:
             item(
@@ -956,11 +956,15 @@ class TradingService:
         current = snapshot.quantities()
         # The app's own slice fills (within the ranges its orders own, as for position events)
         # continue a started plan instead of restarting it into its own trade cooldown.
-        foreign = prior is None or any(
-            not (bounds := self.execution.owned_inventory_ranges.get(i))
-            or not bounds[0] <= current.get(i, 0) <= bounds[1]
-            for i in set(current) | set(prior)
-            if current.get(i, 0) != prior.get(i, 0)
+        foreign = (
+            prior is None
+            or not (self.active_plan_started and self.pending_target)
+            or any(
+                not (bounds := self.execution.owned_inventory_ranges.get(i))
+                or not bounds[0] <= current.get(i, 0) <= bounds[1]
+                for i in set(current) | set(prior)
+                if current.get(i, 0) != prior.get(i, 0)
+            )
         )
         if (
             foreign
@@ -1458,6 +1462,16 @@ class TradingService:
                 )
 
     async def _execute_pending(self):
+        try:
+            await self._execute_pending_plan()
+        finally:
+            if self.pending_target is None:
+                # A dropped or finished plan takes its recovery context with it (a stale one
+                # would show 'Hedge plan pending' and block the closing burner).
+                self.pending_recovery = None
+                self.execution.recovery_checks = None
+
+    async def _execute_pending_plan(self):
         if self.execution.burn_open():
             return
         target = self.pending_target
@@ -1498,6 +1512,8 @@ class TradingService:
         if not changed:
             self.pending_target = None
             self.active_plan_started = False
+            # Plan complete with nothing working: its owned ranges must not mask later changes.
+            self.execution.owned_inventory_ranges.clear()
             return
         corrective = not self.gate.engine.evaluate(snapshot, quotes, scenario_for_plan, actual).passed
         if not self.active_plan_started and not corrective:
@@ -1814,16 +1830,22 @@ class TradingService:
         try:
             return await self._control(action, profile, _automatic)
         except Exception as exc:
-            if operator and self.control_epoch == epoch and self.mode not in ("PAPER", "SETUP"):
-                reason = str(exc) or type(exc).__name__
+            reason = str(exc) or type(exc).__name__
+            if operator and self.control_epoch == epoch and self.mode in ("PAPER", "SETUP"):
+                if action in ("pause", "shadow", "profile"):
+                    # Execution was disarmed before the refusal: say so, as Pause does.
+                    self._hard_stop(f"{action.title()} requested; paper execution stopped: {reason}")
+            elif operator and self.control_epoch == epoch:
                 if (
                     interrupted is not None
                     and interrupted["resume_mode"] == "PAPER"
                     and self.mode == "WAITING_DATA"
+                    # Auto paper turned off meanwhile: do not bring the automatic start back.
+                    and (not interrupted.get("autostart") or self.autostart_mode() == "paper")
                 ):
                     self.data_wait = {**interrupted, "epoch": epoch}
                     self.health = "Automatic resume waiting for full preflight: " + reason
-                elif auto_armed and self.mode == "PAUSED":
+                elif auto_armed and self.mode in ("PAUSED", "SHADOW"):
                     self.autostart_pending = self.autostart_mode() == "paper"
                 if self.mode == "WAITING_DATA" and self.data_wait is None:
                     # Nothing would ever resume this wait: show the truth instead of a stuck mode.
@@ -2067,6 +2089,7 @@ class TradingService:
                 self.broker.readonly = False
                 self.execution.paused = self.execution.pause_requested = False
                 self.setup_armed = False
+                self.autostart_pending = False  # paper runs: a later safety stop must not auto-restart
                 self.mode, self.force_optimize = ("PAPER" if action == "paper" else "SETUP"), True
                 if action == "paper" and not result.passed:
                     self.pending_target = self.last_target

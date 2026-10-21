@@ -30,8 +30,10 @@ from .burner import (
     gap_stats,
     hysteresis,
     jit_waiting,
+    option_commission,
     plan_cap,
     select,
+    stock_commission,
 )
 from .config import NY
 from .continuity import DataUnavailable
@@ -46,6 +48,12 @@ SETTLE_SECONDS = 5  # bounded wait for positions to match confirmed fills before
 # update arrived. Wait this long, then download executions, completed orders and positions once
 # before trusting "unfilled" (a CLOSED result or another exit attempt).
 QUIET_SECONDS = 1.0
+# An exit that ended short is confirmed by this many downloads before another exit is sized from
+# the recorded fills: selling a late-reported fill again would leave the account short.
+EXIT_CONFIRMATIONS = 2
+# An exit waits for an ordinary spread (the entry's execution spread limits) until this long
+# before its deadline, then sells at the bid regardless rather than carry the inventory.
+EXIT_SPREAD_GRACE_SECONDS = 30
 SCENARIO_AGE_SECONDS = 20
 DECISION_RECORD_SECONDS = 15
 MODES = ("off", "shadow", "paper")
@@ -75,6 +83,8 @@ class ClosingBurner:
         self.mismatch = None
         self.reconcile_requested = set()
         self.verified = set()  # short-filled legs whose fills a later reconcile confirmed
+        self.confirmations = {}  # downloads made for a short-filled leg
+        self.finished_legs = {}  # leg id -> label of a final cycle (late fills are alerted)
         self.quiet_seconds = QUIET_SECONDS
         self.loaded = False
         self.burn_epoch = 0
@@ -122,7 +132,14 @@ class ClosingBurner:
                     self.reported[identifier] = max(self.reported.get(identifier, 0), filled)
                     if self.cycle is not None:
                         self.wake()
-            elif event in ("execution", "commission", "position") and self.cycle is not None:
+            elif event == "execution" and value.order_ref.removeprefix("hedge:") in self.finished_legs:
+                label = self.finished_legs[value.order_ref.removeprefix("hedge:")]
+                self.service.alert(
+                    "error",
+                    f"Late fill on a closing burner leg after its cycle ended: {value.signed_quantity:+d} "
+                    f"{label}. It is ordinary inventory now; check the position on Positions & risk",
+                )
+            if event in ("execution", "commission", "position") and self.cycle is not None:
                 self.wake()
         except Exception:
             pass
@@ -255,14 +272,23 @@ class ClosingBurner:
                     self._finalize("RESIDUAL", "Unresolved burn leg at the close", legs, fills, now)
                 return
             leg = pending[-1]
+            closed = now >= w["close"]
+            if closed and leg["id"] in self.reconcile_requested:
+                # Downloaded once and still not final: an IOC cannot fill after the close, so
+                # release the hedger instead of blocking it into the next session.
+                self._finalize("RESIDUAL", "Burn leg not final at the close", legs, fills, now)
+                return
             self._set("ENTRY" if leg["leg"] == "entry" else "EXIT", f"Waiting for the {leg['leg']} IOC")
             age = (now - timestamp(leg["created_at"])).total_seconds()
-            if age > LEG_TIMEOUT_SECONDS and leg["id"] not in self.reconcile_requested:
+            if (closed or age > LEG_TIMEOUT_SECONDS) and leg["id"] not in self.reconcile_requested:
                 self.reconcile_requested.add(leg["id"])
                 self._event(c, "RECONCILE", intent_id=leg["id"], reason="IOC leg not terminal")
                 try:
                     await s.reconcile()
                 except Exception:
+                    if closed:
+                        self._finalize("RESIDUAL", "Burn leg unverified at the close", legs, fills, now)
+                        return
                     self.reconcile_requested.discard(leg["id"])  # retry on a later step
                     raise
             return
@@ -284,8 +310,10 @@ class ClosingBurner:
                         )
                         return
                     raise
-                self.verified.add(last["id"])
-                # Recompute from the downloaded executions and positions (once: now verified).
+                self.confirmations[last["id"]] = self.confirmations.get(last["id"], 0) + 1
+                if last["leg"] == "entry" or self.confirmations[last["id"]] >= EXIT_CONFIRMATIONS:
+                    self.verified.add(last["id"])
+                # Recompute from the downloaded executions and positions.
                 return await self._advance(s.now())
         # Settled only when every broker-confirmed fill is recorded AND positions agree with them.
         unreported = any(
@@ -306,7 +334,13 @@ class ClosingBurner:
                 self._set("SETTLING", problem)
             elif not self.mismatch["reconciled"]:
                 self._event(c, "RECONCILE", reason=problem)
-                await s.reconcile()  # a failed reconcile retries; it never counts as reconciled
+                try:
+                    await s.reconcile()  # a failed reconcile retries; it never counts as reconciled
+                except Exception:
+                    if now >= w["close"]:
+                        self._finalize("RESIDUAL", "Fills unverified at the close", legs, fills, now)
+                        return
+                    raise
                 self.mismatch = {"since": s.now(), "reconciled": True}
             else:
                 self._finalize(
@@ -378,6 +412,8 @@ class ClosingBurner:
                 collar_ticks=collar,
                 reserve=c["expected_loss"],
                 deadline=deadline,
+                # Wait out a momentarily wide book, but never carry the inventory past the window.
+                spread_guard=(deadline - now).total_seconds() > EXIT_SPREAD_GRACE_SECONDS,
             )
         if result.get("intent_id"):
             self.leg_ids.add(result["intent_id"])
@@ -474,20 +510,24 @@ class ClosingBurner:
         self.store.record("burn_cycle_result", self.account, result, burn_result_id(c["cycle_id"]))
         self._event(c, status, reason=reason, residual=result["residual"])
         s.execution.owned_inventory_ranges.pop(c["con_id"], None)
+        self.finished_legs.update({leg["id"]: c["label"] for leg in legs})
         if status == "RESIDUAL":
             # The block is released: the hedger and RiskGate now treat it as ordinary inventory.
             s.pending_target = None
             s.force_optimize = True
+            position = s.broker.snapshot().quantities().get(c["con_id"], 0) - c["original_quantity"]
             s.alert(
-                "error" if result["residual"] else "warning",
+                "error" if result["residual"] or position else "warning",
                 f"Closing burner cycle {c['cycle_id'][:8]} ended RESIDUAL: {reason}; "
-                f"{result['residual']} {c['label']} left as ordinary inventory",
+                f"{result['residual']} {c['label']} left as ordinary inventory by the recorded fills "
+                f"(the broker position shows {position:+d} against the cycle start)",
                 key=("burner_residual", c["session"], c["cycle_id"]),
             )
         self.cycle, self.leg_ids, self.mismatch = None, set(), None
         self.reported.clear()
         self.reconcile_requested.clear()
         self.verified.clear()
+        self.confirmations.clear()
         self._stats = None
         self._exit_refusal = None
         self._set(status, reason)
@@ -630,8 +670,11 @@ class ClosingBurner:
         today = self.today(day)
         if today["cycles"] >= p.max_cycles_per_day:
             return self._wait("Daily cycle limit reached", info)
+        # Commission reports arrive late: count an estimate for the ones still missing.
         expense_remaining = (
-            float(p.daily_expense_cap) - today["realized_cost"] if p.daily_expense_cap is not None else None
+            float(p.daily_expense_cap) - today["realized_cost"] - today["fees_estimate_pending"]
+            if p.daily_expense_cap is not None
+            else None
         )
         if expense_remaining is not None and expense_remaining <= 0:
             return self._wait("Daily expense cap reached", info)
@@ -797,6 +840,7 @@ class ClosingBurner:
             "realized_cost": sum(r["realized_loss"] for r in results),
             "fees": sum(r["fees"] for r in results),
             "fees_pending": sum(bool(r.get("fees_pending")) for r in results),
+            "fees_estimate_pending": sum(self._missing_fee_estimate(r) for r in results),
             "turnover": sum(r["turnover"] for r in results),
             "cycle_seconds": measured,
             "mean_cycle_seconds": sum(measured) / len(measured) if measured else None,
@@ -804,6 +848,21 @@ class ClosingBurner:
         }
         self._stats = (day, time.monotonic(), stats)
         return stats
+
+    def _missing_fee_estimate(self, result):
+        if not result.get("fees_pending"):
+            return 0.0
+        p = self.manifest.policy  # commission rates live in the strategy policy
+        estimate = 0.0
+        for side in ("entry", "exit"):
+            units, price = result.get(f"{side}_filled") or 0, result.get(f"{side}_vwap") or 0.0
+            if units:
+                estimate += (
+                    option_commission(p, units)
+                    if result.get("kind") == "OPT"
+                    else stock_commission(p, units, price)
+                )
+        return max(0.0, estimate - (result.get("fees") or 0.0))
 
     def _refresh_fees(self, results):
         """Commission reports arrive after executions; refresh fees for cycles still pending."""

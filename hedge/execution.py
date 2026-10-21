@@ -5,7 +5,9 @@ from datetime import timedelta
 from decimal import Decimal
 from uuid import uuid4
 
+from .config import NY
 from .continuity import quote_coverage
+from .execution_quality import timestamp
 from .models import OrderRequest, SetupPackageRequest, Target
 from .optimizer import execution_cost
 from .order_policy import choose_order, rounded_price, spread_error, urgency_for
@@ -542,7 +544,7 @@ class ExecutionManager:
         # Decimal arithmetic: a float bid - k*tick can land just below a tick and floor one too far.
         return rounded_price(Decimal(str(quote.bid)) - collar_ticks * Decimal(str(tick)), tick, 1)
 
-    def _burn_quote_error(self, quote, now, max_age):
+    def _burn_quote_error(self, quote, now, max_age, spread_con_id=None):
         if quote is None:
             return "Missing burn quote"
         if quote.data_type != ("synthetic" if self.gate.demo else "live"):
@@ -551,6 +553,9 @@ class ExecutionManager:
             return "Stale/future burn quote"
         if quote.bid <= 0 or quote.ask <= 0:
             return "Burn quote has no two-sided book"
+        if spread_con_id and spread_error(self.manifest, self.manifest.contract_map[spread_con_id], quote):
+            # A momentarily wide book would turn a planned few-dollar round trip into a large loss.
+            return "Burn quote spread wider than the execution limit"
         return None
 
     async def submit_burn_leg(
@@ -572,6 +577,7 @@ class ExecutionManager:
         price_cap=None,
         reserve=0.0,
         deadline=None,
+        spread_guard=True,
     ):
         """Durable IOC leg of a closing-burner cycle (entry buy or exit sell).
 
@@ -595,7 +601,7 @@ class ExecutionManager:
             ):
                 return {"submitted": False, "reason": "Prior credit preview failed; burn entry waits"}
             quote = quotes.get(con_id)
-            if error := self._burn_quote_error(quote, now, quote_age):
+            if error := self._burn_quote_error(quote, now, quote_age, spread_guard and con_id):
                 return {"submitted": False, "reason": error}
             limit = self.burn_limit(con_id, quote, signed, collar_ticks)
             if limit <= 0:
@@ -682,7 +688,7 @@ class ExecutionManager:
                 if fresh.quantities() != actual or fresh.orders:
                     raise ValueError("Inventory/orders changed before transmission")
                 fresh_quote = qs.get(con_id)
-                if error := self._burn_quote_error(fresh_quote, clock, quote_age):
+                if error := self._burn_quote_error(fresh_quote, clock, quote_age, spread_guard and con_id):
                     raise ValueError(error)
                 fresh_limit = self.burn_limit(con_id, fresh_quote, signed, collar_ticks)
                 if signed > 0 and fresh_limit > limit:
@@ -718,6 +724,10 @@ class ExecutionManager:
             except Exception as exc:
                 self.store.transition(request.intent_id, "REJECTED")
                 return {"submitted": False, "reason": f"Fresh burn validation: {exc}"}
+            if deadline is not None and self.execution_time(now) >= deadline:
+                # Validation and durable writes take time: never transmit past the deadline.
+                self.store.transition(request.intent_id, "REJECTED")
+                return {"submitted": False, "reason": f"Burner {leg} deadline passed before transmission"}
             self.store.transition(request.intent_id, "SUBMITTING", order_id=order_id)
             bounds = (original_quantity, actual.get(con_id, 0), after[con_id])
             self.owned_inventory_ranges[con_id] = (min(bounds), max(bounds))
@@ -899,6 +909,30 @@ class ExecutionManager:
                 )
             elif row["state"] in ("SUBMITTING", "ACKNOWLEDGED", "PARTIALLY_FILLED", "CANCEL_PENDING"):
                 self.store.transition(row["id"], "UNKNOWN")
+        # DAY and IOC orders cannot outlive their session: an uncertain intent from an earlier
+        # session that the reconciled broker no longer lists is finished (any fill is in positions).
+        today = snapshot.at.astimezone(NY).date()
+        for row in self.store.intents(snapshot.account, True):
+            reference = (
+                ("hedge-package:" + row["package_id"]) if row.get("package_id") else "hedge:" + row["id"]
+            )
+            if (
+                row["state"] == "UNKNOWN"
+                and snapshot.reconciled
+                and reference not in by_ref
+                and timestamp(row["created_at"]).astimezone(NY).date() < today
+            ):
+                self.store.transition(row["id"], "ABANDONED")
+                self.store.record(
+                    "alert",
+                    snapshot.account,
+                    {
+                        "severity": "warning",
+                        "message": f"Uncertain order {row['id'][:8]} from an earlier session is no longer at "
+                        "the broker; closed it (any fill is already in the positions)",
+                        "intent_id": row["id"],
+                    },
+                )
         if self.unresolved():
             self.paused = True
 

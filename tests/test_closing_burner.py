@@ -749,11 +749,12 @@ def test_burner_endpoint_is_protected_downgrade_only_and_exports_are_complete(ma
 # ---------------------------------------------------------------------------------- review regressions
 
 
-def _premature_cancel(broker, which):
+def _premature_cancel(broker, which, release_after=1):
     """IB-like IOC number `which`: ib_async turns error 202 into Cancelled(filled=0) BEFORE the
-    execution report and position update. The late execution arrives with the next download."""
+    execution report and position update. The late execution arrives with download number
+    `release_after` (1 = the next download)."""
     original, download = broker._submit_ioc, broker.reconcile
-    late, sent = [], []
+    late, sent, downloads = [], [], []
 
     def submit(request, order_id):
         sent.append(request)
@@ -786,7 +787,8 @@ def _premature_cancel(broker, which):
         return {"order_id": order_id, "perm_id": order_id}
 
     async def reconcile():
-        while late:  # reqExecutions / reqPositions return what the early status omitted
+        downloads.append(1)
+        while late and len(downloads) >= release_after:  # what the early status omitted
             late.pop(0)()
         return await download()
 
@@ -925,3 +927,87 @@ def test_burn_round_trips_never_touch_recovery_inventory(store, manifest, quotes
         fill(request.intent_id, order_id, signed, f"burn.{order_id}")
     pnl = attributed_trading_pnl(store, manifest, quotes, now)
     assert pnl["daily_trading_pnl"] == pytest.approx(-1)  # only the recovery fill's own fee
+
+
+async def test_an_exit_that_ended_short_is_confirmed_twice_so_a_late_fill_is_never_sold_again(burning):
+    service, clock = await burning()
+    sent = _premature_cancel(service.broker, which=2, release_after=2)
+    await steps(service, 6)
+    result = results(service)[0]
+    assert result["status"] == "CLOSED" and (result["exit_filled"], result["exit_attempts"]) == (200, 1)
+    assert [r.signed_quantity for r in sent] == [200, -200]  # never short
+    assert service.broker.snapshot().quantities().get(10, 0) == 0
+
+
+async def test_a_late_fill_after_the_cycle_ended_raises_an_alert(burning):
+    service, clock = await burning()
+    _premature_cancel(service.broker, which=1, release_after=2)  # beyond the entry's one download
+    await steps(service, 3)
+    assert results(service)[0]["reason"] == "Entry IOC unfilled"
+    await service.broker.reconcile()  # e.g. the routine 60 s download brings the fill
+    await settle(service)
+    alerts = [a["message"] for a in service.store.records("alert", service.manifest.account)]
+    assert any("Late fill on a closing burner leg" in m and "+200" in m for m in alerts)
+
+
+async def test_an_exit_waits_out_a_wide_book_but_sells_before_its_deadline(burning):
+    service, clock = await burning()
+    await steps(service)  # the entry fills
+
+    def widen():
+        refresh(service)
+        quote = service.broker.quotes()[10]
+        wide = quote.model_copy(update={"bid": quote.bid - 10, "observed_at": clock.at})
+        service.broker.update_quotes({**service.broker.quotes(), 10: wide}, clock.at)
+
+    widen()
+    await steps(service, 2)
+    assert "spread wider" in service.burner.reason and not results(service)
+    exits = [r for r in service.store.intents(service.manifest.account) if r.get("leg") == "exit"]
+    assert not [r for r in exits if r["broker_order_id"] is not None]
+    clock.at = close_on(clock.at.date(), 15, 57, 25)  # inside the last 30 s before 15:57:45
+    widen()
+    await steps(service, 2)
+    result = results(service)[0]
+    assert result["status"] == "CLOSED" and result["exit_filled"] == 200
+
+
+async def test_failed_downloads_finalize_the_cycle_at_the_close_instead_of_blocking_hedging(burning):
+    service, clock = await burning()
+    service.broker.ioc_fill_caps = [200]
+    await steps(service)
+    service.broker.positions[10] = 0  # the position report lags the confirmed fills
+
+    async def timeout():
+        raise TimeoutError("reconcile timed out")
+
+    service.reconcile = timeout
+    for _ in range(50):  # 15:50 -> past 16:00
+        clock.at += timedelta(seconds=15)
+        await steps(service)
+    result = results(service)[0]
+    assert result["status"] == "RESIDUAL" and "at the close" in result["reason"]
+    assert not service.execution.burn_open()
+    alerts = [a["message"] for a in service.store.records("alert", service.manifest.account)]
+    assert any("RESIDUAL" in m and "broker position" in m for m in alerts)
+
+
+async def test_an_uncertain_leg_from_an_earlier_session_is_closed_after_a_clean_reconcile(
+    burning, monkeypatch
+):
+    service, clock = await burning()
+
+    async def lost(request, order_id):
+        raise ConnectionError("Socket dropped after placeOrder")
+
+    real = service.broker.submit
+    monkeypatch.setattr(service.broker, "submit", lost)
+    await steps(service, 2)
+    assert service.execution.unresolved()
+    monkeypatch.setattr(service.broker, "submit", real)
+    clock.at = close_on(service.manifest.scoring_sessions[1], 9, 45)
+    refresh(service)
+    await service.reconcile()
+    assert not service.execution.unresolved()
+    legs = [r for r in service.store.intents(service.manifest.account) if r.get("purpose") == "burn"]
+    assert [r["state"] for r in legs] == ["ABANDONED"]

@@ -493,3 +493,40 @@ async def test_reconcile_keeps_a_started_plan_after_its_own_fill_but_not_after_a
     service.broker.positions[stock] = held.get(stock, 0) + 7  # a trade the app did not make
     await service.reconcile()
     assert service.pending_target is None and not service.active_plan_started and service.force_optimize
+
+
+async def test_a_dropped_plan_takes_its_recovery_context_with_it(operational, monkeypatch):
+    service = operational
+    held = service.broker.snapshot().quantities()
+    service.pending_target = Target(
+        quantities=dict(held),  # nothing left to change
+        expected_score=0,
+        current_score=1000,
+        uncertainty=0,
+        status="OPTIMAL",
+        snapshot_id="s",
+        scenario_id="x",
+        config_hash="h",
+    )
+    monkeypatch.setattr(service.recovery, "paper_errors", lambda model_hash: [], raising=False)
+    monkeypatch.setattr(service.recovery, "mode", "paper", raising=False)
+    service.pending_recovery = {
+        "model_hash": None,
+        "generated_at": service.now(),
+        "scenarios": service.last_scenarios,
+        "reference": held,
+    }
+    await service._execute_pending()
+    assert service.pending_target is None and service.pending_recovery is None
+
+
+async def test_reconcile_restarts_when_no_plan_is_running_even_inside_an_old_owned_range(operational):
+    service = operational
+    stock = next(i for i, c in service.manifest.contract_map.items() if c.kind == "STK")
+    held = service.broker.snapshot().quantities().get(stock, 0)
+    service.last_snapshot = service.broker.snapshot()
+    service.execution.owned_inventory_ranges[stock] = (held - 100, held + 100)  # a finished plan's
+    service.pending_target, service.active_plan_started, service.force_optimize = None, False, False
+    service.broker.positions[stock] = held + 50  # e.g. a trade entered by hand in TWS
+    await service.reconcile()
+    assert service.force_optimize
