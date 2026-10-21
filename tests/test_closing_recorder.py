@@ -417,7 +417,7 @@ async def test_optional_timeout_only_quarantines_unheld_unordered_contract(manif
         assert broker.qualified and 103 not in broker.native
         assert 103 in broker.qualification_errors
     else:
-        with pytest.raises(ValueError, match="Required holding/order contracts unavailable"):
+        with pytest.raises(ValueError, match="Contest contracts not verified by IBKR"):
             await broker._connect_and_qualify()
         assert not broker.qualified
 

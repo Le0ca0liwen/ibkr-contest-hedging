@@ -26,3 +26,4 @@ config/local.*.json
 
 # Personal Claude Code permission overrides; never shipped to other checkouts
 .claude/settings.local.json
+.claude/settings.json

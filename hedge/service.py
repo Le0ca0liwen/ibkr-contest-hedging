@@ -613,7 +613,9 @@ class TradingService:
             )
         connected = self.broker.snapshot().connected if self.demo else self.broker.ib.isConnected()
         qualified = getattr(self.broker, "qualified", True)
-        leftovers = self.last_monitor_error and "contracts unavailable" in self.last_monitor_error
+        leftovers = bool(
+            self.last_monitor_error and "not in the contest configuration" in self.last_monitor_error
+        )
         if leftovers:
             item(
                 "IBKR",
@@ -636,13 +638,11 @@ class TradingService:
         else:
             item("IBKR", "ok", f"Connected to {m.account} (port {m.gateway_port})")
         if leftovers:
-            names = self._position_labels()
-            ids = [x.strip() for x in self.last_monitor_error.split(":", 1)[-1].split(";") if x.strip()]
             item(
                 "Account holdings",
                 "fail",
                 "Close these non-contest positions in TWS: "
-                + "; ".join(names.get(int(i), f"conId {i}") if i.isdigit() else i for i in ids),
+                + self.last_monitor_error.split("(close them in TWS):", 1)[-1].strip(),
             )
         legs = m.mandatory.items()
         held = snap.quantities() if snap else {}
@@ -702,41 +702,31 @@ class TradingService:
                 else "Recorded",
             )
         auto = self.autostart_mode()
+        blocked = any(i["status"] == "fail" for i in items)
         item(
             "Automatic paper start",
             "ok" if auto == "paper" and not self.last_monitor_error and not self.pause_reason else "warn",
             ("On" if auto == "paper" else "Off")
             + (
-                " · waiting: " + self.health
-                if self.autostart_pending or (self.data_wait or {}).get("autostart")
-                else ""
+                ""
+                if not (self.autostart_pending or (self.data_wait or {}).get("autostart"))
+                else " · waiting for the ✗ rows above"
+                if blocked
+                else " · waiting: " + self.health
             ),
         )
         item(
             "Trading",
             "ok" if self.mode == "PAPER" else "warn",
-            {
-                "PAPER": "Paper trading on",
-                "WAITING_DATA": "Paper trading waits for its checks: " + self.health,
-            }.get(self.mode, f"{self.mode.title()}: " + self.health),
+            "Paper trading on"
+            if self.mode == "PAPER"
+            else f"{self.mode.title()} until the ✗ rows above are fixed"
+            if blocked
+            else {"WAITING_DATA": "Paper trading waits for its checks: " + self.health}.get(
+                self.mode, f"{self.mode.title()}: " + self.health
+            ),
         )
         return items
-
-    def _position_labels(self):
-        """Best effort: readable names for IBKR positions (for the leftover-positions hint)."""
-        labels = {}
-        try:
-            for position in self.broker.ib.positions(self.manifest.account):
-                c = position.contract
-                name = (
-                    c.symbol
-                    if c.secType == "STK"
-                    else f"{c.symbol} {c.lastTradeDateOrContractMonth} {c.strike:g}{c.right}"
-                )
-                labels[c.conId] = f"{name} ({position.position:g})"
-        except Exception:
-            pass
-        return labels
 
     def restore_autostart(self):
         """At launch: re-apply the dashboard switch and arm the automatic paper start."""

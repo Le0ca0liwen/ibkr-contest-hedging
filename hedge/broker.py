@@ -227,12 +227,25 @@ class IBKRBroker:
             if i in self.manifest.contract_map and self.manifest.contract_map[i].kind == "OPT"
         }
         missing = required - self.native.keys()
+        foreign = sorted(i for i in missing if i not in self.manifest.contract_map)
+        if foreign:
+            # Name them the way TWS shows them, so the operator can close them there.
+            names = {}
+            for position in self.ib.positions(self.manifest.account):
+                c = position.contract
+                name = (
+                    f"{c.symbol} stock"
+                    if c.secType == "STK"
+                    else f"{c.symbol} {c.lastTradeDateOrContractMonth} {c.strike:g}{c.right}"
+                )
+                names[c.conId] = f"{name} {position.position:+g}"
+            raise ValueError(
+                "Positions not in the contest configuration (close them in TWS): "
+                + "; ".join(f"{names.get(i, 'conId')} [{i}]" for i in foreign)
+            )
         if missing:
-            labels = [
-                self.manifest.contract_map[i].label if i in self.manifest.contract_map else str(i)
-                for i in sorted(missing)
-            ]
-            raise ValueError("Required holding/order contracts unavailable: " + "; ".join(labels))
+            labels = [self.manifest.contract_map[i].label for i in sorted(missing)]
+            raise ValueError("Contest contracts not verified by IBKR: " + "; ".join(labels))
 
     async def _qualify_contract(self, c):
         details = await asyncio.wait_for(

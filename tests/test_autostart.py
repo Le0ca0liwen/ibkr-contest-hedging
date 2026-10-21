@@ -163,11 +163,46 @@ async def test_readiness_checklist_names_what_blocks_paper(launched):
     state = launched.state()
     assert state["checklist"] and state["mandatory_legs"] and state["config_hash"]
     # Leftover positions: the IBKR row names the real cause instead of "open TWS".
-    launched.last_monitor_error = "Required holding/order contracts unavailable: 4762; 15547841"
+    launched.last_monitor_error = (
+        "Positions not in the contest configuration (close them in TWS): "
+        "BA stock -1141 [4762]; ITA stock +200 [39046959]"
+    )
     rows = {i["label"]: i for i in launched.checklist()}
     assert "non-contest positions" in rows["IBKR"]["detail"]
-    assert rows["Account holdings"]["detail"].endswith("conId 4762; conId 15547841")
+    assert rows["Account holdings"]["detail"].endswith("BA stock -1141 [4762]; ITA stock +200 [39046959]")
     assert rows["Automatic paper start"]["status"] == "warn"
+    assert "rows above" in rows["Trading"]["detail"]  # the cause is stated once, not on every row
+
+
+def test_leftover_positions_are_named_as_tws_shows_them(manifest):
+    import asyncio
+    from types import SimpleNamespace
+
+    from hedge.broker import IBKRBroker
+
+    broker = IBKRBroker(manifest, asyncio.Queue())
+    broker.native = {c.con_id: object() for c in manifest.contracts}
+    broker.ib.positions = lambda account: [
+        SimpleNamespace(contract=SimpleNamespace(conId=4762, secType="STK", symbol="BA"), position=-1141.0),
+        SimpleNamespace(
+            contract=SimpleNamespace(
+                conId=920159842,
+                secType="OPT",
+                symbol="BA",
+                lastTradeDateOrContractMonth="20261023",
+                strike=195.0,
+                right="C",
+            ),
+            position=-1.0,
+        ),
+    ]
+    snapshot = SimpleNamespace(quantities=lambda: {4762: -1141, 920159842: -1}, orders=())
+    with pytest.raises(ValueError) as error:
+        broker._validate_required_qualification(snapshot)
+    assert str(error.value) == (
+        "Positions not in the contest configuration (close them in TWS): "
+        "BA stock -1141 [4762]; BA 20261023 195C -1 [920159842]"
+    )
 
 
 def test_close_import_accepts_the_statement_figure_as_printed():
