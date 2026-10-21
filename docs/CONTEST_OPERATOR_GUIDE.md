@@ -76,12 +76,14 @@ reason in plain words. The badge counts the ✗ rows.
   (Settings & alerts > Automatic closing NAV recorder) and is the official close. A
   DIVERGED warning means the 16:20 value differed from the 16:00 one; the 16:00 value is
   kept. Check IBKR's closing NAV and correct it in Settings & alerts if needed.
+- **After about 16:26:** read **Day-end miss explanation** (Overview, under the scoring
+  ledger): how far the official close was from the target and why. Nothing to press.
 
 ## After the contest (Nov 4)
 
 Keep the app running until about 16:25 ET on Nov 4. The recorded API closes are the
 official scores; no statement import is needed. Download the records with the
-"Export … ↗" links: scores and burn cycles on Overview, orders, fills and
+"Export … ↗" links: scores, burn cycles and day reports on Overview, orders, fills and
 execution quality on Trades, decisions on Decisions.
 
 ## AI operator features
@@ -96,11 +98,19 @@ all of them on or off; trading never waits for them.
   decisions, risk checks) and this guide, and shows what it relied on. With AI off, or if
   Google fails or 60 questions were asked in the last hour, the answer comes straight from
   the Today rows. One question every 10 seconds. Then do what the Today rows say.
+- **Day-end miss explanation** (Overview, under the scoring ledger): about 16:26 ET on
+  each scored day the app splits the miss (official close minus target) into stock and
+  option moves, trades, commissions, the burner and an "Unexplained" remainder, so the
+  lines add up to the official numbers. The numbers are always shown. With AI on, a short
+  explanation, items worth checking and up to three suggested settings appear below them;
+  the suggestions are never applied, so change a setting only with its own button.
+  **Recompute now** picks up late commission reports or a corrected close; a large
+  Unexplained line usually means an option was marked oddly or close marks are missing.
 
 ## Where things are
 
 - **Overview:** Today, Ask the app, NAV and score cards, risk envelope, latest hedge decision,
-  closing surplus burner, official scoring ledger.
+  closing surplus burner, official scoring ledger, day-end miss explanation.
 - **Positions & risk:** market data monitor, actual holdings, Greeks and risk checks.
 - **Trades:** execution quality, orders, fills and fees.
 - **Decisions:** hedge decision history and the optional AI supervisor (advice only).

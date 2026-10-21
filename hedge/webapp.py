@@ -16,6 +16,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .ai_qa import QABusy, QALimit
+from .day_report import DayReportBusy, DayReportLimit, DayReportWaiting
 from .execution_quality import execution_quality
 
 
@@ -68,6 +69,15 @@ class AutostartSettings(BaseModel):
 class Question(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     question: str = Field(min_length=1, max_length=500)
+
+
+SessionDate = date  # a field named "date" with a default would shadow the type in its annotation
+
+
+class DayReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    date: SessionDate | None = None  # default: the latest scored session whose close has passed
+    action: Literal["compute", "explain"] = "compute"
 
 
 class DailyRateImport(BaseModel):
@@ -129,6 +139,19 @@ def create_app(service):
             raise HTTPException(429, str(exc)) from None
         except QABusy as exc:
             raise HTTPException(409, str(exc)) from None
+
+    @app.post("/api/day-report")
+    async def day_report(body: DayReportRequest):
+        # Deterministic attribution of a scored day's miss; 'explain' starts optional AI text in the
+        # background. Advice only: neither changes any trading state.
+        try:
+            return service.day_reports.request(body.date, body.action)
+        except DayReportLimit as exc:
+            raise HTTPException(429, str(exc)) from None
+        except (DayReportWaiting, DayReportBusy) as exc:
+            raise HTTPException(409, str(exc)) from None
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from None
 
     @app.post("/api/daily-cash-rate")
     async def daily_cash_rate(body: DailyRateImport):
@@ -294,6 +317,8 @@ def create_app(service):
             rows = execution_quality(service.store, account, service.manifest.contract_map)
         elif category == "decisions":
             rows = service.state()["decisions"]
+        elif category == "day_reports":
+            rows = service.day_reports.export_rows()
         else:
             raise HTTPException(404, "Unknown export")
         buffer = io.StringIO()

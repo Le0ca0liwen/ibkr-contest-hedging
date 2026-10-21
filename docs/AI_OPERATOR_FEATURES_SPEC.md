@@ -1303,3 +1303,35 @@ Commit 1 (section 1, section 2 and feature 4):
   asyncio event-loop clock.
 - A `wait_for` timeout or any non-`ValueError` exception in `ask()` maps to the fixed texts "Google AI timed out" /
   "Google AI unavailable; deterministic monitoring continues", so a context-building error also falls back.
+
+Commit 2 (feature 2, day-end miss explanation):
+
+- **Report id includes the commissions.** id = `digest(("day_report", contest_id, D, inputs_digest, fees_digest))[:32]`,
+  where `fees_digest` covers each window fill's commission. With the spec's id (inputs only, fees excluded),
+  **Recompute now** after late commission reports would hit the existing id and `store.record` would keep the old
+  payload. The automatic schedule still keys on `(date, inputs_digest)`, so late fees alone never create a report.
+- **Marks per contract.** IBKR marks are used when IBKR marked the contract at every close at which it is held
+  (otherwise quote mids). For contracts held at both closes this is the spec's rule; for a contract opened or closed
+  during the day it uses IBKR's mark at the close where it is held, so its position and fill lines share one mark per
+  close and the difference does not land in Unexplained.
+- **Automatic AI explanation only for the newest settled day** (once per report; a failed attempt is not retried
+  automatically). Enabling AI after several closes therefore makes one call, not up to ten; older days use
+  **Explain with AI**. A **Recompute now** that creates a new report also starts one explanation when AI is on.
+- **AI off writes no annex.** `explain()` returns without a record and `POST /api/day-report {"action": "explain"}`
+  answers 409 "AI is off: the day-end report shows numbers only ..."; the panel shows "AI off: numbers only". The
+  `disabled` annex status is therefore unused. `explain` computes the report first when the date has none.
+- **Degradation details.** "Option without Greeks" also covers an option without implied vol at D's close (dσ
+  unknown). With the previous close's marks missing, `interest` is also "—" (it needs that close's cash). Rule 3 (wide
+  or non-live quote) checks D's close quote only. A missing scoring target (pending formula or daily rate) is treated
+  like a missing close: 409 from the endpoint, silently skipped by `tick()`.
+- **Dashboard state omits `contracts`** (per-contract rows) from `day_reports` to keep the 2-second poll light; they
+  stay in the record. Each item adds `ai_note` (for example "AI off: numbers only").
+- **Export numbers are numbers.** `official_close`, `target`, `miss`, `score` and `amount_usd` are floats so the
+  formula guard does not prefix negative values with `'`; the exact Decimal strings stay in the record.
+- **Decision context** groups blocking reasons with numbers masked as `#` ("Modeled improvement # does not exceed
+  threshold #") so the top three are meaningful.
+- **`ai_common.ai_error(exc)`** maps any failure to the fixed texts (only `structured()`'s own messages pass through);
+  the Q&A now uses it too.
+- `_ai_operator_loop` is added and started now; it calls only `day_reports.tick(now)` until feature 3 adds
+  `event_risk.tick(now)`. `ai_features` gains `day_report`, `state()` gains `day_reports`, and the Q&A context gains the
+  `day_report` key (date, miss, score, status, three largest lines).

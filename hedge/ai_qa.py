@@ -14,8 +14,9 @@ from uuid import uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from .ai_common import AIFeature, RateLimit, operator_text, safe_alerts
+from .ai_common import AIFeature, RateLimit, ai_error, operator_text, safe_alerts
 from .config import NY
+from .day_report import top_drivers
 
 POINT_TO = (
     "none",
@@ -103,6 +104,28 @@ def _et(value):
         return datetime.fromisoformat(str(value)).astimezone(NY).strftime("%b %d %H:%M ET")
     except ValueError:
         return "time unknown"
+
+
+def _day_report(reports):
+    """Latest day-end report as numbers and app-written driver labels only (no contracts or notes)."""
+    report = (reports or [None])[0]
+    if not isinstance(report, dict):
+        return None
+    official = report.get("official") or {}
+    return {
+        "date": report.get("date"),
+        "miss": _number(_float(official.get("miss"))),
+        "score": _number(_float(official.get("score"))),
+        "status": report.get("status"),
+        "top_drivers": top_drivers(report),
+    }
+
+
+def _float(value):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
 
 
 class OperatorQA(AIFeature):
@@ -201,6 +224,7 @@ class OperatorQA(AIFeature):
                 "previous_close_provenance": state.get("previous_close_provenance"),
                 "api_close_official": state.get("api_close_official"),
             },
+            "day_report": _day_report(state.get("day_reports")),
         }
         keys = [
             "mode",
@@ -323,14 +347,7 @@ class OperatorQA(AIFeature):
                     }
                     self.ok("Answered; advice only")
                 except Exception as exc:  # CancelledError (shutdown) still propagates
-                    # structured() raises only fixed texts; anything else is replaced, never echoed.
-                    message = (
-                        str(exc)
-                        if type(exc) is ValueError
-                        else "Google AI timed out"
-                        if isinstance(exc, TimeoutError)
-                        else "Google AI unavailable; deterministic monitoring continues"
-                    )
+                    message = ai_error(exc)  # fixed texts only, never provider output
                     self.fail(message, "Answers come from the readiness checklist")
                     result = self.fallback(
                         state, note=f"AI unavailable ({message}); answer from the readiness checklist"

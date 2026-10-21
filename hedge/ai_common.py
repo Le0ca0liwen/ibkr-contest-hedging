@@ -53,6 +53,16 @@ APP_ALERT_PREFIXES = (  # app-authored alert families that may be summarized for
 OTHER_ALERT = "Broker or other message (see Settings & alerts)"
 DETAILS = " [details on the dashboard]"
 CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
+UNAVAILABLE = "Google AI unavailable; deterministic monitoring continues"
+FIXED_ERRORS = ("AI disabled", "Invalid Google AI response rejected", "Google AI ")
+
+
+def ai_error(exc):
+    """A failed AI call as one fixed text: Supervisor.structured()'s own ValueErrors pass; a timeout or
+    anything else (including app-side errors) is replaced, never echoed."""
+    if type(exc) is ValueError and str(exc).startswith(FIXED_ERRORS):
+        return str(exc)
+    return "Google AI timed out" if isinstance(exc, TimeoutError) else UNAVAILABLE
 
 
 def operator_text(text, account=None, limit=240):

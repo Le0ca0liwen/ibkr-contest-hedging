@@ -16,6 +16,7 @@ from .closing import CloseMarkRecorder, ClosingRecorder
 from .config import NY
 from .continuity import DataUnavailable, data_only, quote_coverage
 from .data import QuoteRecorder
+from .day_report import DayReporter
 from .demo import demo_quotes
 from .execution import ExecutionManager
 from .execution_quality import execution_quality, timestamp
@@ -132,6 +133,7 @@ class TradingService:
         # when it needs a scenario forecast that includes its own latest fills.
         self.monitor_wakeup = asyncio.Event()
         self.burner = ClosingBurner(self)
+        self.day_reports = DayReporter(self)  # deterministic day-end attribution + optional AI text
 
     def now(self):
         return self.demo_start + timedelta(seconds=time.monotonic() - self.started) if self.demo else utcnow()
@@ -139,6 +141,7 @@ class TradingService:
     async def start(self):
         self.store.initialize()
         self.qa.load()
+        self.day_reports.load()
         Path("data").mkdir(exist_ok=True)
         path = Path("data") / ("writer-" + digest(self.manifest.account)[:12] + ".lock")
         self.writer_file = path.open("a+")
@@ -194,6 +197,7 @@ class TradingService:
             asyncio.create_task(self._burner_loop()),
             asyncio.create_task(self._daily_history_loop()),
             asyncio.create_task(self._collector_loop()),
+            asyncio.create_task(self._ai_operator_loop()),
         ]
 
     async def _start_collector(self):
@@ -279,6 +283,25 @@ class TradingService:
         self.ai_tasks.add(task)
         task.add_done_callback(lambda t: (self.ai_tasks.discard(t), t.cancelled() or t.exception()))
         return task
+
+    async def _ai_operator_loop(self):
+        """Every 30 s: the day-end report schedule (deterministic; its AI text runs in spawn_ai
+        tasks). Never raises into the service and never awaits Google."""
+        while True:
+            await asyncio.sleep(30)
+            try:
+                self.day_reports.tick(self.now())
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                try:
+                    self.alert(
+                        "warning",
+                        f"AI operator schedule failed: {type(exc).__name__}; trading is unaffected",
+                        key=("ai_loop", self.now().astimezone(NY).date().isoformat(), type(exc).__name__),
+                    )
+                except Exception:
+                    pass
 
     async def stop(self):
         await self.execution.pause()
@@ -2338,8 +2361,9 @@ class TradingService:
                 "ai_enabled": self.supervisor.enabled,
                 "ai_status": self.supervisor.status(),
                 # In-memory caches only: no database reads added to the 2 s poll.
-                "ai_features": {"qa": self.qa.status()},
+                "ai_features": {"qa": self.qa.status(), "day_report": self.day_reports.status()},
                 "qa_history": self.qa.history(),
+                "day_reports": self.day_reports.latest(),
                 "recovery": {**self.recovery.latest, "promotion": self.recovery.promotion_status()},
                 "burner": self.burner.state(),
                 "checklist": self.checklist(),
