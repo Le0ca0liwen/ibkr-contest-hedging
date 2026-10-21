@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import fcntl
+import json
 import os
 import time
 from datetime import datetime, timedelta
@@ -18,7 +19,7 @@ from .demo import demo_quotes
 from .execution import ExecutionManager
 from .execution_quality import execution_quality, timestamp
 from .models import digest, utcnow
-from .moomoo_data import MoomooData, missing_codes
+from .moomoo_data import MoomooData, collector_codes, missing_codes
 from .optimizer import HedgeOptimizer, execution_cost
 from .recovery import RecoveryController, recovery_budget_errors
 from .risk import RiskGate
@@ -103,6 +104,9 @@ class TradingService:
         self.auto_hedge_after_setup = False
         self.autostart_override = None  # dashboard choice; None = configuration
         self.autostart_pending = False
+        self.history_lock = asyncio.Lock()
+        self.history_status = {"status": "unknown", "message": "", "at": None, "as_of": None}
+        self.last_monitor_error = None
         self.execution.score_context = lambda snapshot, qs, now: (
             self.closing_target(snapshot, now),
             self.nav_tracker.estimate(snapshot, qs, self.manifest.contract_map),
@@ -145,6 +149,8 @@ class TradingService:
         self.store.record("configuration", self.manifest.account, self.manifest, self.manifest.config_hash)
         self.burner.restore_setting()
         self.restore_autostart()
+        if not self.demo and self.manifest.market_data_provider == "moomoo":
+            self._write_collector_codes()
         if not self.demo and Path("config/local.moomoo-codes.json").exists():
             self.market_data_log = Path("data/moomoo-collector.log").open("a")
             self.market_data_process = await asyncio.create_subprocess_exec(
@@ -160,8 +166,8 @@ class TradingService:
                 self.alert(
                     "error" if not Path("config/local.moomoo-codes.json").exists() else "warning",
                     f"Moomoo collector is not subscribed to {len(missing)} manifest contracts "
-                    f"(e.g. {', '.join(missing[:4])}); run `python -m hedge.cli moomoo-codes --config "
-                    "<config>` and restart",
+                    f"(e.g. {', '.join(missing[:4])}); the quote list could not be written: restart the "
+                    "app with Start Contest.command",
                 )
         if self.demo:
             if not self.rehearsal:
@@ -184,6 +190,7 @@ class TradingService:
             asyncio.create_task(self.closing_recorder.run()),
             asyncio.create_task(self.close_marks.run()),
             asyncio.create_task(self._burner_loop()),
+            asyncio.create_task(self._daily_history_loop()),
         ]
 
     async def _burner_loop(self):
@@ -261,11 +268,14 @@ class TradingService:
                             update={"connected": False, "reconciled": False}
                         )
                     self.ready = False
+                    reason = event
+                    if event == "disconnected" and self.last_monitor_error:
+                        reason = f"IBKR disconnected after: {self.last_monitor_error}"
                     if event == "disconnected" and self._enter_data_wait("IBKR connection interrupted"):
                         pass  # Cancel/reconcile in the monitor, never block event delivery.
                     else:
-                        self._hard_stop(event)
-                    self.alert("error", event)
+                        self._hard_stop(reason)
+                    self.alert("error", reason)
                 elif event == "position":
                     identifier, quantity = value["con_id"], int(float(value["quantity"]))
                     previous = (
@@ -364,6 +374,296 @@ class TradingService:
         self.broker.readonly = True
         self.pending_target = self.pending_recovery = None
         self.active_plan_started = False
+
+    def contest_confirmed(self):
+        """confirmed: true in the file, or the operator confirmed this exact configuration on the
+        dashboard (a durable record keyed by its hash; any configuration change needs it again)."""
+        if self.manifest.confirmed:
+            return True
+        return any(
+            r.get("config_hash") == self.manifest.config_hash
+            for r in self.store.records("configuration_confirmation", self.manifest.account, 20)
+        )
+
+    def confirm_configuration(self, config_hash):
+        if config_hash != self.manifest.config_hash:
+            raise ValueError("The configuration changed since this page loaded; reload and review it again")
+        if not self.demo and not self.broker.qualified:
+            raise ValueError("Connect to IBKR first: every contract must be verified before confirming")
+        self.store.record(
+            "configuration_confirmation",
+            self.manifest.account,
+            {
+                "config_hash": self.manifest.config_hash,
+                "account": self.manifest.account,
+                "mandatory": {
+                    self.manifest.contract_map[i].label: q for i, q in self.manifest.mandatory.items()
+                },
+                "at": self.now().isoformat(),
+            },
+        )
+        return self.state()
+
+    def _write_collector_codes(self):
+        """The Moomoo collector subscribes exactly this configuration's contracts (quote-only)."""
+        path = Path("config/local.moomoo-codes.json")
+        codes = collector_codes(self.manifest)
+        try:
+            current = json.loads(path.read_text())
+        except (OSError, ValueError):
+            current = None
+        if current == codes:
+            return
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if path.exists():
+                path.with_name(path.name + ".bak").write_text(path.read_text())
+            temporary = path.with_name(path.name + ".tmp")
+            temporary.write_text(json.dumps(codes, indent=1) + "\n")
+            temporary.replace(path)
+            self.alert("info", f"Moomoo quote list updated from the configuration ({len(codes)} contracts)")
+        except OSError as exc:
+            self.alert("error", f"Could not write the Moomoo quote list: {exc}")
+
+    def history_symbols(self):
+        m = self.manifest
+        return sorted({c.symbol for c in m.contracts if c.kind == "STK"} | {m.beta_benchmark})
+
+    def history_last_date(self):
+        path = Path(self.manifest.daily_stock_history or "")
+        try:
+            dates = [line.split(",", 1)[0] for line in path.read_text().splitlines()[1:] if line]
+        except OSError:
+            return None
+        return max(dates)[:10] if dates else None
+
+    def _history_preconditions(self):
+        m = self.manifest
+        if self.demo or m.market_data_provider != "moomoo" or not m.daily_stock_history:
+            raise ValueError("Daily price history comes from Moomoo only in the contest configuration")
+        if not Path(".runtime/moomoo-env/bin/python").exists():
+            raise ValueError("The Moomoo environment (.runtime/moomoo-env) is missing")
+        now = self.now()
+        if m.is_session(now.astimezone(NY).date()):
+            close = m.session_close(now.astimezone(NY).date())
+            if close - timedelta(minutes=25) <= now <= close + timedelta(minutes=10):
+                raise ValueError("Not during the closing window (15:35-16:10 ET); try after 16:10 ET")
+        if self.history_lock.locked():
+            raise ValueError("A price history download is already running")
+
+    def start_history_refresh(self, reason):
+        """Dashboard button: check now, download in the background (the panel shows progress)."""
+        self._history_preconditions()
+        if self.history_status.get("status") == "running":
+            raise ValueError("A price history download is already running")
+        self.history_status = {**self.history_status, "status": "running", "message": reason}
+        task = asyncio.create_task(self.refresh_daily_history(reason))
+        task.add_done_callback(lambda t: t.cancelled() or t.exception())  # errors land in status
+        return self.history_status
+
+    async def refresh_daily_history(self, reason):
+        """Download completed daily closes through quote-only Moomoo OpenD (never trades). The
+        scenario engine reloads the file when it changes and keeps the previous good one."""
+        m = self.manifest
+        python = Path(".runtime/moomoo-env/bin/python")
+        try:
+            self._history_preconditions()
+        except ValueError as exc:
+            self.history_status = {**self.history_status, "status": "failed", "message": str(exc)}
+            raise
+        now = self.now()
+        day = now.astimezone(NY).date()
+        async with self.history_lock:
+            self.history_status = {**self.history_status, "status": "running", "message": reason}
+            with Path("data/moomoo-daily.log").open("a") as log:
+                process = await asyncio.create_subprocess_exec(
+                    str(python.absolute()),
+                    "ops/fetch_moomoo_daily.py",
+                    "--symbols",
+                    *self.history_symbols(),
+                    "--as-of",
+                    day.isoformat(),
+                    "--output",
+                    str(m.daily_stock_history),
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.STDOUT,
+                    env={k: v for k, v in os.environ.items() if k in ("HOME", "PATH", "TMPDIR", "LANG")},
+                )
+                try:
+                    output, _ = await asyncio.wait_for(process.communicate(), 180)
+                except TimeoutError:
+                    process.kill()
+                    output = b"Timed out after 180 s"
+                text = output.decode(errors="replace").strip()
+                log.write(f"--- {now.isoformat()} {reason}\n{text}\n")
+            last = text.splitlines()[-1] if text else ""
+            ok = process.returncode == 0
+            self.history_status = {
+                "status": "ok" if ok else "failed",
+                "message": last[:300],
+                "at": now.isoformat(),
+                "as_of": day.isoformat(),
+                "reason": reason,
+            }
+            self.store.record("daily_history_refresh", m.account, self.history_status)
+            if not ok:
+                self.alert(
+                    "warning",
+                    "Daily price history download failed: "
+                    + (last[:200] or "no output")
+                    + ". Is Moomoo OpenD running and logged in?",
+                    key=("history_failed", day.isoformat(), last[:80]),
+                )
+            return self.history_status
+
+    async def _daily_history_loop(self):
+        """Before each open (08:30-09:29 ET on exchange sessions) refresh the daily closes once;
+        retry every 5 minutes after a failure."""
+        m = self.manifest
+        if self.demo or m.market_data_provider != "moomoo" or not m.daily_stock_history:
+            return
+        next_try = 0.0
+        while True:
+            await asyncio.sleep(60)
+            try:
+                now = self.now()
+                ny = now.astimezone(NY)
+                if not m.is_session(ny.date()) or time.monotonic() < next_try:
+                    continue
+                window = (ny.hour, ny.minute)
+                done = (
+                    self.history_status.get("status") == "ok"
+                    and self.history_status.get("as_of") == ny.date().isoformat()
+                )
+                if (8, 30) <= window <= (9, 29) and not done:
+                    status = await self.refresh_daily_history("Automatic pre-open refresh")
+                    next_try = time.monotonic() + (0 if status["status"] == "ok" else 300)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.history_status = {**self.history_status, "status": "failed", "message": str(exc)}
+                next_try = time.monotonic() + 300
+
+    def checklist(self):
+        """Read-only readiness summary for the dashboard (no broker calls, no state changes)."""
+        m, items = self.manifest, []
+        snap = self.last_snapshot
+
+        def item(label, status, detail):
+            items.append({"label": label, "status": status, "detail": detail})
+
+        postgres = self.store.engine.dialect.name == "postgresql"
+        if not self.demo:
+            item(
+                "Database",
+                "ok" if postgres else "fail",
+                "PostgreSQL (durable)"
+                if postgres
+                else "SQLite: paper trading refuses it. Close this app and start Start Contest.command",
+            )
+        connected = self.broker.snapshot().connected if self.demo else self.broker.ib.isConnected()
+        qualified = getattr(self.broker, "qualified", True)
+        if not connected:
+            item(
+                "IBKR",
+                "fail",
+                f"Not connected: open TWS (Paper) with the API enabled on port {m.gateway_port}",
+            )
+        elif not qualified:
+            item(
+                "IBKR",
+                "fail",
+                "Connected; contract verification failed: " + (self.last_monitor_error or self.health),
+            )
+        else:
+            item("IBKR", "ok", f"Connected to {m.account} (port {m.gateway_port})")
+        if self.last_monitor_error and "contracts unavailable" in self.last_monitor_error:
+            item(
+                "Account holdings",
+                "fail",
+                "Close the non-contest positions in TWS (IBKR conIds): "
+                + self.last_monitor_error.split(":", 2)[-1].strip(),
+            )
+        legs = m.mandatory.items()
+        held = snap.quantities() if snap else {}
+        done = [i for i, q in legs if held.get(i, 0) == q]
+        todo = [
+            f"{'BUY' if q - held.get(i, 0) > 0 else 'SELL'} {abs(q - held.get(i, 0))} {m.contract_map[i].label}"
+            for i, q in legs
+            if held.get(i, 0) != q
+        ]
+        item(
+            "Mandated legs",
+            "ok" if not todo else "fail",
+            f"{len(done)} of {len(m.mandatory)} held"
+            + ("" if not todo else ". Enter in TWS (Paper): " + "; ".join(todo)),
+        )
+        confirmed = self.contest_confirmed()
+        item(
+            "Contest configuration",
+            "ok" if confirmed else "fail",
+            "Confirmed"
+            if confirmed
+            else "Not confirmed: review the seven legs and press Confirm configuration",
+        )
+        live = sum(
+            1 for q in self.last_quotes.values() if q.data_type == ("synthetic" if self.demo else "live")
+        )
+        item(
+            "Quotes",
+            "ok" if self.last_quotes and live == len(self.last_quotes) else "warn",
+            f"{live} of {len(self.last_quotes)} quotes live"
+            + (
+                ""
+                if live
+                else " (quotes are read once IBKR is connected and the contracts are verified)"
+                if not connected or not qualified
+                else " (Moomoo quotes are live 09:30-16:00 ET)"
+            ),
+        )
+        if not self.demo and m.daily_stock_history:
+            last = self.history_last_date()
+            status = self.history_status
+            item(
+                "Price history",
+                "ok" if last and status.get("status") != "failed" else "warn" if last else "fail",
+                (f"Daily closes through {last}" if last else "No daily history file yet")
+                + (f" · last download {status['status']}: {status['message']}" if status.get("at") else ""),
+            )
+        day = m.active_session(self.now())
+        if day is not None and day != m.day_zero:
+            record = self.ledger.previous_close_record(day)
+            previous = self.ledger.previous_close(day)
+            provenance = (record or {}).get("provenance")
+            item(
+                "Previous official close",
+                "fail" if previous is None else "warn" if provenance == "api" else "ok",
+                "Missing: enter the IBKR statement NAV (Settings & alerts)"
+                if previous is None
+                else "API capture only: enter the IBKR statement NAV when it is published"
+                if provenance == "api"
+                else "Recorded",
+            )
+        auto = self.autostart_mode()
+        item(
+            "Automatic paper start",
+            "ok" if auto == "paper" else "warn",
+            ("On" if auto == "paper" else "Off")
+            + (
+                " · waiting: " + self.health
+                if self.autostart_pending or (self.data_wait or {}).get("autostart")
+                else ""
+            ),
+        )
+        item(
+            "Trading",
+            "ok" if self.mode == "PAPER" else "warn",
+            {
+                "PAPER": "Paper trading on",
+                "WAITING_DATA": "Paper trading waits for its checks: " + self.health,
+            }.get(self.mode, f"{self.mode.title()}: " + self.health),
+        )
+        return items
 
     def restore_autostart(self):
         """At launch: re-apply the dashboard switch and arm the automatic paper start."""
@@ -568,6 +868,7 @@ class TradingService:
                 if time.monotonic() - self.last_reconcile >= self.manifest.policy.reconcile_seconds:
                     await self.reconcile()
                 self.last_snapshot = self.broker.snapshot()
+                self.last_monitor_error = None
                 if self.manifest.next_close(self.now()) is None:
                     if self.mode in ("PAPER", "SETUP", "WAITING_DATA"):
                         self._hard_stop("Contest ended; filled holdings retained")
@@ -736,6 +1037,7 @@ class TradingService:
                 await asyncio.sleep(self.manifest.policy.risk_seconds)
             except Exception as exc:
                 message = f"{type(exc).__name__}: {exc}"
+                self.last_monitor_error = message
                 if self.data_wait and self.data_wait.get("autostart"):
                     # Paper never started: keep the launch-time automatic start armed.
                     self.autostart_pending = True
@@ -1363,9 +1665,14 @@ class TradingService:
                 self.pause_reason = None
                 self.health = "Shadow monitoring enabled; no paper submissions"
             elif action in ("paper", "setup", "arm_setup"):
+                if action != "paper" and self.manifest.contest_rules == "spcx_rklb_spy":
+                    raise ValueError(
+                        "Automatic Day 0 purchases are not supported for this contest: enter the seven "
+                        "legs in TWS (Paper); hedging starts once all seven are held"
+                    )
                 if self.manifest.scoring_rule == "pending_interest_adjustment":
                     raise ValueError("Instructor's revised scoring formula required before activation")
-                if not self.manifest.confirmed or not self.broker.qualified:
+                if not self.contest_confirmed() or not self.broker.qualified:
                     raise ValueError("Confirm contest configuration and broker contract identities first")
                 if not self.demo and self.store.engine.dialect.name != "postgresql":
                     raise ValueError(
@@ -1700,6 +2007,7 @@ class TradingService:
                 "day_zero": str(self.manifest.day_zero),
                 "purchase_session": str(self.manifest.purchase_session),
                 "setup": {
+                    "supported": self.manifest.contest_rules != "spcx_rklb_spy",
                     "armed": self.setup_armed,
                     "auto_hedge": self.auto_hedge_after_setup,
                     "plan": self.setup_target_quantities,
@@ -1777,6 +2085,16 @@ class TradingService:
                 "ai_status": self.supervisor.status(),
                 "recovery": {**self.recovery.latest, "promotion": self.recovery.promotion_status()},
                 "burner": self.burner.state(),
+                "checklist": self.checklist(),
+                "mandatory_legs": [
+                    {"label": self.manifest.contract_map[i].label, "quantity": q, "con_id": i}
+                    for i, q in self.manifest.mandatory.items()
+                ],
+                "daily_history": {
+                    "symbols": self.history_symbols(),
+                    "last_date": self.history_last_date() if not self.demo else None,
+                    **self.history_status,
+                },
                 "autostart": {
                     "mode": self.autostart_mode(),
                     "configured": self.manifest.autostart,
@@ -1837,6 +2155,6 @@ class TradingService:
                 "scoring_sessions": [str(d) for d in self.manifest.scoring_sessions],
                 "session_clock": self._session_clock(),
                 "open_intent_count": len(self.store.intents(self.manifest.account, True)),
-                "confirmed": self.manifest.confirmed,
+                "confirmed": self.contest_confirmed(),
             }
         )

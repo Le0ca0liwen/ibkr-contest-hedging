@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import json
 import os
+import signal
 from datetime import date
 from pathlib import Path
 from uuid import uuid4
@@ -246,6 +247,9 @@ def main():
                 pd.read_parquet(args.history) if args.history else None,
                 rehearsal=args.rehearsal,
             )
+            # Closing the launcher's Terminal window sends SIGHUP, which uvicorn ignores: turn it
+            # into SIGTERM so shutdown pauses trading, cancels working app orders and frees locks.
+            signal.signal(signal.SIGHUP, lambda *_: os.kill(os.getpid(), signal.SIGTERM))
             uvicorn.run(create_app(service), host="127.0.0.1", port=args.port, log_level="info")
         elif args.command == "import-closes":
             manifest = load_manifest(args.config)

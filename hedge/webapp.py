@@ -12,7 +12,7 @@ from typing import Literal
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
 from .execution_quality import execution_quality
@@ -30,6 +30,17 @@ class CloseImport(BaseModel):
     nav: Decimal
     source: str
     account: str
+
+    @field_validator("nav", mode="before")
+    @classmethod
+    def plain_number(cls, value):
+        # Accept the statement figure as printed, e.g. "$1,002,345.67".
+        return value.replace("$", "").replace(",", "").strip() if isinstance(value, str) else value
+
+
+class ConfigConfirmation(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    config_hash: str
 
 
 class AISettings(BaseModel):
@@ -168,6 +179,22 @@ def create_app(service):
         try:
             async with service.control_lock:
                 return service.set_autostart(body.mode)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.post("/api/confirm-config")
+    async def confirm_config(body: ConfigConfirmation):
+        try:
+            async with service.control_lock:
+                return service.confirm_configuration(body.config_hash)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+
+    @app.post("/api/daily-history/refresh")
+    async def refresh_history():
+        # Quote-only Moomoo download; never changes the trading mode.
+        try:
+            return service.start_history_refresh("Dashboard request")
         except ValueError as exc:
             raise HTTPException(409, str(exc)) from exc
 

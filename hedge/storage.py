@@ -114,8 +114,8 @@ def burn_leg_prefix(cycle_id):
 
 
 def utc_iso(value):
-    """Record times are stored in UTC; SQLite returns them naive, so label them explicitly."""
-    return (value if value.tzinfo else value.replace(tzinfo=UTC)).isoformat()
+    """Record times in UTC: SQLite returns them naive, PostgreSQL in the session time zone."""
+    return (value.astimezone(UTC) if value.tzinfo else value.replace(tzinfo=UTC)).isoformat()
 
 
 def burn_leg_id(cycle_id):

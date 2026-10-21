@@ -422,6 +422,9 @@ class Manifest(Frozen):
     def session_close(self, day: date) -> datetime:
         return xcals.get_calendar("XNYS").session_close(pd.Timestamp(day)).to_pydatetime()
 
+    def is_session(self, day: date) -> bool:
+        return xcals.get_calendar("XNYS").is_session(pd.Timestamp(day))
+
     def session_open(self, day: date) -> datetime:
         return xcals.get_calendar("XNYS").session_open(pd.Timestamp(day)).to_pydatetime()
 

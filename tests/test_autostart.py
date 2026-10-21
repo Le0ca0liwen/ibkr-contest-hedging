@@ -120,3 +120,96 @@ async def test_repeated_alerts_are_not_flooded_and_record_times_carry_utc(launch
     alerts = launched.store.records("alert", launched.manifest.account)
     assert [a["message"] for a in alerts].count("disconnected") == 1
     assert all(a["at"].endswith("+00:00") for a in alerts)
+
+
+async def test_contest_setup_is_manual_and_confirmation_can_come_from_the_dashboard(store):
+    from hedge.demo import demo_manifest
+
+    contest = demo_manifest().model_copy(update={"confirmed": False})
+    service = TradingService(contest, store, demo=True)
+    assert not service.contest_confirmed()
+    with pytest.raises(ValueError, match="configuration changed"):
+        service.confirm_configuration("stale-hash")
+    state = service.confirm_configuration(contest.config_hash)
+    assert state["confirmed"] and service.contest_confirmed()
+    record = store.records("configuration_confirmation", contest.account)[0]
+    assert record["config_hash"] == contest.config_hash and record["mandatory"]
+    # Any configuration change needs a fresh confirmation.
+    changed = TradingService(
+        contest.model_copy(update={"initial_nav": contest.initial_nav + 1}), store, demo=True
+    )
+    assert changed.manifest.config_hash != contest.config_hash and not changed.contest_confirmed()
+
+
+async def test_seven_leg_contest_refuses_automatic_purchases(manifest, store):
+    contest = manifest.model_copy(update={"contest_rules": "spcx_rklb_spy"})
+    service = TradingService(contest, store, demo=True)
+    for action in ("arm_setup", "setup"):
+        with pytest.raises(ValueError, match="enter the seven legs in TWS"):
+            await service.control(action)
+
+
+async def test_readiness_checklist_names_what_blocks_paper(launched):
+    items = {i["label"]: i for i in launched.checklist()}
+    assert items["Mandated legs"]["status"] == "ok"
+    assert items["Automatic paper start"]["detail"].startswith("On")
+    assert items["Trading"]["status"] == "warn"
+    launched.broker.positions.clear()
+    launched.last_snapshot = launched.broker.snapshot()
+    legs = {i["label"]: i for i in launched.checklist()}["Mandated legs"]
+    assert legs["status"] == "fail" and "Enter in TWS (Paper): BUY" in legs["detail"]
+    state = launched.state()
+    assert state["checklist"] and state["mandatory_legs"] and state["config_hash"]
+
+
+def test_close_import_accepts_the_statement_figure_as_printed():
+    from hedge.webapp import CloseImport
+
+    row = CloseImport(date="2026-10-21", nav="$1,002,345.67", source="IBKR statement", account="DU1")
+    assert str(row.nav) == "1002345.67"
+
+
+async def test_collector_codes_and_daily_history_refresh_need_no_terminal(
+    manifest, store, tmp_path, monkeypatch
+):
+    import json
+    from datetime import datetime
+
+    from hedge.config import NY
+    from hedge.moomoo_data import collector_codes
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "data").mkdir()
+    contest = manifest.model_copy(
+        update={"market_data_provider": "moomoo", "daily_stock_history": "data/daily.csv"}
+    )
+    service = TradingService(contest, store, demo=True)
+    service.demo = False  # exercise the live-only paths without a broker
+    service.now = lambda: datetime(2026, 10, 22, 10, 0, tzinfo=NY)
+    codes = tmp_path / "config/local.moomoo-codes.json"
+    codes.parent.mkdir()
+    codes.write_text('["US.OLD"]')
+    service._write_collector_codes()
+    assert json.loads(codes.read_text()) == collector_codes(contest)
+    assert (tmp_path / "config/local.moomoo-codes.json.bak").read_text() == '["US.OLD"]'
+
+    fake = tmp_path / ".runtime/moomoo-env/bin/python"
+    fake.parent.mkdir(parents=True)
+    fake.write_text("#!/bin/sh\necho 'Archived 12 prior completed daily observations'\n")
+    fake.chmod(0o755)
+    status = await service.refresh_daily_history("test")
+    assert status["status"] == "ok" and status["as_of"] == "2026-10-22"
+    assert "Archived 12" in status["message"]
+    service.now = lambda: datetime(2026, 10, 22, 15, 50, tzinfo=NY)
+    with pytest.raises(ValueError, match="closing window"):
+        service.start_history_refresh("button")
+
+
+def test_record_times_are_utc_from_either_database():
+    from datetime import datetime
+
+    from hedge.config import NY
+    from hedge.storage import utc_iso
+
+    assert utc_iso(datetime(2026, 10, 21, 6, 11, 35)) == "2026-10-21T06:11:35+00:00"  # SQLite (naive)
+    assert utc_iso(datetime(2026, 10, 21, 2, 11, 35, tzinfo=NY)) == "2026-10-21T06:11:35+00:00"  # PostgreSQL
