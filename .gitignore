@@ -23,3 +23,6 @@ config/local.*.json
 
 # Claude Code workflow worktrees
 .claude/worktrees/
+
+# Personal Claude Code permission overrides; never shipped to other checkouts
+.claude/settings.local.json
