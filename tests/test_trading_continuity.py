@@ -609,3 +609,97 @@ async def test_a_target_on_the_liquidity_boundary_passes_the_gate_that_charges_t
         2 * tight.estimated_cost,
     )
     assert not any("excess liquidity" in r for r in result.reasons), result.reasons
+
+
+def _breach(metrics_delta):
+    from hedge.models import RiskResult
+
+    metrics = {
+        "budget": 1_000_000.0,
+        "stress_loss": 0.0,
+        "gross_notional": 0.0,
+        "delta:SPY": metrics_delta,
+        "excess_liquidity_estimate": 900_000.0,
+    }
+    failed = metrics_delta > 100_000
+    return RiskResult(
+        passed=not failed, reasons=("Residual delta cap: SPY",) if failed else (), metrics=metrics
+    )
+
+
+def _working(service, monkeypatch, order_ref="hedge:plan-slice"):
+    snap = service.broker.snapshot()
+    working = snap.model_copy(
+        update={"orders": (WorkingOrder(order_id=7, con_id=10, signed_remaining=100, order_ref=order_ref),)}
+    )
+    monkeypatch.setattr(service.broker, "snapshot", lambda: working)
+    cancelled = []
+
+    async def cancel(order_id):
+        cancelled.append(order_id)
+
+    monkeypatch.setattr(service.execution, "cancel_order", cancel)
+    return cancelled
+
+
+async def test_a_breach_the_market_made_after_the_risk_read_never_blames_a_working_order(
+    operational, monkeypatch
+):
+    service = operational
+    assert service.mode == "PAPER"
+    service.last_risk = _breach(99_000.0)  # the loop's earlier read on older quotes passed
+    monkeypatch.setattr(service.gate.engine, "evaluate", lambda *a, **k: _breach(101_000.0))
+    cancelled = _working(service, monkeypatch)  # an unrelated order leaves SPY delta unchanged
+    await service._check_working_orders()
+    assert service.mode == "PAPER" and not cancelled
+
+
+async def test_a_working_order_deepening_a_market_breach_is_withdrawn_without_stopping(
+    operational, monkeypatch
+):
+    service = operational
+    held = service.broker.snapshot().quantities()
+    monkeypatch.setattr(
+        service.gate.engine,
+        "evaluate",
+        lambda snapshot, quotes, scenarios, quantities, costs=0: _breach(
+            102_000.0 if quantities.get(10, 0) != held.get(10, 0) else 101_000.0
+        ),
+    )
+    cancelled = _working(service, monkeypatch)
+    await service._check_working_orders()
+    assert service.mode == "PAPER" and cancelled == [7] and service.force_optimize
+    await service._check_working_orders()
+    assert cancelled == [7]  # withdrawn once, not on every loop
+
+
+async def test_our_order_the_market_pushed_past_a_limit_is_withdrawn_not_a_hard_stop(
+    operational, monkeypatch
+):
+    service = operational
+    held = service.broker.snapshot().quantities()
+    monkeypatch.setattr(
+        service.gate.engine,
+        "evaluate",
+        lambda snapshot, quotes, scenarios, quantities, costs=0: _breach(
+            101_000.0 if quantities.get(10, 0) != held.get(10, 0) else 99_000.0
+        ),
+    )
+    cancelled = _working(service, monkeypatch)
+    await service._check_working_orders()
+    assert service.mode == "PAPER" and cancelled == [7] and "withdrawn" in service.health
+
+
+async def test_a_foreign_working_order_that_would_breach_a_limit_still_hard_stops(operational, monkeypatch):
+    service = operational
+    held = service.broker.snapshot().quantities()
+    monkeypatch.setattr(
+        service.gate.engine,
+        "evaluate",
+        lambda snapshot, quotes, scenarios, quantities, costs=0: _breach(
+            101_000.0 if quantities.get(10, 0) != held.get(10, 0) else 99_000.0
+        ),
+    )
+    cancelled = _working(service, monkeypatch, order_ref="")  # e.g. an order entered in TWS
+    await service._check_working_orders()
+    assert service.mode == "PAUSED" and "Working-order check" in service.health and not cancelled

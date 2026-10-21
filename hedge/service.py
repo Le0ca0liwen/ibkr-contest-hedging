@@ -37,6 +37,16 @@ from .valuation import NAVTracker
 STATE_ROWS = 250  # most recent orders, fills and execution-quality rows in state()
 
 
+# Portfolio-limit reasons a market move can create while our own orders work (vs rule violations).
+MARKET_RISK_REASONS = (
+    "Residual delta cap",
+    "Stress loss exceeds",
+    "Gross underlying-equivalent notional",
+    "Insufficient excess liquidity",
+    "Stock notional cap",
+)
+
+
 class TradingService:
     def __init__(self, manifest, store, demo=False, history=None, rehearsal=False):
         if rehearsal and not demo:
@@ -124,6 +134,7 @@ class TradingService:
         self.setup_planner = SetupPlanner(manifest, self.gate)
         self.recovery = RecoveryController(manifest, store)
         self.pending_recovery = None
+        self.withdrawn_orders = set()  # working orders cancelled after a market-made breach (once each)
         self.market_data_errors = {}
         self.api_close_warned = set()
         self.closing_recorder = ClosingRecorder(
@@ -1128,27 +1139,7 @@ class TradingService:
                     if self.mode in ("PAPER", "SETUP") and data_only(self.last_risk.reasons):
                         await self._wait_for_data("; ".join(self.last_risk.reasons))
                     if self.mode in ("PAPER", "SETUP") and self.last_snapshot.orders:
-                        working_snapshot = self.broker.snapshot()
-                        projected_check = self.gate.validate(
-                            working_snapshot,
-                            self.broker.quotes(),
-                            self.last_scenarios,
-                            working_snapshot.projected(),
-                            self.now(),
-                            corrective=not self.last_risk.passed,
-                            day_zero=self.mode == "SETUP",
-                            # Hard-stop only when working orders worsen or add a breach; one the
-                            # market caused is the optimizer's to correct, not a reason to stop.
-                            require_improvement=False,
-                        )
-                        if not projected_check.passed:
-                            message = "Working-order check: " + "; ".join(projected_check.reasons)
-                            if data_only(projected_check.reasons):
-                                await self._wait_for_data(message)
-                            else:
-                                self._hard_stop(message)
-                                await self.execution.pause()
-                                self.alert("error", message)
+                        await self._check_working_orders()
                     if self.mode == "WAITING_DATA":
                         self.ready = False
                     await self._resume_after_data_wait()
@@ -1261,6 +1252,59 @@ class TradingService:
                     pass
                 next_connection = time.monotonic() + 15
                 await asyncio.sleep(5)
+
+    async def _check_working_orders(self):
+        """Working orders must never deepen a risk breach or create one. Our own orders that the
+        market has since moved past a portfolio limit are withdrawn and re-planned; foreign orders
+        and rule violations hard-stop paper trading."""
+        working_snapshot, working_quotes = self.broker.snapshot(), self.broker.quotes()
+        # Judge the held book on the SAME fresh quotes as the projected one: with
+        # last_risk (older quotes) a breach the market made between the two reads
+        # was blamed on whatever order happened to be working.
+        held = self.gate.engine.evaluate(
+            working_snapshot, working_quotes, self.last_scenarios, working_snapshot.quantities()
+        )
+        projected_check = self.gate.validate(
+            working_snapshot,
+            working_quotes,
+            self.last_scenarios,
+            working_snapshot.projected(),
+            self.now(),
+            corrective=not held.passed,
+            day_zero=self.mode == "SETUP",
+            # Hard-stop only when working orders worsen or add a breach; one the
+            # market caused is the optimizer's to correct, not a reason to stop.
+            require_improvement=False,
+        )
+        if not projected_check.passed:
+            message = "Working-order check: " + "; ".join(projected_check.reasons)
+            ours = all(o.order_ref.startswith(("hedge:", "hedge-package:")) for o in working_snapshot.orders)
+            if data_only(projected_check.reasons):
+                await self._wait_for_data(message)
+            elif ours and all(r.startswith(MARKET_RISK_REASONS) for r in projected_check.reasons):
+                # Our own orders passed every check when sent; the market has since moved them past a
+                # risk limit. Withdraw them once and re-plan; paper trading keeps running. Foreign
+                # orders and rule violations (forbidden, mandated, structural) still hard-stop.
+                try:
+                    # A burn IOC ends by itself within seconds; the burner settles its own cycle.
+                    for order in () if self.execution.burn_open() else working_snapshot.orders:
+                        if order.order_id not in self.withdrawn_orders:
+                            self.withdrawn_orders.add(order.order_id)
+                            await self.execution.cancel_order(order.order_id)
+                except Exception as exc:
+                    self._hard_stop(f"{message}; withdrawal failed: {type(exc).__name__}")
+                    await self.execution.pause()
+                    self.alert("error", self.health)
+                    return
+                self.pending_target = None
+                self.active_plan_started = False
+                self.force_optimize = True
+                self.health = message + "; working orders withdrawn, re-planning"
+                self.alert("warning", self.health)
+            else:
+                self._hard_stop(message)
+                await self.execution.pause()
+                self.alert("error", message)
 
     async def _monitor_pause(self):
         """Sleep risk_seconds, or less when the closing burner needs a fresh scenario forecast."""
