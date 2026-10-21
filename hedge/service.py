@@ -1624,6 +1624,12 @@ class TradingService:
             self.alert("warning", f"AI supervisor unavailable; deterministic strategy continues: {exc}")
 
     async def control(self, action, profile=None, *, _automatic=False):
+        if action in ("setup", "arm_setup") and self.manifest.contest_rules == "spcx_rklb_spy":
+            # Refused before anything changes, so a stale page cannot disturb a pending start.
+            raise ValueError(
+                "Automatic Day 0 purchases are not supported for this contest: enter the seven "
+                "legs in TWS (Paper); hedging starts once all seven are held"
+            )
         if action == "profile" and (
             profile not in PROFILES or (not self.demo and profile not in self.supervisor.allowed_profiles)
         ):
@@ -1665,11 +1671,6 @@ class TradingService:
                 self.pause_reason = None
                 self.health = "Shadow monitoring enabled; no paper submissions"
             elif action in ("paper", "setup", "arm_setup"):
-                if action != "paper" and self.manifest.contest_rules == "spcx_rklb_spy":
-                    raise ValueError(
-                        "Automatic Day 0 purchases are not supported for this contest: enter the seven "
-                        "legs in TWS (Paper); hedging starts once all seven are held"
-                    )
                 if self.manifest.scoring_rule == "pending_interest_adjustment":
                     raise ValueError("Instructor's revised scoring formula required before activation")
                 if not self.contest_confirmed() or not self.broker.qualified:

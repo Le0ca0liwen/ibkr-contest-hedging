@@ -144,9 +144,11 @@ async def test_contest_setup_is_manual_and_confirmation_can_come_from_the_dashbo
 async def test_seven_leg_contest_refuses_automatic_purchases(manifest, store):
     contest = manifest.model_copy(update={"contest_rules": "spcx_rklb_spy"})
     service = TradingService(contest, store, demo=True)
+    service.autostart_pending, epoch = True, service.control_epoch
     for action in ("arm_setup", "setup"):
         with pytest.raises(ValueError, match="enter the seven legs in TWS"):
             await service.control(action)
+    assert service.autostart_pending and service.control_epoch == epoch  # nothing disturbed
 
 
 async def test_readiness_checklist_names_what_blocks_paper(launched):
