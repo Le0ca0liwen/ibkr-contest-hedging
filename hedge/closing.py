@@ -29,6 +29,8 @@ class ClosingRecorder:
         self.missed = set()
         self.post_close_done = set()  # diverged or skipped post-close observations (bell value kept)
         self.loaded = False
+        # SPCX/RKLB/SPY contest: the IBKR API closing NAV is the official scoring close.
+        self.api_official = manifest.contest_rules == "spcx_rklb_spy"
 
     def state(self):
         now = self.clock()
@@ -126,9 +128,15 @@ class ClosingRecorder:
                         )
                         self.missed.add(str(day))
                         self.alert(
-                            "warning", f"Closing NAV capture missed for {day}; import the IBKR statement"
+                            "warning",
+                            f"Closing NAV capture missed for {day}; enter IBKR's closing NAV in Settings & "
+                            "alerts > Import an official closing NAV"
+                            if self.api_official
+                            else f"Closing NAV capture missed for {day}; import the IBKR statement",
                         )
-                    self.status = f"Closing capture missed for {day}; statement required"
+                    self.status = f"Closing capture missed for {day}; " + (
+                        "enter the closing NAV manually" if self.api_official else "statement required"
+                    )
                     continue
                 phase = "close"
             if self.retry_at is not None and now < self.retry_at:
@@ -168,7 +176,13 @@ class ClosingRecorder:
                     self.status = f"Post-close NAV for {day} diverged from the bell by {value - bell:+.2f}"
                     self.alert(
                         "warning",
-                        f"{self.status}; bell value kept. Import the IBKR statement NAV for {day}",
+                        f"{self.status}; bell value kept. "
+                        + (
+                            f"Check IBKR's closing NAV for {day} and correct it in Settings & alerts if it "
+                            "differs"
+                            if self.api_official
+                            else f"Import the IBKR statement NAV for {day}"
+                        ),
                     )
                     return
                 if phase == "post_close":
@@ -177,13 +191,18 @@ class ClosingRecorder:
                         f"SYNTHETIC simulator {POST_CLOSE} (after {options_close:%H:%M} options close)"
                         if self.demo
                         else f"IBKR API {POST_CLOSE} (after {options_close:%H:%M} options close; "
-                        "NetLiquidation; statement reconciliation pending)"
+                        + (
+                            "NetLiquidation; official close)"
+                            if self.api_official
+                            else "NetLiquidation; statement reconciliation pending)"
+                        )
                     )
                 else:
                     source = (
                         "SYNTHETIC simulator closing observation"
                         if self.demo
-                        else "IBKR API closing observation (NetLiquidation; statement reconciliation pending)"
+                        else "IBKR API closing observation (NetLiquidation; "
+                        + ("official close)" if self.api_official else "statement reconciliation pending)")
                     )
                 source += f"; scheduled {start.isoformat()}; observed {at.isoformat()}"
                 self.ledger.import_close(day, value, source, self.manifest.account)

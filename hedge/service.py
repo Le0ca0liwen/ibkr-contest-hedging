@@ -407,9 +407,20 @@ class TradingService:
         if not any(r.get("message") == message and timestamp(r["at"]) >= cutoff for r in recent):
             self.store.record("alert", self.manifest.account, {"severity": severity, "message": message})
 
+    @property
+    def api_close_official(self):
+        """SPCX/RKLB/SPY contest: the IBKR API closing NAV is the official scoring close (operator
+        instruction, Oct 21), so API rows are final rather than provisional."""
+        return self.manifest.contest_rules == "spcx_rklb_spy"
+
     def _warn_api_previous_close(self, day, record):
         """Once per session: today's target rests on a provisional API close, not the statement."""
-        if record is None or record["provenance"] != "api" or day in self.api_close_warned:
+        if (
+            record is None
+            or record["provenance"] != "api"
+            or day in self.api_close_warned
+            or self.api_close_official
+        ):
             return
         sessions = (self.manifest.day_zero, *self.manifest.scoring_sessions)
         self.alert(
@@ -426,7 +437,7 @@ class TradingService:
         summary = self.ledger.summary()
         last = self.manifest.scoring_sessions[-1]
         provisional = [d["date"] for d in summary["days"] if d.get("provenance") == "api"]
-        if provisional and self.now() >= self.manifest.session_close(last):
+        if provisional and not self.api_close_official and self.now() >= self.manifest.session_close(last):
             self.alert(
                 "warning",
                 "Final contest score is provisional: import IBKR statement NAV for " + ", ".join(provisional),
@@ -728,14 +739,20 @@ class TradingService:
             record = self.ledger.previous_close_record(day)
             previous = self.ledger.previous_close(day)
             provenance = (record or {}).get("provenance")
+            official_api = self.api_close_official
             item(
                 "Previous official close",
-                "fail" if previous is None else "warn" if provenance == "api" else "ok",
-                "Missing: enter the IBKR statement NAV (Settings & alerts)"
+                "fail" if previous is None else "warn" if provenance == "api" and not official_api else "ok",
+                (
+                    "Missing: enter IBKR's closing NAV (Settings & alerts)"
+                    if official_api
+                    else "Missing: enter the IBKR statement NAV (Settings & alerts)"
+                )
                 if previous is None
                 else "API capture only: enter the IBKR statement NAV when it is published"
-                if provenance == "api"
-                else "Recorded",
+                if provenance == "api" and not official_api
+                else f"Recorded: ${float(previous):,.2f}"
+                + (" (IBKR API close)" if provenance == "api" else ""),
             )
         auto = self.autostart_mode()
         blocked = any(i["status"] == "fail" for i in items)
@@ -2277,6 +2294,7 @@ class TradingService:
                 "previous_close": str(previous) if previous is not None else None,
                 # "statement" (official IBKR statement) or "api" (provisional recorder capture).
                 "previous_close_provenance": previous_record["provenance"] if previous_record else None,
+                "api_close_official": self.api_close_official,
                 "closing_target": str(closing_target) if closing_target is not None else None,
                 "closing_target_estimated": self.manifest.scoring_rule == "actual_daily_cash_rate"
                 and day not in self.ledger.daily_rates(),

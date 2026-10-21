@@ -42,7 +42,7 @@ reason in plain words. The badge counts the ✗ rows.
 | Contest configuration | Press **Confirm contest configuration** (enabled once IBKR has verified every contract), check the seven legs in the dialog, confirm. Needed once per configuration. |
 | Quotes | Moomoo quotes are live 09:30-16:00 ET. Outside those hours this row is a !, not a problem. |
 | Price history | Press **Refresh price history now** if it failed or is old. The app also refreshes it by itself between 08:30 and 09:29 ET. |
-| Previous official close | Enter the IBKR statement NAV (Settings & alerts > Import an official closing NAV). Missing blocks paper trading; "API capture only" is a reminder. |
+| Previous official close | Recorded automatically: the IBKR API closing NAV is the official close for this contest. Only if it is missing (capture missed), enter IBKR's closing NAV in Settings & alerts > Import an official closing NAV. Missing blocks paper trading. |
 | Automatic paper start | Shows whether it is on and what it waits for. |
 | Trading | The current mode and why it waits, if it does. |
 
@@ -60,8 +60,9 @@ reason in plain words. The badge counts the ✗ rows.
 ## Every scored day (Oct 22-23, Oct 26-30, Nov 2-4)
 
 - **Before 09:30 ET:** the app can stay running overnight. Check the Today panel.
-  Enter yesterday's IBKR statement NAV when it is published (Settings & alerts >
-  Import an official closing NAV; "$1,234,567.89" is accepted as printed).
+  Nothing to import: yesterday's IBKR API closing NAV is the official close. Only if
+  the Previous official close row says Missing, enter IBKR's closing NAV (Settings &
+  alerts > Import an official closing NAV; "$1,234,567.89" is accepted as printed).
 - **09:30 onward:** hedging resumes by itself. Watch the Today panel and
   Settings & alerts > Alerts & required actions.
 - **15:40-15:56 ET:** the closing surplus burner may buy and sell SPCX/RKLB shares
@@ -69,13 +70,14 @@ reason in plain words. The badge counts the ✗ rows.
   or restart between 15:40 and 16:25.** To stop new burn trades only, press
   **Burner off**; any open round trip still sells back what it bought.
 - **16:00 and about 16:20:** the closing NAV is recorded automatically
-  (Settings & alerts > Automatic closing NAV recorder). A DIVERGED warning means:
-  import the statement NAV for that day.
+  (Settings & alerts > Automatic closing NAV recorder) and is the official close. A
+  DIVERGED warning means the 16:20 value differed from the 16:00 one; the 16:00 value is
+  kept. Check IBKR's closing NAV and correct it in Settings & alerts if needed.
 
 ## After the contest (Nov 4)
 
-Keep the app running until about 16:25 ET on Nov 4, then import any statement
-NAVs still marked "API" in the scoring ledger. Download the records with the
+Keep the app running until about 16:25 ET on Nov 4. The recorded API closes are the
+official scores; no statement import is needed. Download the records with the
 "Export … ↗" links: scores and burn cycles on Overview, orders, fills and
 execution quality on Trades, decisions on Decisions.
 

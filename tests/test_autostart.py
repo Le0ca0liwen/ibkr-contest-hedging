@@ -466,3 +466,25 @@ async def test_a_refused_shadow_while_paper_runs_shows_the_stop(launched, monkey
         await launched.control("shadow")
     assert launched.mode == "PAUSED" and "Shadow requested" in launched.health
     assert launched.execution.paused and launched.broker.readonly
+
+
+def test_the_api_close_is_the_official_close_in_the_contest(manifest, store):
+    from datetime import datetime
+
+    from hedge.config import NY
+
+    contest = manifest.model_copy(update={"contest_rules": "spcx_rklb_spy"})
+    service = TradingService(contest, store, demo=True)
+    assert service.api_close_official and service.closing_recorder.api_official
+    assert not TradingService(manifest, store, demo=True).api_close_official  # practice: statements
+    day = contest.scoring_sessions[0]
+    service.now = lambda: datetime.combine(day, datetime.min.time(), NY).replace(hour=10)
+    service.ledger.import_close(
+        contest.day_zero, contest.initial_nav, "IBKR API closing observation", contest.account
+    )
+    record = service.ledger.previous_close_record(day)
+    assert record["provenance"] == "api"
+    service._warn_api_previous_close(day, record)
+    assert not any("statement" in a["message"] for a in store.records("alert", contest.account))
+    row = {i["label"]: i for i in service.checklist()}["Previous official close"]
+    assert row["status"] == "ok" and "IBKR API close" in row["detail"]
