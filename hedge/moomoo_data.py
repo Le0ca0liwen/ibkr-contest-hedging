@@ -87,7 +87,7 @@ class MoomooData:
             and rights.get("us_qot_right") in ("LV1", "LV2", "LV3", "SF")
             and stock_item.get("book_push_count", 0) >= 2
             and stock_at is not None
-            and timedelta(0) <= now - stock_at <= timedelta(seconds=self.manifest.risk.stock_quote_age)
+            and timedelta(0) <= now - stock_at <= timedelta(seconds=self.manifest.risk.held_option_quote_age)
         ):
             return None
         iv = self.last_iv.get(contract.con_id)
@@ -104,7 +104,7 @@ class MoomooData:
             return None
         # Keep the day's last quoted spread around the model value (it prices any later trade).
         half = (ask - bid) / 2 if math.isfinite(bid) and math.isfinite(ask) and 0 < bid <= ask else 0
-        half = max(half, 0.005 * price, 0.005)
+        half = min(max(half, 0.005 * price, 0.005), price)  # mid stays at the model value
         return Quote(
             provider="moomoo",
             con_id=contract.con_id,
@@ -169,20 +169,23 @@ class MoomooData:
                             "us_option_qot_right" if contract.kind == "OPT" else "us_qot_right"
                         )
                         # A quiet (unchanged) option book stays valid up to the held-leg bound;
-                        # the risk gate still requires option_quote_age for anything traded.
-                        max_age = (
+                        # the risk gate still requires option_quote_age for anything traded. After
+                        # hours stock books are quiet too: the same bound (trades still need 5 s).
+                        after_hours = self.manifest.post_market(now) is not None
+                        stock_age = (
                             self.manifest.risk.held_option_quote_age
-                            if contract.kind == "OPT"
+                            if after_hours
                             else self.manifest.risk.stock_quote_age
+                        )
+                        max_age = (
+                            self.manifest.risk.held_option_quote_age if contract.kind == "OPT" else stock_age
                         )
                         live = (
                             permission in ("LV1", "LV2", "LV3", "SF")
                             and raw.get("rights", {}).get("us_qot_right") in ("LV1", "LV2", "LV3", "SF")
                             and stock_item.get("book_push_count", 0) >= 2
                             and stock_at is not None
-                            and timedelta(0)
-                            <= now - stock_at
-                            <= timedelta(seconds=self.manifest.risk.stock_quote_age)
+                            and timedelta(0) <= now - stock_at <= timedelta(seconds=stock_age)
                             and book_at is not None
                             and timedelta(0) <= now - book_at <= timedelta(seconds=max_age)
                             and self._in_session(contract, now)

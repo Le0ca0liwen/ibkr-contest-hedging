@@ -11,6 +11,7 @@ import pytest
 
 from hedge.config import NY
 from hedge.demo import demo_manifest
+from hedge.models import Position
 from hedge.moomoo_data import MoomooData, code_for
 from hedge.scenarios import POST_MARKET_VARIANCE, trading_variance
 
@@ -115,7 +116,7 @@ def test_after_hours_options_are_valued_from_the_live_underlying(tmp_path):
     assert all(q.data_type == "frozen" for q in MoomooData(base, path).quotes(now).values())
     # A stale underlying book: no after-hours valuation.
     stale = feed(m, now)
-    stale["securities"][code_for(stock)]["book_push_at"] = (now - timedelta(seconds=30)).isoformat()
+    stale["securities"][code_for(stock)]["book_push_at"] = (now - timedelta(seconds=301)).isoformat()
     path.write_text(json.dumps(stale))
     assert MoomooData(m, path).quotes(now)[option.con_id].data_type == "frozen"
 
@@ -238,3 +239,129 @@ async def test_paper_trading_starts_after_hours_and_plans_shares_only(manifest, 
     assert target is not None
     changed = {i for i, q in target.quantities.items() if q != snapshot.quantities().get(i, 0)}
     assert all(m.contract_map[i].kind == "STK" for i in changed), changed
+
+
+def test_the_last_day_keeps_trading_until_the_scored_close(manifest, store):
+    from hedge.service import TradingService
+
+    m = contest(manifest)
+    service = TradingService(m, store, demo=True)
+    last = m.scoring_sessions[-1]
+    service.now = lambda: at(last, 17)
+    assert not service.contest_over()
+    service.now = lambda: at(last, 20)
+    assert service.contest_over()
+    practice = TradingService(manifest, store, demo=True)
+    practice.now = lambda: at(last, 16)
+    assert practice.contest_over()
+
+
+def test_a_close_cannot_be_entered_before_the_post_market_session_ends(manifest, store):
+    import re
+
+    from fastapi.testclient import TestClient
+
+    from hedge.service import TradingService
+    from hedge.webapp import create_app
+
+    m = contest(manifest)
+    service = TradingService(m, store, demo=True)
+    client = TestClient(create_app(service))
+    token = re.search(r'name="control-token" content="([^"]+)"', client.get("/").text).group(1)
+    day = m.scoring_sessions[0]
+
+    def post():
+        return client.post(
+            "/api/closes",
+            json={"date": str(day), "nav": str(m.initial_nav), "source": "IBKR", "account": m.account},
+            headers={"X-Control-Token": token},
+        )
+
+    service.now = lambda: at(day, 17)
+    refused = post()
+    assert refused.status_code in (400, 409, 422) and "after 20:00 ET" in refused.text
+    service.now = lambda: at(day, 20, 30)
+    assert post().status_code == 200
+
+
+def test_the_day_report_window_runs_between_scored_closes(manifest, store):
+    from hedge.service import TradingService
+
+    m = contest(manifest)
+    service = TradingService(m, store, demo=True)
+    day = m.scoring_sessions[1]
+    assert service.day_reports._window(day) == (at(m.scoring_sessions[0], 20), at(day, 20))
+
+
+def test_the_after_hours_model_mid_is_the_model_price_even_after_a_wide_day_book(tmp_path):
+    m = contest(demo_manifest())
+    now = at(m.scoring_sessions[0], 17)
+    raw = feed(m, now)
+    option = next(c for c in m.contracts if c.kind == "OPT" and c.right == "C" and c.strike > 195)
+    raw["securities"][code_for(option)]["order_book"] = {"Bid": [[0.01, 1]], "Ask": [[40.0, 1]]}
+    path = tmp_path / "latest.json"
+    path.write_text(json.dumps(raw))
+    q = MoomooData(m, path).quotes(now)[option.con_id]
+    assert q.mid == pytest.approx(q.model_price) and q.bid >= 0
+
+
+def test_the_after_hours_margin_preview_matches_the_order_flag(manifest, monkeypatch):
+    import hedge.broker as broker_module
+    from hedge.broker import IBKRBroker
+    from hedge.models import OrderRequest
+
+    m = contest(manifest)
+    broker = IBKRBroker(m, asyncio.Queue())
+    previews = []
+
+    async def what_if(contract, order):
+        previews.append(order)
+        return SimpleNamespace()
+
+    broker.ib = SimpleNamespace(whatIfOrderAsync=what_if)
+    broker.native = {10: object()}
+    request = OrderRequest(
+        intent_id="x",
+        con_id=10,
+        signed_quantity=100,
+        limit_price=Decimal("195.00"),
+        account=m.account,
+        snapshot_id="s",
+        decision_id="d",
+    )
+    monkeypatch.setattr(broker_module, "utcnow", lambda: at(m.scoring_sessions[0], 17))
+    asyncio.run(broker.margin_preview(request))
+    assert previews[-1].outsideRth is True
+
+
+def test_after_hours_a_quiet_book_values_a_held_stock_but_a_trade_needs_a_fresh_one(
+    manifest, snapshot, quotes
+):
+    from hedge.risk import RiskGate
+    from hedge.scenarios import ScenarioEngine
+
+    m = contest(manifest)
+    now = at(m.scoring_sessions[0], 17)
+    quiet = {
+        i: q.model_copy(
+            update={
+                "observed_at": now - timedelta(seconds=60),
+                "greek_at": now - timedelta(seconds=60),
+                "data_type": "model" if m.contract_map[i].kind == "OPT" else "live",
+            }
+        )
+        for i, q in quotes.items()
+    }
+    snap = snapshot.model_copy(
+        update={
+            "at": now,
+            "account_at": now,
+            "positions": (*snapshot.positions, Position(con_id=10, quantity=100)),
+        }
+    )
+    scenarios = ScenarioEngine(m).build(snap, quiet, now)
+    gate = RiskGate(m)
+    held = gate.validate(snap, quiet, scenarios, snap.quantities(), now)
+    assert not any(r.startswith(("Stale/future quote", "Non-live quote")) for r in held.reasons), held.reasons
+    traded = gate.validate(snap, quiet, scenarios, {**snap.quantities(), 10: 150}, now)
+    assert "Stale/future quote: 10" in traded.reasons

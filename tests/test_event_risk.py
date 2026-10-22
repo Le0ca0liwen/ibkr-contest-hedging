@@ -455,7 +455,7 @@ async def test_nothing_applies_until_approved(tmp_path, monkeypatch, contest_fra
         record["factors"] == {"RKLB": 1.5, "SPCX": 1.0, "SPY": 1.0}
         and record["calendar_id"] == calendar["id"]
     )
-    assert record["expires_at"] == et(D1, 16).isoformat()
+    assert record["expires_at"] == et(D1, 20).isoformat()  # the contest scores after the post-market session
 
 
 def test_caution_scales_forecast_not_stress(contest_frame):

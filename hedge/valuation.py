@@ -171,16 +171,18 @@ class NAVTracker:
     affect NAV immediately. Reset on broker NAV observation, never merely on an
     inventory change (which would erase paid costs while broker NAV lags).
 
-    With IBKR's real-time daily P&L (about once a second) the estimate is instead the last
-    SETTLED NetLiquidation rolled forward by the P&L change since: a NetLiquidation push that
-    follows a fill within PNL_SETTLE is briefly wrong (by up to ~$1,000 on Oct 22) and is never
-    adopted, and IBKR's own marks, fills and fees all come through the P&L.
+    With IBKR's real-time daily P&L (about every 1-2 s) the estimate is instead the last SETTLED
+    NetLiquidation rolled forward by the P&L change since: a NetLiquidation push that follows a fill
+    within PNL_SETTLE is briefly wrong (by up to ~$1,000 on Oct 22) and is never adopted, and
+    IBKR's own marks, fills and fees all come through the P&L. After hours the P&L keeps options
+    static, so their model revaluation is added. A base never crosses a session phase.
     """
 
     PNL_MAX_AGE = timedelta(seconds=5)  # older P&L: fall back to fill attribution
     PNL_SETTLE = timedelta(seconds=20)  # no fill this long before a NetLiquidation push, or since
     PNL_PROMPT = timedelta(seconds=30)  # the push must be paired with a P&L reading this soon
-    PNL_JUMP = 0.002  # of NAV in one step: a daily P&L reset, not a market move
+    PNL_RESET_FLOOR = 25.0  # a new P&L day starts within this of zero ...
+    PNL_RESET_STEP = 200.0  # ... after a one-step drop at least this large
 
     def __init__(self, manifest=None):
         self.key = None
@@ -191,44 +193,91 @@ class NAVTracker:
         self.manifest = manifest
         self.pnl_anchor = None  # (settled NetLiquidation, daily P&L read with it)
         self.pnl_key = None
+        self.pnl_phase = None
         self.pnl_last = None
+        self.option_refs = {}  # after hours: held options' model mid at the base
         self.source = "fill attribution"
         self.last_check = None  # latest settled push vs the stream's prediction
 
-    def _pnl_estimate(self, snapshot):
-        """NAV from the P&L stream, or None to fall back (no fresh stream / no settled anchor yet)."""
+    def _phase(self, now):
+        """Regular session, contest post-market session or closed: a stream base never crosses one
+        (IBKR's P&L stops repricing options after the close)."""
+        m = self.manifest
+        if m is None:
+            return None
+        if m.post_market(now) is not None:
+            return "post"
+        day = now.astimezone(NY).date()
+        return (
+            "regular" if m.is_session(day) and m.session_open(day) <= now < m.session_close(day) else "closed"
+        )
+
+    def _reset(self, pnl):
+        """IBKR started a new P&L day: the value dropped to about zero in one step."""
+        return abs(pnl) <= max(self.PNL_RESET_FLOOR, 0.05 * abs(self.pnl_last)) and (
+            abs(self.pnl_last - pnl) >= self.PNL_RESET_STEP
+        )
+
+    def _after_hours_options(self, snapshot, quotes, contracts, refs):
+        """After hours IBKR's P&L keeps held options static while NetLiquidation re-marks them from
+        the underlying (observed Oct 22): add their model revaluation since the base."""
+        total = 0.0
+        for p in snapshot.positions:
+            q, c = quotes.get(p.con_id), contracts.get(p.con_id)
+            if p.quantity and c is not None and c.kind == "OPT" and q is not None and q.data_type == "model":
+                total += p.quantity * c.multiplier * (q.mid - refs.setdefault(p.con_id, q.mid))
+        return total
+
+    def _pnl_estimate(self, snapshot, quotes, contracts):
+        """NAV from the P&L stream, or None to fall back (no fresh stream / no settled base yet)."""
         pnl_at = snapshot.pnl_at
-        if snapshot.pnl_daily is None or pnl_at is None or snapshot.at - pnl_at > self.PNL_MAX_AGE:
+        phase = self._phase(snapshot.at)
+        if (
+            snapshot.pnl_daily is None
+            or pnl_at is None
+            or snapshot.at - pnl_at > self.PNL_MAX_AGE
+            or (self.pnl_anchor is not None and phase != self.pnl_phase)
+        ):
+            # Stale or resubscribed stream, or a new session phase: wait for the next settled push.
+            self.pnl_anchor = self.pnl_key = self.pnl_last = None
+            self.option_refs = {}
             return None
         pnl, nav = float(snapshot.pnl_daily), float(snapshot.nav)
-        if (
-            self.pnl_anchor is not None
-            and self.pnl_last is not None
-            and abs(pnl - self.pnl_last) > (self.PNL_JUMP * nav)
-        ):
-            # Daily P&L reset (or a feed glitch): keep the estimate continuous across the jump.
+        if self.pnl_anchor is not None and self.pnl_last is not None and self._reset(pnl):
             base, pnl0 = self.pnl_anchor
             self.pnl_anchor = (base + (self.pnl_last - pnl0), pnl)
         key = (snapshot.nav, snapshot.account_at)
-        settled = snapshot.at - snapshot.account_at <= self.PNL_PROMPT and not any(
+        # The P&L read when the push arrived; else the current one if the push is recent.
+        if snapshot.account_pnl_daily is not None:
+            at_push = float(snapshot.account_pnl_daily)
+        elif snapshot.at - snapshot.account_at <= self.PNL_PROMPT:
+            at_push = pnl
+        else:
+            at_push = None
+        settled = at_push is not None and not any(
             e.at >= snapshot.account_at - self.PNL_SETTLE for e in self.executions.values()
         )
         if key != self.pnl_key and settled:
             if self.pnl_anchor is not None:
                 base, pnl0 = self.pnl_anchor
-                predicted = base + (pnl - pnl0)
+                predicted = (
+                    base
+                    + (at_push - pnl0)
+                    + self._after_hours_options(snapshot, quotes, contracts, dict(self.option_refs))
+                )
                 self.last_check = {
                     "at": snapshot.account_at.isoformat(),
                     "net_liquidation": nav,
                     "stream_estimate": predicted,
                     "difference": nav - predicted,
                 }
-            self.pnl_anchor, self.pnl_key = (nav, pnl), key
+            self.pnl_anchor, self.pnl_key, self.pnl_phase = (nav, at_push), key, phase
+            self.option_refs = {}
         self.pnl_last = pnl
         if self.pnl_anchor is None:
             return None
         base, pnl0 = self.pnl_anchor
-        return base + (pnl - pnl0)
+        return base + (pnl - pnl0) + self._after_hours_options(snapshot, quotes, contracts, self.option_refs)
 
     def execution(self, execution):
         self.executions[execution.exec_id] = execution
@@ -237,7 +286,7 @@ class NAVTracker:
         self.fees[exec_id] = float(amount)
 
     def estimate(self, snapshot, quotes, contracts):
-        streamed = self._pnl_estimate(snapshot)
+        streamed = self._pnl_estimate(snapshot, quotes, contracts)
         self.source = "IBKR P&L stream (1 s)" if streamed is not None else "fill attribution"
         if streamed is not None:
             return streamed

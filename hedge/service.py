@@ -786,7 +786,12 @@ class TradingService:
             if not self.last_quotes
             else f"{live} of {total} quotes live"
             + (f" ({modeled} options valued from their live underlying after hours)" if modeled else "")
-            + ("" if live else " (Moomoo quotes are live 09:30-16:00 ET)")
+            + (
+                ""
+                if live
+                else " (Moomoo quotes are live 09:30-16:00 ET"
+                + ("; shares also 16:00-20:00 ET)" if m.extended_hours else ")")
+            )
             + (
                 f"; no quote at all for {total - len(self.last_quotes)}"
                 if len(self.last_quotes) < total
@@ -1067,6 +1072,10 @@ class TradingService:
             self.force_optimize = True
         return snapshot
 
+    def contest_over(self):
+        """After the last scored close (20:00 ET in the contest, whose post-market session counts)."""
+        return self.now() >= self.manifest.scoring_close(self.manifest.scoring_sessions[-1])
+
     def _detect_sleep(self):
         """Seconds the computer slept since the previous monitor pass, or None."""
         wall, mono = time.time(), time.monotonic()
@@ -1260,9 +1269,7 @@ class TradingService:
                 if self.market_data_errors and not self.last_quotes:
                     self.health = "IBKR connected; live stock/option API subscriptions unavailable; purchases and hedging blocked"
                 day = self.manifest.active_session(self.now())
-                if self.now() >= self.manifest.session_close(
-                    self.manifest.scoring_sessions[-1]
-                ) and self.mode in ("PAPER", "SETUP"):
+                if self.contest_over() and self.mode in ("PAPER", "SETUP"):
                     self._hard_stop("Contest ended; filled holdings retained")
                     await self.execution.pause()
                 if day:
@@ -1934,7 +1941,7 @@ class TradingService:
                 ages[c.kind].append((now - q.observed_at).total_seconds())
         return {
             "session": str(day),
-            "minutes_to_close": round((self.manifest.session_close(day) - now).total_seconds() / 60, 1),
+            "minutes_to_close": round((self.manifest.scoring_close(day) - now).total_seconds() / 60, 1),
             "accrual_days": self.manifest.accrual_days(day)
             if day in self.manifest.scoring_sessions
             else None,
@@ -2527,7 +2534,7 @@ class TradingService:
                 if self.moomoo_data and self.moomoo_data.path.exists()
                 else "IBKR",
                 "market_data_execution_verified": bool(self.last_quotes)
-                and all(q.data_type == "live" for q in self.last_quotes.values())
+                and all(q.data_type in ("live", "model") for q in self.last_quotes.values())
                 and set(self.manifest.mandatory).issubset(self.last_quotes)
                 if self.manifest.market_data_provider == "moomoo" and not self.demo
                 else None,

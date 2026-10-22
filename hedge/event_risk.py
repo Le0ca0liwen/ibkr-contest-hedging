@@ -598,7 +598,7 @@ class EventRisk(AIFeature):
             "evidence": calendar.get("events") if calendar else [],
             "expands": {k: self.expands.get(k, [k]) for k in self.keys},
             "approved_at": now.isoformat(),
-            "expires_at": m.session_close(session).astimezone(NY).isoformat(),
+            "expires_at": m.scoring_close(session).astimezone(NY).isoformat(),
             "config_hash": m.config_hash,  # informational only: never used to invalidate anything
             "seq": time.time_ns(),
         }

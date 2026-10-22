@@ -418,10 +418,14 @@ class RecoveryController:
             count = evidence.get("independent_test_windows", 0)
             status = {
                 "eligible": not blockers,
-                "status": "Validation passed" if not blockers else "Paper recovery unavailable: validation incomplete",
+                "status": "Validation passed"
+                if not blockers
+                else "Paper recovery unavailable: validation incomplete",
                 "blockers": blockers,
                 "evidence_class": evidence.get("evidence_class", "unavailable"),
-                "independent_test_windows": count if isinstance(count, int) and not isinstance(count, bool) else 0,
+                "independent_test_windows": count
+                if isinstance(count, int) and not isinstance(count, bool)
+                else 0,
             }
             self._promotion_cache = (stamps, status)
             return status

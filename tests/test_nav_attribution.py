@@ -129,3 +129,67 @@ def test_the_broker_records_the_account_pnl_stream(manifest):
     assert broker.pnl_daily is None
     broker._pnl(SimpleNamespace(account=manifest.account, dailyPnL=-123.45))
     assert broker.pnl_daily == Decimal("-123.45") and broker.pnl_at is not None
+
+
+def test_a_large_real_move_is_not_mistaken_for_a_pnl_reset(manifest, snapshot, quotes, now):
+    tracker = NAVTracker(manifest)
+    tracker.estimate(stream(snapshot, now, 1, 100.0), quotes, manifest.contract_map)
+    jump = stream(snapshot, now, 2, 5_100.0)
+    assert tracker.estimate(jump, quotes, manifest.contract_map) == pytest.approx(1_005_000)
+
+
+def test_a_stream_gap_waits_for_a_fresh_settled_push(manifest, snapshot, quotes, now):
+    tracker = NAVTracker(manifest)
+    tracker.estimate(stream(snapshot, now, 1, 0.0), quotes, manifest.contract_map)
+    stale = snapshot.model_copy(
+        update={
+            "at": now + timedelta(seconds=60),
+            "pnl_daily": Decimal("0"),
+            "pnl_at": now + timedelta(seconds=1),
+        }
+    )
+    tracker.estimate(stale, quotes, manifest.contract_map)
+    # The stream resumes 10 minutes later, 3,000 higher: no base until a settled push.
+    resumed = stream(snapshot, now, 600, 3_000.0)
+    assert tracker.estimate(resumed, quotes, manifest.contract_map) == pytest.approx(1_000_000)
+    assert tracker.source == "fill attribution"
+    pushed = stream(snapshot, now, 601, 3_001.0, nav=1_003_000.0, pushed=600)
+    assert tracker.estimate(pushed, quotes, manifest.contract_map) == pytest.approx(1_003_000)
+    assert tracker.source == "IBKR P&L stream (1 s)"
+
+
+def test_after_hours_the_stream_adds_the_held_options_model_revaluation(manifest, snapshot, quotes):
+    from datetime import datetime
+
+    from hedge.config import NY
+
+    m = manifest.model_copy(update={"contest_rules": "spcx_rklb_spy"})
+    evening = datetime(2026, 10, 7, 17, tzinfo=NY)
+    modeled = {
+        i: q.model_copy(update={"data_type": "model" if m.contract_map[i].kind == "OPT" else "live"})
+        for i, q in quotes.items()
+    }
+    base = snapshot.model_copy(
+        update={"at": evening, "account_at": evening, "pnl_daily": Decimal("0"), "pnl_at": evening}
+    )
+    tracker = NAVTracker(m)
+    assert tracker.estimate(base, modeled, m.contract_map) == pytest.approx(1_000_000)
+    held = next(p for p in snapshot.positions if m.contract_map[p.con_id].kind == "OPT")
+    moved = {
+        **modeled,
+        held.con_id: modeled[held.con_id].model_copy(
+            update={"bid": modeled[held.con_id].bid + 1, "ask": modeled[held.con_id].ask + 1}
+        ),
+    }
+    later = base.model_copy(
+        update={"at": evening + timedelta(seconds=2), "pnl_at": evening + timedelta(seconds=2)}
+    )
+    expected = 1_000_000 + held.quantity * m.contract_map[held.con_id].multiplier * 1.0
+    assert tracker.estimate(later, moved, m.contract_map) == pytest.approx(expected)
+
+
+def test_the_push_is_paired_with_the_pnl_when_it_arrived(manifest, snapshot, quotes, now):
+    tracker = NAVTracker(manifest)
+    first = stream(snapshot, now, 25, 80.0).model_copy(update={"account_pnl_daily": Decimal("50")})
+    # NetLiquidation (1,000,000) arrived with P&L 50; P&L is 80 now: the estimate is 30 higher.
+    assert tracker.estimate(first, quotes, manifest.contract_map) == pytest.approx(1_000_030)

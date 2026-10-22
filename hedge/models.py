@@ -126,6 +126,7 @@ class PortfolioSnapshot(Frozen):
     # without the stream. NAVTracker rolls the last settled NetLiquidation forward with it.
     pnl_daily: Decimal | None = None
     pnl_at: datetime | None = None
+    account_pnl_daily: Decimal | None = None  # the daily P&L when NetLiquidation last arrived
 
     def quantities(self) -> dict[int, int]:
         return {p.con_id: p.quantity for p in self.positions if p.quantity}

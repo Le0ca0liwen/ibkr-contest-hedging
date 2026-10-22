@@ -208,6 +208,9 @@ class RiskGate:
             max_age = (
                 (limits.option_quote_age if traded else limits.held_option_quote_age)
                 if c.kind == "OPT"
+                # After hours a quiet book values a held stock; a trade still needs a fresh one.
+                else limits.held_option_quote_age
+                if not traded and self.manifest.post_market(now) is not None
                 else limits.stock_quote_age
             )
             greek_age = limits.greek_age if traded else max(limits.greek_age, limits.held_option_quote_age)

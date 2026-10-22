@@ -360,8 +360,16 @@ def create_app(service):
     async def import_close(body: CloseImport):
         try:
             if body.date in service.manifest.scoring_sessions or body.date == service.manifest.day_zero:
-                if service.now() < service.manifest.session_close(body.date):
-                    raise ValueError("That session has not closed yet (16:00 ET)")
+                if service.now() < service.manifest.scoring_close(body.date):
+                    raise ValueError(
+                        "That session has not closed yet ("
+                        + (
+                            "its official close is read after 20:00 ET"
+                            if service.manifest.extended_hours
+                            else "16:00 ET"
+                        )
+                        + ")"
+                    )
             # Guard against a typo (a missing digit moves every later target and risk limit).
             # Independent references only, so a mistyped earlier entry can still be corrected.
             references = [

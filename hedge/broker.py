@@ -44,6 +44,7 @@ class IBKRBroker:
         self.reconcile_lock = asyncio.Lock()
         self.account_at = datetime.min.replace(tzinfo=timezone.utc)
         self.pnl_daily = self.pnl_at = None  # real-time account daily P&L (reqPnL)
+        self.account_pnl = None  # the daily P&L when NetLiquidation last arrived (pairs the two)
         self.quote_times, self.greek_times = {}, {}
         self.ticks_by_contract = {}
         self.market_rules = {}
@@ -82,6 +83,8 @@ class IBKRBroker:
     def _account(self, value):
         if value.account == self.manifest.account and value.tag == "NetLiquidation":
             self.account_at = utcnow()
+            fresh = self.pnl_at is not None and (self.account_at - self.pnl_at).total_seconds() <= 5
+            self.account_pnl = self.pnl_daily if fresh else None
 
     def _pnl(self, pnl):
         # IBKR marks an unset value with DBL_MAX (1.797e308), which isfinite() accepts.
@@ -92,7 +95,7 @@ class IBKRBroker:
         """Real-time account P&L, about once a second (account values arrive only every ~3 min).
         A subscription from before a reconnect is dead: replace it."""
         account = self.manifest.account
-        self.pnl_daily = self.pnl_at = None
+        self.pnl_daily = self.pnl_at = self.account_pnl = None
         try:
             if (account, "") in self.ib.wrapper.pnlKey2ReqId:
                 self.ib.cancelPnL(account)
@@ -474,6 +477,7 @@ class IBKRBroker:
             reconciled=self.reconciled,
             pnl_daily=self.pnl_daily,
             pnl_at=self.pnl_at,
+            account_pnl_daily=self.account_pnl,
         )
 
     def quotes(self):
@@ -703,7 +707,8 @@ class IBKRBroker:
             *([] if request.order_type == "MKT" else [float(request.limit_price)]),
             account=request.account,
             tif="DAY",
-            outsideRth=False,
+            outsideRth=self.manifest.contract_map[request.con_id].kind == "STK"
+            and self.manifest.post_market(utcnow()) is not None,
         )
         return await self.ib.whatIfOrderAsync(self.native[request.con_id], order)
 
