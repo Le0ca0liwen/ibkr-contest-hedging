@@ -55,6 +55,9 @@ policy:
   # Accept a hedge certified within $20 of the modeled optimum (the trade threshold is >= $100).
   # The $1 default often cannot be proven inside the 10 s solver budget.
   primary_band: 20
+  # Re-optimize options every 2 minutes instead of 15. In replays of the Oct 8-21 sessions this
+  # cut the mean daily |miss| by about $150 for about $20/day more trading cost.
+  option_seconds: 120
   cash_rate: 0.0344
   cash_rate_status: modeled
   cash_rate_source: "Contest rules: cash balance earns nominal r ~ 3.44%"
