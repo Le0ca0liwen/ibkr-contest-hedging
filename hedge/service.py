@@ -35,6 +35,9 @@ from .universe import screen_snapshot
 from .valuation import NAVTracker
 
 STATE_ROWS = 250  # most recent orders, fills and execution-quality rows in state()
+# Wall-clock time running this far ahead of the monotonic clock (which stops while the computer
+# sleeps, on macOS and Linux) means the app was asleep: refresh everything from IBKR at once.
+SLEEP_GAP_SECONDS = 60
 
 
 # Portfolio-limit reasons a market move can create while our own orders work (vs rule violations).
@@ -102,6 +105,7 @@ class TradingService:
         self.last_optimization = {"STK": 0.0, "OPT": 0.0}
         self.last_trade = {"STK": 0.0, "OPT": 0.0}
         self.last_reconcile = 0.0
+        self.clock_mark = None  # (wall, monotonic) at the previous monitor pass, for sleep detection
         self.tasks = []
         self.market_data_process = None
         self.market_data_log = None
@@ -1062,10 +1066,40 @@ class TradingService:
             self.force_optimize = True
         return snapshot
 
+    def _detect_sleep(self):
+        """Seconds the computer slept since the previous monitor pass, or None."""
+        wall, mono = time.time(), time.monotonic()
+        last, self.clock_mark = self.clock_mark, (wall, mono)
+        if last is None:
+            return None
+        slept = (wall - last[0]) - (mono - last[1])
+        return slept if slept > SLEEP_GAP_SECONDS else None
+
+    def _after_sleep(self, slept):
+        """Orders, fills and positions may have changed unseen: reconcile before any decision, and
+        say so once."""
+        self.last_reconcile = float("-inf")
+        self.force_optimize = True
+        woke = datetime.now(NY)
+        self.store.record(
+            "continuity",
+            self.manifest.account,
+            {"status": "SLEPT", "seconds": round(slept), "until": woke.isoformat(), "mode": self.mode},
+        )
+        self.alert(
+            "warning",
+            f"The computer was asleep for about {max(1, round(slept / 60))} min (until {woke:%H:%M} ET); "
+            "orders and positions were refreshed from IBKR. Keep the Mac on power with the lid open "
+            "while trading.",
+        )
+
     async def _monitor_loop(self):
         next_connection = 0.0
         while True:
             try:
+                slept = self._detect_sleep()
+                if slept is not None:
+                    self._after_sleep(slept)
                 if not self.broker.snapshot().connected if self.demo else not self.broker.ib.isConnected():
                     if time.monotonic() >= next_connection:
                         await self.broker.connect()

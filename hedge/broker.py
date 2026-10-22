@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Protocol
 
-from ib_async import IB, ComboLeg, ExecutionFilter, LimitOrder, MarketOrder, TagValue
+from ib_async import IB, ComboLeg, ExecutionFilter, LimitOrder, MarketOrder, OrderStatus, TagValue
 from ib_async import Contract as IBContract
 
 from .continuity import DataUnavailable
@@ -347,10 +347,11 @@ class IBKRBroker:
     async def _download_state(self):
         self.reconciled = False
         await self.ib.reqPositionsAsync()
-        await self.ib.reqAllOpenOrdersAsync()
+        open_now = await self.ib.reqAllOpenOrdersAsync()
         completed = await self.ib.reqCompletedOrdersAsync(False)
         for trade in completed:
             self._order(trade)
+        self._settle_stale_trades(open_now, completed)
         fills = await self.ib.reqExecutionsAsync(ExecutionFilter(acctCode=self.manifest.account))
         for fill in fills:
             self._execution(None, fill)
@@ -366,6 +367,24 @@ class IBKRBroker:
             self.reconciled = False
             raise
         return snapshot
+
+    def _settle_stale_trades(self, open_now, completed):
+        """An order still open here that IBKR no longer lists as open AND lists as completed takes
+        IBKR's final status. ib_async ignores a completed-order report for an order it already
+        tracks, so a final status missed while the Mac slept would otherwise keep a cancelled order
+        "working" forever. Without both confirmations nothing is marked done."""
+        still_open = {t.order.permId for t in open_now if t.order.permId}
+        final = {
+            t.order.permId: t.orderStatus.status
+            for t in completed
+            if t.order.permId and t.orderStatus.status in OrderStatus.DoneStates
+        }
+        for trade in self.ib.openTrades():
+            perm = trade.order.permId
+            if perm and perm not in still_open and perm in final:
+                trade.orderStatus.status = final[perm]
+                trade.orderStatus.remaining = 0
+                self._order(trade)
 
     def snapshot(self):
         values = {

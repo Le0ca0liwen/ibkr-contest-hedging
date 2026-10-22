@@ -703,3 +703,65 @@ async def test_a_foreign_working_order_that_would_breach_a_limit_still_hard_stop
     cancelled = _working(service, monkeypatch, order_ref="")  # e.g. an order entered in TWS
     await service._check_working_orders()
     assert service.mode == "PAUSED" and "Working-order check" in service.health and not cancelled
+
+
+def test_a_cancel_missed_while_asleep_is_settled_only_with_ibkrs_confirmation(manifest):
+    import asyncio
+    from types import SimpleNamespace
+
+    from hedge.broker import IBKRBroker
+
+    def trade(perm, status):
+        return SimpleNamespace(
+            order=SimpleNamespace(
+                permId=perm,
+                orderId=perm,
+                account=manifest.account,
+                orderRef="hedge:x",
+                orderType="LMT",
+                lmtPrice=1.0,
+            ),
+            orderStatus=SimpleNamespace(status=status, filled=0, remaining=100),
+        )
+
+    stale, working, unknown = trade(5, "PendingCancel"), trade(6, "Submitted"), trade(7, "PendingCancel")
+    broker = IBKRBroker(manifest, asyncio.Queue())
+    broker.ib = SimpleNamespace(
+        openTrades=lambda: [
+            t
+            for t in (stale, working, unknown)
+            if t.orderStatus.status not in ("Cancelled", "Filled", "ApiCancelled", "Inactive")
+        ]
+    )
+    # IBKR: 6 is still open (even though it also appears completed earlier), 5 is completed and not
+    # open, 7 is in neither list (unknown: kept).
+    broker._settle_stale_trades([trade(6, "Submitted")], [trade(5, "Cancelled"), trade(6, "Cancelled")])
+    assert stale.orderStatus.status == "Cancelled" and stale.orderStatus.remaining == 0
+    assert working.orderStatus.status == "Submitted" and unknown.orderStatus.status == "PendingCancel"
+    assert [e[1]["perm_id"] for e in broker.events._queue] == [5]
+
+
+async def test_a_sleep_gap_refreshes_from_ibkr_and_alerts_once(manifest, store, monkeypatch):
+    import time as clock
+
+    from hedge.service import TradingService
+
+    service = TradingService(manifest, store, demo=True)
+    wall, mono = [1_000_000.0], [5_000.0]
+    monkeypatch.setattr(clock, "time", lambda: wall[0])
+    monkeypatch.setattr(clock, "monotonic", lambda: mono[0])
+    assert service._detect_sleep() is None
+    wall[0] += 30
+    mono[0] += 30
+    assert service._detect_sleep() is None  # an ordinary pass
+    service.last_reconcile = mono[0]
+    wall[0] += 900  # asleep for 15 minutes: the monotonic clock stood still
+    mono[0] += 2
+    slept = service._detect_sleep()
+    assert slept == 898
+    service._after_sleep(slept)
+    assert clock.monotonic() - service.last_reconcile >= manifest.policy.reconcile_seconds
+    assert service.force_optimize
+    alerts = [a["message"] for a in store.records("alert", manifest.account)]
+    assert len(alerts) == 1 and "asleep for about 15 min" in alerts[0]
+    assert store.records("continuity", manifest.account)[0]["status"] == "SLEPT"
