@@ -84,7 +84,8 @@ class IBKRBroker:
             self.account_at = utcnow()
 
     def _pnl(self, pnl):
-        if pnl.account == self.manifest.account and math.isfinite(pnl.dailyPnL):
+        # IBKR marks an unset value with DBL_MAX (1.797e308), which isfinite() accepts.
+        if pnl.account == self.manifest.account and math.isfinite(pnl.dailyPnL) and abs(pnl.dailyPnL) < 1e12:
             self.pnl_daily, self.pnl_at = Decimal(str(pnl.dailyPnL)), utcnow()
 
     def _subscribe_pnl(self):

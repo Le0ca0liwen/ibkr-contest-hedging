@@ -125,6 +125,7 @@ def test_the_broker_records_the_account_pnl_stream(manifest):
     broker = IBKRBroker(manifest, asyncio.Queue())
     broker._pnl(SimpleNamespace(account="DU_OTHER", dailyPnL=5.0))
     broker._pnl(SimpleNamespace(account=manifest.account, dailyPnL=float("nan")))
+    broker._pnl(SimpleNamespace(account=manifest.account, dailyPnL=1.7976931348623157e308))  # IBKR "unset"
     assert broker.pnl_daily is None
     broker._pnl(SimpleNamespace(account=manifest.account, dailyPnL=-123.45))
     assert broker.pnl_daily == Decimal("-123.45") and broker.pnl_at is not None
