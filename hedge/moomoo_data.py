@@ -46,7 +46,10 @@ class MoomooData:
         self.last_iv = {}
 
     @staticmethod
-    def book_time(item):
+    def book_time(item, allow_crossed=False):
+        """Receipt time of a book pushed at least twice. A crossed book (ask < bid) is invalid,
+        except outside regular hours (allow_crossed), where fragmented venues often cross briefly:
+        it still dates a valuation, never an executable quote."""
         if item.get("book_push_count", 0) < 2:
             return None
         at = datetime.fromisoformat(item["book_push_at"])
@@ -54,7 +57,12 @@ class MoomooData:
             return None
         book = item["order_book"]
         bid, ask = float(book["Bid"][0][0]), float(book["Ask"][0][0])
-        if not all(math.isfinite(x) for x in (bid, ask)) or bid <= 0 or ask < bid:
+        if (
+            not all(math.isfinite(x) for x in (bid, ask))
+            or bid <= 0
+            or ask <= 0
+            or (ask < bid and not allow_crossed)
+        ):
             raise ValueError("Invalid two-sided book")
         # Source timestamps are not guaranteed for US instruments. When supplied,
         # retain their conservative age as additional evidence, never overwrite it.
@@ -143,6 +151,7 @@ class MoomooData:
                     + ", ".join(self.subscription_failed)
                     + " (the quote collector retries every 30 s)"
                 )
+            extended = self.manifest.extended_session(now) is not None
             for contract in self.manifest.contracts:
                 try:
                     item = securities[code_for(contract)]
@@ -155,18 +164,42 @@ class MoomooData:
                     else:
                         # No trade yet today: blank last-trade fields. The book still counts, dated by
                         # its receipt time.
-                        at = self.book_time(item)
+                        at = self.book_time(item, allow_crossed=extended)
                         if at is None:
                             raise ValueError("No provider timestamp")
                     stock_item = securities[f"US.{contract.symbol}"]
                     stock_book = stock_item["order_book"]
                     spot = (float(stock_book["Bid"][0][0]) + float(stock_book["Ask"][0][0])) / 2
-                    stock_at = self.book_time(stock_item)
+                    stock_at = self.book_time(stock_item, allow_crossed=extended)
                     bid, ask = float(book["Bid"][0][0]), float(book["Ask"][0][0])
+                    if contract.kind == "STK" and extended and ask < bid:
+                        # A crossed pre/post-market book: value the held stock at its midpoint (its
+                        # options likewise), never trade it; the other names keep trading.
+                        if stock_at is None or not timedelta(0) <= now - stock_at <= timedelta(
+                            seconds=self.manifest.risk.held_option_quote_age
+                        ):
+                            raise ValueError("Crossed book without a current receipt time")
+                        quotes[contract.con_id] = Quote(
+                            provider="moomoo",
+                            con_id=contract.con_id,
+                            bid=spot,
+                            ask=spot,
+                            bid_size=0,
+                            ask_size=0,
+                            observed_at=stock_at,
+                            data_type="model",
+                            spot=spot,
+                            shortable_shares=self.manifest.stock_borrow.get(contract.symbol),
+                        )
+                        errors.append(
+                            f"Crossed {'pre' if self.manifest.pre_market(now) else 'post'}-market book: "
+                            f"{contract.label} valued at its midpoint, not traded until it uncrosses"
+                        )
+                        continue
                     live = False
                     book_at = at
                     if raw.get("quote_server_connected") and item.get("book_push_count", 0) >= 2:
-                        book_at = self.book_time(item)
+                        book_at = self.book_time(item, allow_crossed=extended)
                         permission = raw.get("rights", {}).get(
                             "us_option_qot_right" if contract.kind == "OPT" else "us_qot_right"
                         )

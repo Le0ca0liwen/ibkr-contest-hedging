@@ -480,3 +480,51 @@ def test_same_index_etfs_keep_their_correlation_while_single_names_are_shrunk(ma
     corr = cov / np.sqrt(np.outer(np.diag(cov), np.diag(cov)))
     assert corr[1, 2] > 0.99  # SPY-VOO: the empirical ~0.999 is kept
     assert corr[0, 1] < 0.85  # BA-SPY: shrunk toward independence as before
+
+
+def test_a_crossed_after_hours_stock_book_values_but_never_trades(tmp_path, manifest, snapshot, quotes):
+    m = contest(demo_manifest())
+    now = at(m.scoring_sessions[0], 19, 35)
+    raw = feed(m, now)
+    stock = next(c for c in m.contracts if c.kind == "STK")
+    option = next(c for c in m.contracts if c.kind == "OPT")
+    raw["securities"][code_for(stock)]["order_book"] = {"Bid": [[195.06, 300]], "Ask": [[195.00, 200]]}
+    path = tmp_path / "latest.json"
+    path.write_text(json.dumps(raw))
+    feed_reader = MoomooData(m, path)
+    got = feed_reader.quotes(now)
+    q = got[stock.con_id]
+    assert q.data_type == "model" and q.bid == q.ask == pytest.approx(195.03) and q.bid_size == 0
+    assert got[option.con_id].data_type == "model" and got[option.con_id].spot == pytest.approx(195.03)
+    assert any("Crossed post-market book" in e for e in feed_reader.errors)
+    # The same crossed book during regular hours is still rejected.
+    regular = at(m.scoring_sessions[0], 11)
+    raw = feed(m, regular)
+    raw["securities"][code_for(stock)]["order_book"] = {"Bid": [[195.06, 300]], "Ask": [[195.00, 200]]}
+    path.write_text(json.dumps(raw))
+    assert stock.con_id not in MoomooData(m, path).quotes(regular)
+
+
+def test_the_risk_gate_holds_a_crossed_stock_but_refuses_to_trade_it(manifest, snapshot, quotes):
+    from hedge.risk import RiskGate
+    from hedge.scenarios import ScenarioEngine
+
+    m = contest(manifest)
+    now = at(m.scoring_sessions[0], 19, 35)
+    valued = {
+        i: q.model_copy(update={"observed_at": now, "greek_at": now, "data_type": "model"})
+        for i, q in quotes.items()
+    }
+    snap = snapshot.model_copy(
+        update={
+            "at": now,
+            "account_at": now,
+            "positions": (*snapshot.positions, Position(con_id=10, quantity=100)),
+        }
+    )
+    scenarios = ScenarioEngine(m).build(snap, valued, now)
+    gate = RiskGate(m)
+    held = gate.validate(snap, valued, scenarios, snap.quantities(), now)
+    assert not any(r.startswith("Non-live quote") for r in held.reasons), held.reasons
+    traded = gate.validate(snap, valued, scenarios, {**snap.quantities(), 10: 50}, now)
+    assert "Non-live quote: 10" in traded.reasons

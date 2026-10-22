@@ -199,8 +199,9 @@ class RiskGate:
                 reasons.append(f"Instrument not approved: {i}")
             allowed_type = "synthetic" if self.demo else "live"
             traded = quantities.get(i, 0) != actual.get(i, 0)
-            # After hours a held option is valued from its live underlying ("model"); never traded.
-            held_model = q.data_type == "model" and c.kind == "OPT" and not traded
+            # Outside regular hours a held option is valued from its underlying, and a stock with a
+            # crossed book at its midpoint ("model"): accepted for holding, never for trading.
+            held_model = q.data_type == "model" and not traded
             if q.data_type != allowed_type and not held_model:
                 reasons.append(f"Non-live quote: {i}")
             limits = self.manifest.risk
