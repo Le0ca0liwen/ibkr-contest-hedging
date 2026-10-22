@@ -442,3 +442,74 @@ async def test_discovery_skips_strikes_not_listed_at_an_expiry():
     added = [c for c in expanded.contracts if c.con_id >= 1000]
     nov19 = {c.strike for c in added if c.expiry == date(2026, 11, 19)}
     assert 770 not in nov19 and len(nov19) == 3  # walked past the unlisted strike to the next one
+
+
+async def test_voo_and_ivv_are_added_as_tradable_hedges_with_a_borrow_allowance(monkeypatch):
+    from datetime import date
+    from pathlib import Path
+
+    from hedge.config import Manifest
+
+    monkeypatch.syspath_prepend(str(Path(__file__).resolve().parents[1] / "ops"))
+    from ops.add_hedge_stocks import add
+
+    expiry = date(2026, 11, 20)
+    stocks = [Contract(con_id=i, symbol=s, kind="STK") for i, s in [(10, "SPCX"), (20, "RKLB"), (30, "SPY")]]
+    legs = [
+        (101, 10, 130, "C", 25),
+        (102, 10, 145, "C", -50),
+        (103, 10, 160, "C", 25),
+        (104, 20, 45, "P", -25),
+        (105, 20, 55, "P", 25),
+        (106, 30, 770, "C", 25),
+        (107, 30, 770, "P", 25),
+    ]
+    symbols = {10: "SPCX", 20: "RKLB", 30: "SPY"}
+    options = [
+        Contract(
+            con_id=i,
+            symbol=symbols[u],
+            kind="OPT",
+            multiplier=100,
+            expiry=expiry,
+            strike=k,
+            right=r,
+            underlying_id=u,
+        )
+        for i, u, k, r, _ in legs
+    ]
+    m = Manifest(
+        name="Contest",
+        account="DU_TEST",
+        day_zero=date(2026, 10, 21),
+        scoring_sessions=(date(2026, 10, 22), date(2026, 11, 4)),
+        valuation_convention="IBKR NAV",
+        report_source="IBKR statement",
+        contracts=(*stocks, *options),
+        mandatory={i: q for i, *_, q in legs},
+        contest_rules="spcx_rklb_spy",
+        contest_option_expiry=expiry,
+        universe="allowlist",
+        allowlist=(10, 20),
+    )
+
+    class Broker(DiscoveryBroker):
+        async def reqContractDetailsAsync(self, native):
+            con_id = {"VOO": 136155102, "IVV": 8991352}[native.symbol]
+            return [
+                SimpleNamespace(
+                    contract=SimpleNamespace(
+                        symbol=native.symbol, secType="STK", currency="USD", conId=con_id
+                    )
+                )
+            ]
+
+    qualified = await qualify_stock_universe(m, ["VOO", "IVV"], Broker())
+    updated, added = add(m, qualified, 300, "IBKR paper: easy to borrow (operator)")
+    assert added == ["IVV", "VOO"]
+    assert {136155102, 8991352} <= set(
+        updated.allowlist
+    ) and 30 not in updated.allowlist  # SPY shares stay banned
+    assert updated.stock_borrow == {"VOO": 300, "IVV": 300}
+    assert updated.stock_borrow_source == "IBKR paper: easy to borrow (operator)"
+    assert updated.mandatory == m.mandatory and updated.config_hash != m.config_hash
