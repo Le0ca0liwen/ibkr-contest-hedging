@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo
 
 ARCHIVE_DAILY_BYTES = 750_000_000
 LOCKED = 75  # another collector holds the lock (the app reports the holder's pid)
+SUBSCRIBE_RETRY_SECONDS = 30
+SUBSCRIPTION_FAILED = "Subscription failed"
 NEW_YORK = ZoneInfo("America/New_York")
 
 
@@ -95,6 +97,52 @@ def make_handlers(sdk, lock, securities, rights, stamp, bars=None):
     return tuple(handlers)
 
 
+def subscribe(sdk, ctx, lock, securities, code):
+    """Subscribe one code to quote and book pushes and take a snapshot of each. True when the
+    subscription succeeded; a failed code carries SUBSCRIPTION_FAILED (shown by the app) until a
+    later retry succeeds."""
+    ret, _ = ctx.subscribe(
+        [code],
+        [sdk.SubType.QUOTE, sdk.SubType.ORDER_BOOK],
+        is_first_push=False,
+        subscribe_push=True,
+    )
+    subscribed = ret == sdk.RET_OK
+    with lock:
+        item = securities.setdefault(code, {})
+        if subscribed:
+            item.pop("error", None)
+        else:
+            item["error"] = SUBSCRIPTION_FAILED
+    ret, rows = ctx.get_stock_quote([code])
+    if ret == sdk.RET_OK:
+        with lock:
+            securities.setdefault(code, {})["quote"] = json.loads(rows.to_json(orient="records"))
+    ret, book = ctx.get_order_book(code, num=1)
+    if ret == sdk.RET_OK:
+        with lock:
+            securities.setdefault(code, {})["order_book"] = book
+    return subscribed
+
+
+def retry_failed(sdk, ctx, lock, securities, failed):
+    """Retry each failed code once; returns the codes still failing. A recovered stock also gets
+    its 1-minute bars again."""
+    still = [code for code in failed if not subscribe(sdk, ctx, lock, securities, code)]
+    for code in failed:
+        if code not in still and not any(ch.isdigit() for ch in code):
+            ctx.subscribe([code], [sdk.SubType.K_1M], is_first_push=True, subscribe_push=True)
+    if failed:
+        recovered = [code for code in failed if code not in still]
+        print(
+            "Quote subscription retry:",
+            f"recovered {', '.join(recovered) or 'none'};",
+            f"still failing {', '.join(still) or 'none'}",
+            flush=True,
+        )
+    return still
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--codes", default="config/local.moomoo-codes.json")
@@ -143,25 +191,9 @@ def main():
                     identities.update(
                         {row["code"]: row for row in json.loads(basic.to_json(orient="records"))}
                     )
-                for code in codes:
-                    ret, msg = ctx.subscribe(
-                        [code],
-                        [sdk.SubType.QUOTE, sdk.SubType.ORDER_BOOK],
-                        is_first_push=False,
-                        subscribe_push=True,
-                    )
-                    if ret != sdk.RET_OK:
-                        securities[code] = {"error": "Subscription failed"}
-                    ret, rows = ctx.get_stock_quote([code])
-                    if ret == sdk.RET_OK:
-                        with lock:
-                            securities.setdefault(code, {})["quote"] = json.loads(
-                                rows.to_json(orient="records")
-                            )
-                    ret, book = ctx.get_order_book(code, num=1)
-                    if ret == sdk.RET_OK:
-                        with lock:
-                            securities.setdefault(code, {})["order_book"] = book
+                failed = [code for code in codes if not subscribe(sdk, ctx, lock, securities, code)]
+                if failed:
+                    print("Quote subscription failed:", ", ".join(failed), flush=True)
                 stocks = [code for code in codes if not any(ch.isdigit() for ch in code)]
                 ctx.subscribe(stocks, [sdk.SubType.K_1M], is_first_push=True, subscribe_push=True)
                 for code in stocks:
@@ -173,8 +205,12 @@ def main():
                             for row in json.loads(recent.to_json(orient="records")):
                                 bars[(row["code"], row["time_key"])] = row
                 last_archive = 0
+                last_retry = time.monotonic()
                 capped = None
                 while True:
+                    if failed and time.monotonic() - last_retry >= SUBSCRIBE_RETRY_SECONDS:
+                        last_retry = time.monotonic()
+                        failed = retry_failed(sdk, ctx, lock, securities, failed)
                     ret, state = ctx.get_global_state()
                     if ret != sdk.RET_OK or not state.get("qot_logined"):
                         raise ValueError("Quote server disconnected")

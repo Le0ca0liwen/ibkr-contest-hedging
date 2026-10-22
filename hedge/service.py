@@ -772,13 +772,27 @@ class TradingService:
         live = sum(
             1 for q in self.last_quotes.values() if q.data_type == ("synthetic" if self.demo else "live")
         )
+        # Count every configured contract: a contract with no quote at all is not live either.
+        total = len(m.contracts)
+        failed = self.moomoo_data.subscription_failed if self.moomoo_data else []
         item(
             "Quotes",
-            "ok" if self.last_quotes and live == len(self.last_quotes) else "warn",
+            "fail" if failed else "ok" if self.last_quotes and live >= total else "warn",
             "No quotes yet (they are read once IBKR is connected and the contracts are verified)"
             if not self.last_quotes
-            else f"{live} of {len(self.last_quotes)} quotes live"
-            + ("" if live else " (Moomoo quotes are live 09:30-16:00 ET)"),
+            else f"{live} of {total} quotes live"
+            + ("" if live else " (Moomoo quotes are live 09:30-16:00 ET)")
+            + (
+                f"; no quote at all for {total - len(self.last_quotes)}"
+                if len(self.last_quotes) < total
+                else ""
+            )
+            + (
+                "; Moomoo subscription failed for " + ", ".join(failed) + " (retried every 30 s; if it "
+                "stays, close the app and start it again)"
+                if failed
+                else ""
+            ),
         )
         if not self.demo and m.daily_stock_history:
             last = self.history_last_date()
@@ -1095,6 +1109,14 @@ class TradingService:
                     and self.manifest.market_data_provider != "moomoo"
                 ):
                     self.last_quotes = self.moomoo_data.quotes(self.now())
+                if self.moomoo_data and self.moomoo_data.subscription_failed:
+                    self.alert(
+                        "warning",
+                        "Moomoo quote subscription failed for "
+                        + ", ".join(self.moomoo_data.subscription_failed)
+                        + "; the quote collector retries every 30 s. If this stays, close the app and "
+                        "start it again.",
+                    )
                 for identifier, quote in self.last_quotes.items():
                     if quote.data_type == "live":
                         self.market_data_errors.pop(identifier, None)

@@ -388,3 +388,19 @@ def test_option_with_no_trade_today_keeps_its_current_book(tmp_path):
     untraded["book_push_count"] = 1  # no trade time and no dated book: still dropped
     path.write_text(json.dumps(raw))
     assert 101 not in MoomooData(m, path).quotes(now)
+
+
+def test_failed_subscriptions_are_named(tmp_path):
+    m, now = demo_manifest(), utcnow()
+    raw = fixture(m, now)
+    raw["securities"]["US.BA"] = {"error": "Subscription failed"}
+    path = tmp_path / "quotes.json"
+    path.write_text(json.dumps(raw))
+    feed = MoomooData(m, path)
+    quotes = feed.quotes(now)
+    assert feed.subscription_failed == ["US.BA"] and 10 not in quotes
+    assert any("Moomoo subscription failed: US.BA" in e for e in feed.errors)
+    raw["securities"]["US.BA"] = fixture(m, now)["securities"]["US.BA"]
+    path.write_text(json.dumps(raw))
+    feed.quotes(now)
+    assert feed.subscription_failed == []

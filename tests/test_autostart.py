@@ -174,6 +174,21 @@ async def test_readiness_checklist_names_what_blocks_paper(launched):
     assert "rows above" in rows["Trading"]["detail"]  # the cause is stated once, not on every row
 
 
+async def test_quotes_row_counts_every_contract_and_fails_on_a_failed_subscription(launched):
+    from types import SimpleNamespace
+
+    total = len(launched.manifest.contracts)
+    assert {i["label"]: i for i in launched.checklist()}["Quotes"]["status"] == "ok"
+    dropped = next(iter(launched.last_quotes))
+    launched.last_quotes = {i: q for i, q in launched.last_quotes.items() if i != dropped}
+    row = {i["label"]: i for i in launched.checklist()}["Quotes"]
+    assert row["status"] == "warn"
+    assert row["detail"] == f"{total - 1} of {total} quotes live; no quote at all for 1"
+    launched.moomoo_data = SimpleNamespace(subscription_failed=["US.BA"])
+    row = {i["label"]: i for i in launched.checklist()}["Quotes"]
+    assert row["status"] == "fail" and "Moomoo subscription failed for US.BA" in row["detail"]
+
+
 def test_leftover_positions_are_named_as_tws_shows_them(manifest):
     import asyncio
     from types import SimpleNamespace

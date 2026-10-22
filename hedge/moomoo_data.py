@@ -42,6 +42,7 @@ class MoomooData:
         self.engine = ValuationEngine(manifest)
         self.received_at = None
         self.errors = []
+        self.subscription_failed = []  # collector codes whose Moomoo subscription failed
         self.last_iv = {}
 
     @staticmethod
@@ -79,6 +80,15 @@ class MoomooData:
             self.received_at = received.isoformat()
             securities = raw["securities"]
             quotes, errors = {}, []
+            self.subscription_failed = sorted(
+                code for code, item in securities.items() if isinstance(item, dict) and item.get("error")
+            )
+            if self.subscription_failed:
+                errors.append(
+                    "Moomoo subscription failed: "
+                    + ", ".join(self.subscription_failed)
+                    + " (the quote collector retries every 30 s)"
+                )
             for contract in self.manifest.contracts:
                 try:
                     item = securities[code_for(contract)]
@@ -204,4 +214,5 @@ class MoomooData:
             return quotes
         except (OSError, KeyError, TypeError, ValueError):
             self.errors = ["Moomoo feed unavailable, stale, or invalid; no executable data"]
+            self.subscription_failed = []
             return {}
