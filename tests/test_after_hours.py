@@ -455,3 +455,28 @@ def test_the_nav_stream_starts_a_new_base_at_the_open(manifest, snapshot):
     regular = base.model_copy(update={"at": opened, "pnl_daily": Decimal("40"), "pnl_at": opened})
     tracker.estimate(regular, {}, m.contract_map)
     assert tracker.source == "fill attribution" and tracker.pnl_anchor is None  # waits for a settled push
+
+
+def test_same_index_etfs_keep_their_correlation_while_single_names_are_shrunk(manifest, tmp_path):
+    import numpy as np
+    import pandas as pd
+
+    from hedge.scenarios import ScenarioEngine
+
+    now = at(manifest.scoring_sessions[0], 17)
+    days = pd.bdate_range(end=pd.Timestamp(now.date()) - pd.Timedelta(days=1), periods=80)
+    rng = np.random.default_rng(3)
+    market = rng.normal(0, 0.01, len(days))
+    rows = []
+    for symbol, beta, noise in [("SPY", 1.0, 0.0002), ("VOO", 1.0, 0.0002), ("BA", 1.3, 0.004)]:
+        prices = 100 * np.exp(np.cumsum(beta * market + rng.normal(0, noise, len(days))))
+        rows += [
+            {"date": str(d.date()), "symbol": symbol, "close": p} for d, p in zip(days, prices, strict=True)
+        ]
+    path = tmp_path / "history.csv"
+    pd.DataFrame(rows).to_csv(path, index=False)
+    m = manifest.model_copy(update={"daily_stock_history": str(path)})
+    cov = ScenarioEngine(m).daily_covariance(now, ["BA", "SPY", "VOO"])
+    corr = cov / np.sqrt(np.outer(np.diag(cov), np.diag(cov)))
+    assert corr[1, 2] > 0.99  # SPY-VOO: the empirical ~0.999 is kept
+    assert corr[0, 1] < 0.85  # BA-SPY: shrunk toward independence as before

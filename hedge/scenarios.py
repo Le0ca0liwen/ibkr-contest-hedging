@@ -22,6 +22,10 @@ TRADING_DAY = 365 / 252  # calendar days of model variance in one trading day (s
 # close -> reopen interval therefore keeps exactly overnight_variance.
 POST_MARKET_VARIANCE = 0.08
 PRE_MARKET_VARIANCE = 0.10
+# ETFs tracking the same index (correlation ~0.999). Their pairs keep the empirical covariance:
+# the shrinkage toward independence that guards single names would cut it to ~0.8 and make a
+# VOO/IVV hedge of SPY options look worse than none (observed Oct 22).
+SAME_INDEX = (frozenset({"SPY", "IVV", "VOO", "SPLG"}),)
 
 
 def overnight_variance(close_day: date, next_day: date) -> float:
@@ -454,6 +458,16 @@ class ScenarioEngine:
             raise ValueError("At least 20 aligned completed-session returns required")
         empirical = returns.cov().to_numpy()
         covariance = 0.8 * empirical + 0.2 * np.diag(np.diag(empirical))
+        kept = covariance.copy()
+        for a, first in enumerate(symbols):
+            for b, second in enumerate(symbols):
+                if a != b and any({first, second} <= group for group in SAME_INDEX):
+                    kept[a, b] = empirical[a, b]
+        try:  # the mixed matrix must stay positive definite for the joint draws
+            np.linalg.cholesky(kept + np.eye(len(symbols)) * max(1e-10, np.trace(kept) * 1e-6))
+            covariance = kept
+        except np.linalg.LinAlgError:
+            pass
         covariance += np.eye(len(symbols)) * max(1e-10, np.trace(covariance) * 1e-6)
         self.daily_cache[key] = covariance
         return covariance
