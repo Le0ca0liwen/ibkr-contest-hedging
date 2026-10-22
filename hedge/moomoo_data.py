@@ -69,6 +69,58 @@ class MoomooData:
         # the latest side update, bounded by actual callback arrival.
         return min(at, max(times)) if times else at
 
+    def _in_session(self, contract, now):
+        """Regular session for everything; the contest post-market session for shares too."""
+        day = now.astimezone(NY).date()
+        if self.manifest.session_open(day) <= now < self.manifest.session_close(day):
+            return True
+        return contract.kind == "STK" and self.manifest.post_market(now) is not None
+
+    def _post_market_option(self, contract, raw, stock_item, stock_at, spot, bid, ask, vendor_iv, now):
+        """After the close options do not trade, but IBKR keeps marking them from the moving
+        underlying (model-style; observed Oct 22). Value a held option the same way: the live
+        after-hours stock book and the IV calibrated during the day (else the vendor's). Never
+        tradable: no size, data_type "model". None when the underlying book is not live."""
+        rights = raw.get("rights", {})
+        if not (
+            raw.get("quote_server_connected")
+            and rights.get("us_qot_right") in ("LV1", "LV2", "LV3", "SF")
+            and stock_item.get("book_push_count", 0) >= 2
+            and stock_at is not None
+            and timedelta(0) <= now - stock_at <= timedelta(seconds=self.manifest.risk.stock_quote_age)
+        ):
+            return None
+        iv = self.last_iv.get(contract.con_id)
+        if iv is None and vendor_iv and math.isfinite(vendor_iv) and vendor_iv > 0:
+            iv = vendor_iv
+        if iv is None:
+            return None
+        try:
+            price = self.engine.price(contract, spot, iv, now)
+            greeks = self.engine.greeks(contract, spot, iv, now)
+        except (ValueError, ArithmeticError):
+            return None
+        if not math.isfinite(price) or price < 0:
+            return None
+        # Keep the day's last quoted spread around the model value (it prices any later trade).
+        half = (ask - bid) / 2 if math.isfinite(bid) and math.isfinite(ask) and 0 < bid <= ask else 0
+        half = max(half, 0.005 * price, 0.005)
+        return Quote(
+            provider="moomoo",
+            con_id=contract.con_id,
+            bid=max(0.0, price - half),
+            ask=price + half,
+            bid_size=0,
+            ask_size=0,
+            observed_at=stock_at,
+            data_type="model",
+            spot=spot,
+            iv=iv,
+            greek_at=stock_at,
+            model_price=price,
+            **greeks,
+        )
+
     def quotes(self, now):
         try:
             raw = json.loads(self.path.read_text())
@@ -133,9 +185,7 @@ class MoomooData:
                             <= timedelta(seconds=self.manifest.risk.stock_quote_age)
                             and book_at is not None
                             and timedelta(0) <= now - book_at <= timedelta(seconds=max_age)
-                            and self.manifest.session_open(now.astimezone(NY).date())
-                            <= now
-                            < self.manifest.session_close(now.astimezone(NY).date())
+                            and self._in_session(contract, now)
                         )
                     iv, greeks = None, {}
                     if contract.kind == "OPT":
@@ -186,6 +236,13 @@ class MoomooData:
                     # Vendor clocks can be slightly ahead of the callback clock;
                     # a verified current book still uses its REAL bounded receipt
                     # timestamp. Never revive an unverified/cached future trade.
+                    if contract.kind == "OPT" and not live and self.manifest.post_market(now) is not None:
+                        model = self._post_market_option(
+                            contract, raw, stock_item, stock_at, spot, bid, ask, iv, now
+                        )
+                        if model is not None:
+                            quotes[contract.con_id] = model
+                            continue
                     if not live and at > now:
                         raise ValueError("Future unverified provider timestamp")
                     quotes[contract.con_id] = Quote(

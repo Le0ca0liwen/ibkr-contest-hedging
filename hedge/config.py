@@ -14,6 +14,10 @@ from pydantic import Field, field_validator, model_validator
 from .models import Contract, Dividend, Frozen, digest
 
 NY = ZoneInfo("America/New_York")
+# Post-market session after the regular close (16:00-20:00 ET). In the SPCX/RKLB/SPY contest its
+# trading and NAV changes count (operator instruction, Oct 22): the official close is read after it
+# and SPCX/RKLB (and other allowlisted) shares keep hedging through it. Options never trade in it.
+EXTENDED_HOURS = timedelta(hours=4)
 # Implied vol rises when spot falls (leverage effect); broad index ETFs show it most strongly.
 BROAD_INDEX_ETFS = frozenset({"SPY", "IVV", "VOO", "SPLG", "QQQ", "IWM", "DIA"})
 INDEX_SPOT_VOL_CORRELATION = -0.7
@@ -432,9 +436,28 @@ class Manifest(Frozen):
         day = now.astimezone(NY).date()
         return day if day in (self.day_zero, *self.scoring_sessions) else None
 
+    @property
+    def extended_hours(self) -> bool:
+        """The contest scores the NAV after the post-market session and hedges through it."""
+        return self.contest_rules == "spcx_rklb_spy"
+
+    def scoring_close(self, day: date) -> datetime:
+        """When the day's scored NAV is set: the regular close, or the end of the post-market
+        session (20:00 ET) in the contest. The official reading follows it (closing.py)."""
+        close = self.session_close(day)
+        return close + EXTENDED_HOURS if self.extended_hours else close
+
+    def post_market(self, now: datetime) -> date | None:
+        """The contest session whose post-market window [close, close + 4 h) contains now."""
+        day = self.active_session(now)
+        if not self.extended_hours or day is None:
+            return None
+        close = self.session_close(day)
+        return day if close <= now < close + EXTENDED_HOURS else None
+
     def next_close(self, now: datetime) -> datetime | None:
         return next(
-            (self.session_close(d) for d in self.scoring_sessions if self.session_close(d) > now), None
+            (self.scoring_close(d) for d in self.scoring_sessions if self.scoring_close(d) > now), None
         )
 
     def can_trade(self, now: datetime, kind: str, setup: bool = False) -> bool:
@@ -448,7 +471,15 @@ class Manifest(Frozen):
             if kind == "OPT"
             else self.policy.stock_cutoff_minutes
         )
-        return self.session_open(day) <= now < self.session_close(day) - timedelta(minutes=cutoff)
+        if self.session_open(day) <= now < self.session_close(day) - timedelta(minutes=cutoff):
+            return True
+        # Contest post-market session: shares only, until the same cutoff before 20:00 ET.
+        return (
+            kind == "STK"
+            and not setup
+            and self.post_market(now) is not None
+            and now < self.session_close(day) + EXTENDED_HOURS - timedelta(minutes=cutoff)
+        )
 
     def accrual_days(self, day: date) -> int:
         days = (self.day_zero, *self.scoring_sessions)

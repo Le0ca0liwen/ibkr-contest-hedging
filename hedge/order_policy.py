@@ -3,6 +3,8 @@
 from datetime import timedelta
 from decimal import ROUND_CEILING, ROUND_FLOOR, Decimal
 
+from .config import EXTENDED_HOURS
+
 
 def spread_error(manifest, contract, quote):
     policy = manifest.execution
@@ -26,6 +28,8 @@ def urgency_for(manifest, contract, now, corrective=False, setup=False):
         else manifest.policy.stock_cutoff_minutes
     )
     deadline = manifest.session_close(day) - timedelta(minutes=cutoff)
+    if contract.kind == "STK" and manifest.post_market(now) is not None:
+        deadline += EXTENDED_HOURS  # the post-market session's own cutoff
     return "DEADLINE" if (deadline - now).total_seconds() <= 90 else "NORMAL"
 
 
@@ -46,6 +50,7 @@ def choose_order(manifest, broker, contract, quote, signed, now, corrective=Fals
     # narrowly quoted stock books. Its slippage reserve is modeled, not a cap.
     market = (
         policy.urgent_market_stocks
+        and manifest.post_market(now) is None  # outside regular hours IBKR takes limits only
         and quote.data_type == "live"
         and urgency == "CORRECTIVE"
         and contract.kind == "STK"

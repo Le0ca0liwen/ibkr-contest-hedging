@@ -198,10 +198,12 @@ class RiskGate:
                 # Existing out-of-screen holdings still need an explicit allowlist before trading.
                 reasons.append(f"Instrument not approved: {i}")
             allowed_type = "synthetic" if self.demo else "live"
-            if q.data_type != allowed_type:
+            traded = quantities.get(i, 0) != actual.get(i, 0)
+            # After hours a held option is valued from its live underlying ("model"); never traded.
+            held_model = q.data_type == "model" and c.kind == "OPT" and not traded
+            if q.data_type != allowed_type and not held_model:
                 reasons.append(f"Non-live quote: {i}")
             limits = self.manifest.risk
-            traded = quantities.get(i, 0) != actual.get(i, 0)
             # An unchanged holding only needs a current valuation; anything traded needs a fresh book.
             max_age = (
                 (limits.option_quote_age if traded else limits.held_option_quote_age)

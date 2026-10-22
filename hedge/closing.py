@@ -4,7 +4,7 @@ import asyncio
 from datetime import timedelta
 from decimal import Decimal
 
-from .config import NY
+from .config import EXTENDED_HOURS, NY
 from .execution_quality import timestamp
 from .models import digest
 
@@ -17,7 +17,6 @@ OBSERVE_TIMEOUT_SECONDS = 30
 # counts (operator instruction, Oct 22), so the official close is read once the post-market
 # session (regular close + 4 h: 20:00 ET) has ended. It supersedes the 16:00 and 16:20 readings.
 END_OF_DAY = "end-of-day observation"
-EXTENDED_HOURS = timedelta(hours=4)
 END_OF_DAY_DELAY = timedelta(minutes=5)
 END_OF_DAY_WINDOW = timedelta(minutes=15)
 

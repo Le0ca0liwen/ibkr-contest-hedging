@@ -65,7 +65,8 @@ class Quote(Frozen):
     bid_size: int = Field(ge=0)
     ask_size: int = Field(ge=0)
     observed_at: datetime
-    data_type: Literal["live", "delayed", "frozen", "synthetic"] = "live"
+    # "model": a held option valued after hours from its live underlying (never tradable).
+    data_type: Literal["live", "delayed", "frozen", "synthetic", "model"] = "live"
     provider: Literal["ibkr", "moomoo", "synthetic", "cboe_datashop", "unknown"] = "unknown"
     spot: float = Field(gt=0)
     iv: float | None = Field(default=None, gt=0)

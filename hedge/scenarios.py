@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .config import NY
+from .config import EXTENDED_HOURS, NY
 from .continuity import DataUnavailable
 from .models import digest
 from .valuation import ValuationEngine
@@ -15,6 +15,10 @@ from .valuation import ValuationEngine
 # The app can trade again once the next scored session has been open this long.
 OVERNIGHT_REACTION = timedelta(minutes=15)
 TRADING_DAY = 365 / 252  # calendar days of model variance in one trading day (sigma^2 / 252)
+# The part of each overnight gap carried by the 16:00-20:00 post-market session, accrued evenly over
+# it (an assumption: after-hours moves run at roughly 0.3x a day's standard deviation). The rest of
+# the gap still arrives at the reopen, so a whole close -> reopen interval is unchanged.
+POST_MARKET_VARIANCE = 0.08
 
 
 def overnight_variance(close_day: date, next_day: date) -> float:
@@ -30,9 +34,10 @@ def overnight_variance(close_day: date, next_day: date) -> float:
 def trading_variance(start: datetime, end: datetime) -> float:
     """Spot/IV variance from start to end in trading days, on the same clock as overnight_variance.
 
-    Open-session time counts in proportion to the session length (early closes included); each
-    close -> reopen gap inside the interval counts overnight_variance. Intraday variance is
-    therefore not understated by calendar time (a 6-hour remainder is ~0.9 days, not 0.25).
+    Open-session time counts in proportion to the session length (early closes included). Each
+    close -> reopen gap counts overnight_variance: POST_MARKET_VARIANCE of it evenly over the
+    post-market session after the close, the rest at the reopen. Intraday variance is therefore
+    not understated by calendar time (a 6-hour remainder is ~0.9 days, not 0.25).
     """
     import exchange_calendars as xcals
 
@@ -45,9 +50,11 @@ def trading_variance(start: datetime, end: datetime) -> float:
         closed = calendar.session_close(session).to_pydatetime()
         overlap = (min(end, closed) - max(start, opened)).total_seconds()
         total += max(0.0, overlap) / (closed - opened).total_seconds()
-        if previous is not None and start <= previous[1] and end >= opened:
-            total += overnight_variance(previous[0], session.date())
-        previous = (session.date(), closed)
+        if previous is not None and start < opened <= end:
+            total += overnight_variance(previous, session.date()) - POST_MARKET_VARIANCE
+        post = (min(end, closed + EXTENDED_HOURS) - max(start, closed)).total_seconds()
+        total += POST_MARKET_VARIANCE * max(0.0, post) / EXTENDED_HOURS.total_seconds()
+        previous = session.date()
     return max(total, 1 / 23400)
 
 
@@ -293,11 +300,14 @@ class ScenarioEngine:
         if next_session:
             # Same standardized joint shocks, longer calendar horizon; score is
             # next-close minus this-close, never versus the initial account NAV.
-            following = self.manifest.session_close(next_session)
+            following = self.manifest.scoring_close(next_session)
             scale = np.sqrt(trading_variance(end, following) / horizon)
             next_changes = self._reprice(ids, quotes, end, following, shocks, iv_shocks, scale)
             # Close -> reopen: calendar-time decay, trading-time spot/IV variance on the same shocks.
             variance = overnight_variance(close_day, next_session)
+            if self.manifest.extended_hours:
+                # The scored close is after the post-market session: only the rest of the gap.
+                variance -= POST_MARKET_VARIANCE
             overnight_shocks, overnight_iv = shocks, iv_shocks
             if source.startswith("historical matched-clock"):
                 # Realized rest-of-session paths carry a sample mean: no directional overnight drift.

@@ -773,9 +773,9 @@ class TradingService:
             else "Not confirmed: review the seven legs and press Confirm contest configuration "
             "(available once IBKR has verified the contracts)",
         )
-        live = sum(
-            1 for q in self.last_quotes.values() if q.data_type == ("synthetic" if self.demo else "live")
-        )
+        valued = ("synthetic",) if self.demo else ("live", "model")
+        live = sum(1 for q in self.last_quotes.values() if q.data_type in valued)
+        modeled = sum(1 for q in self.last_quotes.values() if q.data_type == "model")
         # Count every configured contract: a contract with no quote at all is not live either.
         total = len(m.contracts)
         failed = self.moomoo_data.subscription_failed if self.moomoo_data else []
@@ -785,6 +785,7 @@ class TradingService:
             "No quotes yet (they are read once IBKR is connected and the contracts are verified)"
             if not self.last_quotes
             else f"{live} of {total} quotes live"
+            + (f" ({modeled} options valued from their live underlying after hours)" if modeled else "")
             + ("" if live else " (Moomoo quotes are live 09:30-16:00 ET)")
             + (
                 f"; no quote at all for {total - len(self.last_quotes)}"
