@@ -34,8 +34,12 @@ Oct 21 applies instead: the IBKR API closing NAV is the official close. Its API 
 and, when taken, the post-close observation) are final, not provisional: no statement import is
 needed, no import warning is raised, and the dashboard, readiness row and AI prompts call the API
 close official. A manual entry (Settings & alerts > Import an official closing NAV) only corrects a
-missed or wrong capture, and then wins over the API rows for that day. The rest of this section
-describes the statement-first behaviour that other contest configurations (e.g. practice) keep.
+missed or wrong capture, and then wins over the API rows for that day. In this contest a missed bell
+capture gets one more try: the post-close observation (16:20-16:25 ET) is recorded as the close,
+with "; bell capture missed" in its source, unless it differs from the NAV of the last broker
+snapshot taken before the close by more than `late_capture_max_delta` x initial NAV. The day is
+marked MISSED (manual entry required) only when that also fails. The rest of this section describes
+the statement-first behaviour that other contest configurations (e.g. practice) keep.
 
 The instructor scores the official IBKR Custom Statement NAV. The bell capture can
 differ from it by roughly $300-1,200: API account values refresh only about every
@@ -50,8 +54,12 @@ After a recorded bell capture, the recorder takes one more fresh NetLiquidation
 observation `late_capture_minutes` after the close (within the following five
 minutes) and stores it as a new api row, `IBKR API post-close observation (after
 16:15 options close; ...)`, which then sets the next target. It is skipped when a
-statement exists for that day, also if one arrives during the request, and it is never
-taken for a missed bell capture: that day still requires the statement.
+statement exists for that day, also if one arrives during the request, and outside the contest it
+is never taken for a missed bell capture: that day still requires the statement.
+
+The NAV request has its own IBKR request id, so it does not wait for the reconcile lock (a
+reconnect that re-qualifies every contract can hold that lock for minutes), and each attempt is
+limited to 30 s so a hung request cannot keep the recorder from its window.
 
 The dashboard and supervisor context show `previous_close_provenance` for today's
 target. When it is `api`, a warning is recorded once per session (restarts

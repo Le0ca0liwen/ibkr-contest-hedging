@@ -79,7 +79,10 @@ reason in plain words. The badge counts the ✗ rows.
 - **16:00 and about 16:20:** the closing NAV is recorded automatically
   (Settings & alerts > Automatic closing NAV recorder) and is the official close. A
   DIVERGED warning means the 16:20 value differed from the 16:00 one; the 16:00 value is
-  kept. Check IBKR's closing NAV and correct it in Settings & alerts if needed.
+  kept. Check IBKR's closing NAV and correct it in Settings & alerts if needed. If the
+  16:00 capture is missed, the 16:20 reading is recorded instead; only if that also fails
+  does it ask you to enter the close. Keep the Mac on power with the lid open from 15:30
+  to 16:30: a sleeping Mac records nothing.
 - **After about 16:26:** read **Day-end miss explanation** (Overview, under the scoring
   ledger): how far the official close was from the target and why. Nothing to press.
 

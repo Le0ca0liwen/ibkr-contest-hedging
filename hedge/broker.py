@@ -298,43 +298,45 @@ class IBKRBroker:
 
     async def closing_nav_observation(self):
         """Fresh, explicitly requested account NAV; never reuse summary cache."""
-        async with self.reconcile_lock:
-            if not self.ib.isConnected() or self.manifest.account not in self.ib.managedAccounts():
-                raise ConnectionError("Configured paper account unavailable for closing NAV capture")
-            observed = []
+        # Not behind reconcile_lock: the summary has its own request id, so it cannot collide
+        # with the keyed reconcile downloads, and the bell window must not wait out a reconnect
+        # that re-qualifies every contract.
+        if not self.ib.isConnected() or self.manifest.account not in self.ib.managedAccounts():
+            raise ConnectionError("Configured paper account unavailable for closing NAV capture")
+        observed = []
 
-            def receive(value):
-                if (
-                    value.account == self.manifest.account
-                    and value.tag == "NetLiquidation"
-                    and value.currency in ("BASE", "USD")
-                ):
-                    observed.append((Decimal(value.value), utcnow()))
+        def receive(value):
+            if (
+                value.account == self.manifest.account
+                and value.tag == "NetLiquidation"
+                and value.currency in ("BASE", "USD")
+            ):
+                observed.append((Decimal(value.value), utcnow()))
 
-            request_at = utcnow()
-            request_id = self.ib.client.getReqId()
-            future = self.ib.wrapper.startReq(request_id)
-            self.ib.accountSummaryEvent += receive
-            try:
-                self.ib.client.reqAccountSummary(request_id, "All", "NetLiquidation")
-                await asyncio.wait_for(future, 15)
-                if not observed or any(not value.is_finite() for value, _ in observed):
-                    raise ValueError("Fresh IBKR closing NAV unavailable")
-                if len({value for value, _ in observed}) != 1:
-                    raise ValueError("Inconsistent closing NAV observations; retry capture")
-                nav, observed_at = observed[-1]
-                return {
-                    "account": self.manifest.account,
-                    "nav": nav,
-                    "requested_at": request_at,
-                    "observed_at": observed_at,
-                    "source": "ibkr",
-                }
-            finally:
-                self.ib.accountSummaryEvent -= receive
-                self.ib.wrapper._endReq(request_id)
-                if self.ib.isConnected():
-                    self.ib.client.cancelAccountSummary(request_id)
+        request_at = utcnow()
+        request_id = self.ib.client.getReqId()
+        future = self.ib.wrapper.startReq(request_id)
+        self.ib.accountSummaryEvent += receive
+        try:
+            self.ib.client.reqAccountSummary(request_id, "All", "NetLiquidation")
+            await asyncio.wait_for(future, 15)
+            if not observed or any(not value.is_finite() for value, _ in observed):
+                raise ValueError("Fresh IBKR closing NAV unavailable")
+            if len({value for value, _ in observed}) != 1:
+                raise ValueError("Inconsistent closing NAV observations; retry capture")
+            nav, observed_at = observed[-1]
+            return {
+                "account": self.manifest.account,
+                "nav": nav,
+                "requested_at": request_at,
+                "observed_at": observed_at,
+                "source": "ibkr",
+            }
+        finally:
+            self.ib.accountSummaryEvent -= receive
+            self.ib.wrapper._endReq(request_id)
+            if self.ib.isConnected():
+                self.ib.client.cancelAccountSummary(request_id)
 
     async def reconcile(self):
         # Several IB requests use one global completion future. Overlapping

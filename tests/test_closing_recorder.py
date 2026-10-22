@@ -591,3 +591,117 @@ async def test_post_close_reading_far_from_the_bell_keeps_the_bell_value(store, 
     clock[0] += timedelta(minutes=1)
     await recorder.tick()
     assert broker.calls == calls  # no retry after a divergence
+
+
+def contest_prepared(store, manifest):
+    contest = manifest.model_copy(update={"contest_rules": "spcx_rklb_spy"})
+    return contest, *prepared(store, contest)
+
+
+async def test_contest_missed_bell_is_retried_once_after_the_options_close(store, manifest):
+    contest, ledger, clock, broker, recorder, alerts = contest_prepared(store, manifest)
+    day, close = contest.scoring_sessions[0], clock[0]
+    store.record(
+        "snapshot",
+        contest.account,
+        {"at": (close - timedelta(seconds=40)).isoformat(), "nav": "1000050.00"},
+    )
+    broker.fail = True
+    await recorder.tick()
+    clock[0] = close + timedelta(minutes=3, seconds=1)
+    await recorder.tick()
+    assert "retrying after the options close (16:20 ET)" in recorder.status
+    assert not store.records("closing_capture", contest.account)
+    assert all("waiting for retry" in a[1] for a in alerts)
+    broker.fail = False
+    clock[0] = close + timedelta(minutes=20, seconds=5)
+    await recorder.tick()
+    assert ledger.closes()[day] == Decimal("1000100.12")
+    source = ledger.latest_report()["source"]
+    assert (
+        "post-close observation" in source and "official close" in source and "bell capture missed" in source
+    )
+    assert recorder.state()["last"]["phase"] == "post_close"
+    calls = broker.calls
+    clock[0] += timedelta(minutes=1)
+    await recorder.tick()
+    await ClosingRecorder(contest, ledger, broker, lambda: clock[0], lambda *x: None).tick()
+    assert broker.calls == calls and all("waiting for retry" in a[1] for a in alerts)
+
+
+async def test_contest_missed_bell_and_post_close_require_a_manual_close(store, manifest):
+    contest, ledger, clock, broker, recorder, alerts = contest_prepared(store, manifest)
+    day, close = contest.scoring_sessions[0], clock[0]
+    broker.fail = True
+    clock[0] = close + timedelta(minutes=20)
+    await recorder.tick()
+    assert day not in ledger.closes() and not store.records("closing_capture", contest.account)
+    clock[0] = close + timedelta(minutes=25, seconds=1)
+    await recorder.tick()
+    assert day not in ledger.closes()
+    assert store.records("closing_capture", contest.account)[0]["status"] == "MISSED"
+    assert any("enter IBKR's closing NAV" in a[1] for a in alerts)
+
+
+async def test_contest_post_close_reading_far_from_the_pre_close_nav_is_not_used(store, manifest):
+    contest, ledger, clock, broker, recorder, alerts = contest_prepared(store, manifest)
+    day, close = contest.scoring_sessions[0], clock[0]
+    store.record(
+        "snapshot", contest.account, {"at": (close - timedelta(seconds=30)).isoformat(), "nav": "998000"}
+    )
+    store.record(  # after the close: never the reference
+        "snapshot", contest.account, {"at": (close + timedelta(minutes=5)).isoformat(), "nav": "1000100"}
+    )
+    clock[0] = close + timedelta(minutes=20)
+    await recorder.tick()
+    assert day not in ledger.closes()
+    row = store.records("closing_capture", contest.account)[0]
+    assert row["status"] == "MISSED" and row["pre_close_nav"] == "998000"
+    assert "differed from the last pre-close NAV" in alerts[0][1]
+    clock[0] += timedelta(seconds=30)
+    await recorder.tick()
+    await ClosingRecorder(contest, ledger, broker, lambda: clock[0], lambda *x: None).tick()
+    assert broker.calls == 1 and day not in ledger.closes()
+
+
+async def test_a_hung_observation_cannot_stall_the_recorder(store, manifest, monkeypatch):
+    import hedge.closing as closing
+
+    monkeypatch.setattr(closing, "OBSERVE_TIMEOUT_SECONDS", 0.05)
+    ledger, clock, broker, recorder, alerts = prepared(store, manifest)
+
+    async def hang():
+        await asyncio.sleep(3600)
+
+    broker.closing_nav_observation = hang
+    await asyncio.wait_for(recorder.tick(), 1)
+    assert "waiting for retry" in recorder.status and alerts
+
+
+async def test_closing_observation_does_not_wait_for_a_reconnect(manifest):
+    from eventkit import Event
+
+    broker = IBKRBroker(manifest, asyncio.Queue())
+    event = Event()
+    futures = {}
+
+    def start(request_id):
+        futures[request_id] = asyncio.get_running_loop().create_future()
+        return futures[request_id]
+
+    def request(request_id, group, tags):
+        event.emit(SimpleNamespace(account=manifest.account, tag=tags, value="1000123.45", currency="USD"))
+        futures[request_id].set_result(None)
+
+    broker.ib = SimpleNamespace(
+        isConnected=lambda: True,
+        managedAccounts=lambda: [manifest.account],
+        accountSummaryEvent=event,
+        wrapper=SimpleNamespace(startReq=start, _endReq=lambda i: None),
+        client=SimpleNamespace(
+            getReqId=lambda: 7, reqAccountSummary=request, cancelAccountSummary=lambda i: None
+        ),
+    )
+    async with broker.reconcile_lock:  # e.g. connect() re-qualifying every contract
+        result = await asyncio.wait_for(broker.closing_nav_observation(), 1)
+    assert result["nav"] == Decimal("1000123.45")

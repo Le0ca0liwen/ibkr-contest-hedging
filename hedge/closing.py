@@ -5,11 +5,14 @@ from datetime import timedelta
 from decimal import Decimal
 
 from .config import NY
+from .execution_quality import timestamp
 from .models import digest
 
 # Source marker of the post-close capture, which stays an API row ("IBKR API ..."/"SYNTHETIC simulator ...").
 POST_CLOSE = "post-close observation"
 POST_CLOSE_WINDOW = timedelta(minutes=5)
+# A hung broker request must not stall the recorder past its window.
+OBSERVE_TIMEOUT_SECONDS = 30
 
 
 def post_close_window(manifest, day):
@@ -27,9 +30,10 @@ def post_close_window(manifest, day):
 class ClosingRecorder:
     """Records API NetLiquidation at the bell, then once more after the options close.
 
-    Both are provisional API rows; an imported IBKR statement always outranks them in the ledger
-    and is never overwritten. The post-close observation follows a recorded bell capture only, so
-    a missed bell still requires the statement.
+    An imported IBKR statement always outranks these API rows in the ledger and is never
+    overwritten. Outside the contest the post-close observation follows a recorded bell capture
+    only, so a missed bell requires the statement. In the contest (API close is official) a missed
+    bell is retried once in the post-close window, checked against the last pre-close snapshot NAV.
     """
 
     def __init__(self, manifest, ledger, broker, clock, alert, demo=False):
@@ -66,8 +70,18 @@ class ClosingRecorder:
         rows = [r for r in revisions if r["day"] == day]
         return not rows or any(r["provenance"] == "statement" or POST_CLOSE in r["source"] for r in rows)
 
+    def _pre_close_nav(self, close):
+        """NAV of the latest stored broker snapshot taken at or before the close, if any."""
+        for row in self.ledger.store.records("snapshot", self.manifest.account, 300):
+            try:
+                if timestamp(row["at"]) <= close:
+                    return Decimal(str(row["nav"]))
+            except (KeyError, TypeError, ValueError, ArithmeticError):
+                continue
+        return None
+
     async def _observe(self, start, deadline):
-        observation = await self.broker.closing_nav_observation()
+        observation = await asyncio.wait_for(self.broker.closing_nav_observation(), OBSERVE_TIMEOUT_SECONDS)
         value = Decimal(str(observation["nav"]))
         at = observation["observed_at"]
         requested = observation["requested_at"]
@@ -124,8 +138,26 @@ class ClosingRecorder:
                     continue
                 phase = "post_close"
             else:
+                phase = "close"
                 start, deadline = close, close + timedelta(seconds=policy.window_seconds)
-                if now > deadline:
+                late = close + timedelta(minutes=policy.late_capture_minutes)
+                retry_late = (
+                    self.api_official
+                    and policy.late_capture_minutes
+                    and now <= late + POST_CLOSE_WINDOW
+                    and str(day) not in self.missed
+                )
+                if now > deadline and retry_late:
+                    # Contest: the post-close API reading is official too, so a missed bell gets
+                    # one more chance after the options close.
+                    if now < late:
+                        self.status = (
+                            f"Closing NAV capture missed the bell for {day}; retrying after the "
+                            f"options close ({late.astimezone(NY):%H:%M} ET)"
+                        )
+                        continue
+                    phase, start, deadline = "post_close", late, late + POST_CLOSE_WINDOW
+                elif now > deadline:
                     if str(day) not in self.missed:
                         self.ledger.store.record(
                             "closing_capture",
@@ -150,7 +182,7 @@ class ClosingRecorder:
                         "enter the closing NAV manually" if self.api_official else "statement required"
                     )
                     continue
-                phase = "close"
+            fallback = phase == "post_close" and day not in closes
             if self.retry_at is not None and now < self.retry_at:
                 return
             self.retry_at = now + timedelta(seconds=policy.retry_seconds)
@@ -160,16 +192,48 @@ class ClosingRecorder:
                 value, at = await self._observe(start, deadline)
                 # Report imports can arrive while the broker request is pending.
                 # No await separates this recheck and the synchronous ledger write.
-                if phase == "close" and day in self.ledger.closes():
+                if (phase == "close" or fallback) and day in self.ledger.closes():
                     self.status = f"Closing NAV for {day} already recorded; existing value retained"
                     return
-                if phase == "post_close" and self._post_close_settled(day, self.ledger.revisions()):
+                if (
+                    phase == "post_close"
+                    and not fallback
+                    and self._post_close_settled(day, self.ledger.revisions())
+                ):
                     self.status = (
                         f"Statement NAV for {day} already recorded; post-close observation discarded"
                     )
                     return
-                bell = closes[day]["nav"] if phase == "post_close" else None
+                bell = closes[day]["nav"] if phase == "post_close" and not fallback else None
                 limit = Decimal(str(policy.late_capture_max_delta)) * self.manifest.initial_nav
+                reference = self._pre_close_nav(close) if fallback else None
+                if reference is not None and abs(value - reference) > limit:
+                    # No bell to compare with: a reading far from the last pre-close NAV is not used.
+                    self.missed.add(str(day))
+                    self.ledger.store.record(
+                        "closing_capture",
+                        self.manifest.account,
+                        {
+                            "contest": self.manifest.contest_id,
+                            "date": str(day),
+                            "status": "MISSED",
+                            "phase": "post_close",
+                            "nav": str(value),
+                            "pre_close_nav": str(reference),
+                            "scheduled_close": close.isoformat(),
+                            "reason": "Bell missed; post-close reading diverged from the pre-close NAV",
+                        },
+                    )
+                    self.status = (
+                        f"Closing capture missed for {day}; post-close NAV differed from the last "
+                        f"pre-close NAV by {value - reference:+.2f}"
+                    )
+                    self.alert(
+                        "warning",
+                        f"{self.status}. Enter IBKR's closing NAV in Settings & alerts > Import an "
+                        "official closing NAV",
+                    )
+                    return
                 if bell is not None and abs(value - bell) > limit:
                     # Likely extended-hours stock marks: keep the bell value, ask for the statement.
                     self.post_close_done.add(day)
@@ -209,6 +273,8 @@ class ClosingRecorder:
                             else "NetLiquidation; statement reconciliation pending)"
                         )
                     )
+                    if fallback:
+                        source += "; bell capture missed"
                 else:
                     source = (
                         "SYNTHETIC simulator closing observation"
