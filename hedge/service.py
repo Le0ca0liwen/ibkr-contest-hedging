@@ -2449,6 +2449,9 @@ class TradingService:
                 "closing_target_estimated": self.manifest.scoring_rule == "actual_daily_cash_rate"
                 and day not in self.ledger.daily_rates(),
                 "account_nav_at": snap.account_at.isoformat() if snap else None,
+                # How the live NAV estimate is formed, and the latest settled push vs the stream.
+                "nav_feed": self.nav_tracker.source,
+                "nav_feed_check": self.nav_tracker.last_check,
                 "nav_report_source": self.manifest.report_source,
                 "official_account_nav": self.ledger.latest_report(),
                 "closing_recorder": self.closing_recorder.state(),

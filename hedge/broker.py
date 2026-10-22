@@ -43,6 +43,7 @@ class IBKRBroker:
         self.reconciled = False
         self.reconcile_lock = asyncio.Lock()
         self.account_at = datetime.min.replace(tzinfo=timezone.utc)
+        self.pnl_daily = self.pnl_at = None  # real-time account daily P&L (reqPnL)
         self.quote_times, self.greek_times = {}, {}
         self.ticks_by_contract = {}
         self.market_rules = {}
@@ -58,6 +59,7 @@ class IBKRBroker:
         self.ib.wrapper.tickOptionComputation = option_computation
         self.ib.disconnectedEvent += self._disconnected
         self.ib.accountValueEvent += self._account
+        self.ib.pnlEvent += self._pnl
         self.ib.pendingTickersEvent += self._ticks
         self.ib.execDetailsEvent += self._execution
         self.ib.commissionReportEvent += self._commission
@@ -80,6 +82,22 @@ class IBKRBroker:
     def _account(self, value):
         if value.account == self.manifest.account and value.tag == "NetLiquidation":
             self.account_at = utcnow()
+
+    def _pnl(self, pnl):
+        if pnl.account == self.manifest.account and math.isfinite(pnl.dailyPnL):
+            self.pnl_daily, self.pnl_at = Decimal(str(pnl.dailyPnL)), utcnow()
+
+    def _subscribe_pnl(self):
+        """Real-time account P&L, about once a second (account values arrive only every ~3 min).
+        A subscription from before a reconnect is dead: replace it."""
+        account = self.manifest.account
+        self.pnl_daily = self.pnl_at = None
+        try:
+            if (account, "") in self.ib.wrapper.pnlKey2ReqId:
+                self.ib.cancelPnL(account)
+            self.ib.reqPnL(account)
+        except Exception as exc:  # an enhancement only: the NAV estimate falls back to fill attribution
+            self.emit("broker_error", {"order_id": None, "code": None, "message": f"P&L stream: {exc}"})
 
     def _ticks(self, tickers):
         for ticker in tickers:
@@ -213,6 +231,7 @@ class IBKRBroker:
         snapshot = await self._download_state()
         self._validate_required_qualification(snapshot)
         self.qualified = True
+        self._subscribe_pnl()
         if self.manifest.market_data_provider == "ibkr":
             self.ib.reqMarketDataType(1)
             for native in self.native.values():
@@ -452,6 +471,8 @@ class IBKRBroker:
             orders=tuple(orders),
             connected=self.ib.isConnected(),
             reconciled=self.reconciled,
+            pnl_daily=self.pnl_daily,
+            pnl_at=self.pnl_at,
         )
 
     def quotes(self):
