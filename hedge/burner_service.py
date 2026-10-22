@@ -86,6 +86,9 @@ class ClosingBurner:
         self.verified = set()  # short-filled legs whose fills a later reconcile confirmed
         self.confirmations = {}  # downloads made for a short-filled leg
         self.finished_legs = {}  # leg id -> label of a final cycle (late fills are alerted)
+        # Fills a final cycle already counted. Every reconcile replays the day's executions, so only
+        # an execution not seen before is a late fill.
+        self.known_exec_ids = set()
         self.exit_wait_since = None  # first wide-book refusal of the current exit
         self.quiet_seconds = QUIET_SECONDS
         self.loaded = False
@@ -137,7 +140,12 @@ class ClosingBurner:
                     self.reported[identifier] = max(self.reported.get(identifier, 0), filled)
                     if self.cycle is not None:
                         self.wake()
-            elif event == "execution" and value.order_ref.removeprefix("hedge:") in self.finished_legs:
+            elif (
+                event == "execution"
+                and value.order_ref.removeprefix("hedge:") in self.finished_legs
+                and value.exec_id not in self.known_exec_ids
+            ):
+                self.known_exec_ids.add(value.exec_id)
                 label = self.finished_legs[value.order_ref.removeprefix("hedge:")]
                 self.service.alert(
                     "error",
@@ -532,6 +540,7 @@ class ClosingBurner:
         self._event(c, status, reason=reason, residual=result["residual"])
         s.execution.owned_inventory_ranges.pop(c["con_id"], None)
         self.finished_legs.update({leg["id"]: c["label"] for leg in legs})
+        self.known_exec_ids.update(f["exec_id"] for f in fills)
         if status == "RESIDUAL":
             # The block is released: the hedger and RiskGate now treat it as ordinary inventory.
             s.pending_target = None

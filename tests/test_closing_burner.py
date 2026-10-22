@@ -950,6 +950,27 @@ async def test_a_late_fill_after_the_cycle_ended_raises_an_alert(burning):
     assert any("Late fill on a closing burner leg" in m and "+200" in m for m in alerts)
 
 
+async def test_replayed_fills_of_a_finished_cycle_are_not_late_fills(burning):
+    from types import SimpleNamespace
+
+    service, clock = await burning()
+    await steps(service, 4)
+    assert results(service)[0]["status"] == "CLOSED"
+    legs = [r for r in service.store.intents(service.manifest.account) if r.get("leg")]
+    fills = service.store.fills_for_refs(service.manifest.account, ["hedge:" + r["id"] for r in legs])
+    assert len(fills) >= 2
+    for _ in range(3):  # every routine reconcile replays the day's executions
+        for f in fills:
+            service.burner.on_broker_event(
+                "execution",
+                SimpleNamespace(
+                    order_ref=f["order_ref"], exec_id=f["exec_id"], signed_quantity=f["signed_quantity"]
+                ),
+            )
+    alerts = [a["message"] for a in service.store.records("alert", service.manifest.account)]
+    assert not any("Late fill" in m for m in alerts)
+
+
 async def test_an_exit_waits_out_a_wide_book_but_sells_before_its_deadline(burning):
     service, clock = await burning()
     await steps(service)  # the entry fills
