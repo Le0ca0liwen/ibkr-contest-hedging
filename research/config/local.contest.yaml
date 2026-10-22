@@ -1,0 +1,1454 @@
+name: SPCX RKLB SPY contest
+beta_benchmark: SPY
+account: DU1234567
+environment: paper
+day_zero: '2026-10-21'
+mandatory_purchase_session: null
+scoring_sessions:
+- '2026-10-22'
+- '2026-10-23'
+- '2026-10-26'
+- '2026-10-27'
+- '2026-10-28'
+- '2026-10-29'
+- '2026-10-30'
+- '2026-11-02'
+- '2026-11-03'
+- '2026-11-04'
+valuation_convention: IBKR official closing account NAV
+report_source: 'IBKR Custom Statement: Net Asset Value'
+scoring_rule: calendar_interest_benchmark
+scoring_annual_rate: '0.0344'
+scoring_daily_rates: {}
+scoring_forecast_daily_rate: null
+scoring_forecast_source: ''
+market_data_provider: moomoo
+stock_borrow: {}
+stock_borrow_source: ''
+daily_stock_history: data/moomoo/daily-contest.csv
+closing_capture:
+  enabled: true
+  window_seconds: 180
+  retry_seconds: 15
+  late_capture_minutes: 20
+execution:
+  stock_slice: 100
+  option_slice: 1
+  minimum_stock_notional: 1000.0
+  minimum_slice_improvement: 1.0
+  stock_spread_absolute: 0.2
+  stock_spread_relative: 0.002
+  option_spread_absolute: 0.5
+  option_spread_relative: 0.15
+  stock_wait_seconds: 15
+  option_wait_seconds: 60
+  setup_wait_seconds: 120
+  stock_lifetime_seconds: 60
+  option_lifetime_seconds: 180
+  setup_lifetime_seconds: 300
+  setup_opening_wait_minutes: 5
+  setup_cutoff_minutes: 1
+  urgent_market_stocks: true
+  market_quote_age: 1.0
+  market_spread_absolute: 0.02
+  market_depth_multiple: 5
+  market_slippage_bps: 5.0
+recovery: {}
+initial_nav: '1000000'
+contracts:
+- con_id: 10
+  symbol: SPCX
+  kind: STK
+  currency: USD
+  exchange: SMART
+  multiplier: 1
+  expiry: null
+  strike: null
+  right: null
+  trading_class: ''
+  underlying_id: null
+- con_id: 20
+  symbol: RKLB
+  kind: STK
+  currency: USD
+  exchange: SMART
+  multiplier: 1
+  expiry: null
+  strike: null
+  right: null
+  trading_class: ''
+  underlying_id: null
+- con_id: 30
+  symbol: SPY
+  kind: STK
+  currency: USD
+  exchange: SMART
+  multiplier: 1
+  expiry: null
+  strike: null
+  right: null
+  trading_class: ''
+  underlying_id: null
+- con_id: 1001
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 130.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1002
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 145.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1003
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 160.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1004
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 45.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1005
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 55.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1006
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 770.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1007
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 770.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 40
+  symbol: IVV
+  kind: STK
+  currency: USD
+  exchange: SMART
+  multiplier: 1
+  expiry: null
+  strike: null
+  right: null
+  trading_class: ''
+  underlying_id: null
+- con_id: 50
+  symbol: VOO
+  kind: STK
+  currency: USD
+  exchange: SMART
+  multiplier: 1
+  expiry: null
+  strike: null
+  right: null
+  trading_class: ''
+  underlying_id: null
+- con_id: 1008
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 50.0
+  right: C
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1009
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 50.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1010
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 49.0
+  right: C
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1011
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 49.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1012
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 51.0
+  right: C
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1013
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 51.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1014
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 48.0
+  right: C
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1015
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 48.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1016
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 52.0
+  right: C
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1017
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 52.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1018
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 47.0
+  right: C
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1019
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 47.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1020
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 50.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1021
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 49.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1022
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 51.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1023
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 48.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1024
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 52.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1025
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 47.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1026
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 50.0
+  right: C
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1027
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 50.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1028
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 49.0
+  right: C
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1029
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 49.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1030
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 51.0
+  right: C
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1031
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 51.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1032
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 48.0
+  right: C
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1033
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 48.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1034
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 52.0
+  right: C
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1035
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 52.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1036
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 47.0
+  right: C
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1037
+  symbol: RKLB
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 47.0
+  right: P
+  trading_class: RKLB
+  underlying_id: 20
+- con_id: 1038
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 145.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1039
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 145.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1040
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 140.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1041
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 140.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1042
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 150.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1043
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 150.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1044
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 135.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1045
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 135.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1046
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 155.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1047
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 155.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1048
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 130.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1049
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-13'
+  strike: 130.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1050
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 145.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1051
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 140.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1052
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 140.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1053
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 150.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1054
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 150.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1055
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 135.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1056
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 135.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1057
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 155.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1058
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 155.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1059
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-20'
+  strike: 130.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1060
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 145.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1061
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 145.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1062
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 140.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1063
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 140.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1064
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 150.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1065
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 150.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1066
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 135.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1067
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 135.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1068
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 155.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1069
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 155.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1070
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 130.0
+  right: C
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1071
+  symbol: SPCX
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-27'
+  strike: 130.0
+  right: P
+  trading_class: SPCX
+  underlying_id: 10
+- con_id: 1072
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-18'
+  strike: 770.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1073
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-18'
+  strike: 770.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1074
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-18'
+  strike: 765.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1075
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-18'
+  strike: 765.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1076
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-18'
+  strike: 775.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1077
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-18'
+  strike: 775.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1078
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-18'
+  strike: 760.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1079
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-18'
+  strike: 760.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1080
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-18'
+  strike: 780.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1081
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-18'
+  strike: 780.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1082
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-18'
+  strike: 755.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1083
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-18'
+  strike: 755.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1084
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-19'
+  strike: 770.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1085
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-19'
+  strike: 770.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1086
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-19'
+  strike: 765.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1087
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-19'
+  strike: 765.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1088
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-19'
+  strike: 775.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1089
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-19'
+  strike: 775.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1090
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-19'
+  strike: 760.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1091
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-19'
+  strike: 760.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1092
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-19'
+  strike: 780.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1093
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-19'
+  strike: 780.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1094
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-19'
+  strike: 755.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1095
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-19'
+  strike: 755.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1096
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-23'
+  strike: 770.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1097
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-23'
+  strike: 770.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1098
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-23'
+  strike: 765.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1099
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-23'
+  strike: 765.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1100
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-23'
+  strike: 775.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1101
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-23'
+  strike: 775.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1102
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-23'
+  strike: 760.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1103
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-23'
+  strike: 760.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1104
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-23'
+  strike: 780.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1105
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-23'
+  strike: 780.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1106
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-23'
+  strike: 755.0
+  right: C
+  trading_class: SPY
+  underlying_id: 30
+- con_id: 1107
+  symbol: SPY
+  kind: OPT
+  currency: USD
+  exchange: SMART
+  multiplier: 100
+  expiry: '2026-11-23'
+  strike: 755.0
+  right: P
+  trading_class: SPY
+  underlying_id: 30
+contest_rules: spcx_rklb_spy
+contest_option_expiry: '2026-11-20'
+mandatory:
+  '1001': 25
+  '1002': -50
+  '1003': 25
+  '1004': -25
+  '1005': 25
+  '1006': 25
+  '1007': 25
+universe: open
+allowlist:
+- 10
+- 20
+- 40
+- 50
+- 1008
+- 1009
+- 1010
+- 1011
+- 1012
+- 1013
+- 1014
+- 1015
+- 1016
+- 1017
+- 1018
+- 1019
+- 1020
+- 1021
+- 1022
+- 1023
+- 1024
+- 1025
+- 1026
+- 1027
+- 1028
+- 1029
+- 1030
+- 1031
+- 1032
+- 1033
+- 1034
+- 1035
+- 1036
+- 1037
+- 1038
+- 1039
+- 1040
+- 1041
+- 1042
+- 1043
+- 1044
+- 1045
+- 1046
+- 1047
+- 1048
+- 1049
+- 1050
+- 1051
+- 1052
+- 1053
+- 1054
+- 1055
+- 1056
+- 1057
+- 1058
+- 1059
+- 1060
+- 1061
+- 1062
+- 1063
+- 1064
+- 1065
+- 1066
+- 1067
+- 1068
+- 1069
+- 1070
+- 1071
+- 1072
+- 1073
+- 1074
+- 1075
+- 1076
+- 1077
+- 1078
+- 1079
+- 1080
+- 1081
+- 1082
+- 1083
+- 1084
+- 1085
+- 1086
+- 1087
+- 1088
+- 1089
+- 1090
+- 1091
+- 1092
+- 1093
+- 1094
+- 1095
+- 1096
+- 1097
+- 1098
+- 1099
+- 1100
+- 1101
+- 1102
+- 1103
+- 1104
+- 1105
+- 1106
+- 1107
+dividends: {}
+risk_free_rate: 0.04
+dividend_yields: {}
+risk:
+  stress_loss: 0.03
+  liquidity_buffer: 0.25
+  gross_notional: 3.0
+  stock_notional: 0.5
+  residual_delta: 0.1
+  contracts_per_option: 50
+  option_names: 6
+  stock_quote_age: 5
+  option_quote_age: 60
+  held_option_quote_age: 300
+  greek_age: 60
+  account_age: 180
+  rate_stress_shift: 0.01
+policy:
+  risk_seconds: 5
+  stock_seconds: 60
+  option_seconds: 900
+  reconcile_seconds: 60
+  score_threshold: 100.0
+  uncertainty_multiplier: 1.645
+  option_cutoff_minutes: 15
+  stock_cutoff_minutes: 2
+  solver_seconds: 10.0
+  primary_band: 20.0
+  ranking_seconds: 1.0
+  ranking_nodes: 32
+  commission_share: 0.005
+  commission_option: 0.65
+  minimum_commission: 1.0
+  slippage_spread_fraction: 0.1
+  borrow_rate: 0.05
+  financing_rate: 0.06
+  cash_rate: 0.0344
+  cash_rate_source: 'Contest rules: cash balance earns nominal r ~ 3.44%'
+  cash_rate_status: modeled
+  cash_interest_free_balance: 10000.0
+  cash_day_count: 360
+  seed: 17
+  history_sessions: 60
+gateway_host: 127.0.0.1
+gateway_port: 4002
+client_id: 71
+confirmed: false
+strategy: dynamic_l1

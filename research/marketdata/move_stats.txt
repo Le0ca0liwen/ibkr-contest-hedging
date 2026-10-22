@@ -1,0 +1,14 @@
+Intraday |log move| over a horizon, within-session, all 10 sessions (2026-10-21 partial to its last bar); percent
+sym   h(min)   median      p90      p99      max
+SPCX       1    0.062    0.195    0.466    1.243
+SPCX       5    0.144    0.458    0.992    2.643
+SPCX      15    0.245    0.762    1.771    3.275
+SPCX      60    0.461    1.321    2.750    4.650
+RKLB       1    0.075    0.243    0.621    2.684
+RKLB       5    0.165    0.522    1.300    5.548
+RKLB      15    0.281    0.885    2.122    6.462
+RKLB      60    0.544    1.810    4.418    6.826
+SPY        1    0.012    0.039    0.081    0.200
+SPY        5    0.027    0.086    0.184    0.378
+SPY       15    0.049    0.151    0.316    0.491
+SPY       60    0.106    0.309    0.624    0.927

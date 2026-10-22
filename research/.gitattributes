@@ -1,0 +1,10 @@
+# Keep checkouts byte-exact on any platform: shell/Python stay LF for bash under WSL even when a Windows clone
+# has core.autocrlf=true; data files (two CSVs keep the CRLF rows of their source downloads) are never converted.
+*.sh    text eol=lf
+*.py    text eol=lf
+*.md    text eol=lf
+*.yaml  text eol=lf
+*.csv   -text
+*.json  -text
+*.txt   -text
+*.patch -text

@@ -1,0 +1,25 @@
+# Run outputs, caches and generated tables: never committed (see research/README.md)
+__pycache__/
+*.py[cod]
+*.db
+*.prof
+*.pkl
+*.log
+*.out
+*.err
+runs/
+cooldown/market/
+cooldown/runs_runner.out
+spread_model/cache/
+spread_model/proto/
+spread_model/diag/
+spread_model/daily_history.csv
+scan/out/
+econ/out/
+solverspeed/highs_logs/
+solverspeed/prof/
+solverspeed/results*.jsonl
+frontier/results*.jsonl
+realbench/daily-*.csv
+marketdata/raw/
+marketdata/refresh_*/

@@ -1,0 +1,98 @@
+[
+{
+"name": "A_P60r1p_1020",
+"day": "2026-10-20",
+"repo": "proto",
+"policy": {
+"option_seconds": 60,
+"option_reversal_reserve": 1.0
+},
+"execution": {
+"slice_economics": "plan"
+}
+},
+{
+"name": "A_C60p_1020",
+"day": "2026-10-20",
+"repo": "proto",
+"policy": {
+"option_seconds": 60
+},
+"execution": {
+"slice_economics": "plan"
+}
+},
+{
+"name": "A_B900p_1020",
+"day": "2026-10-20",
+"repo": "proto",
+"policy": {},
+"execution": {
+"slice_economics": "plan"
+}
+},
+{
+"name": "A_P60r1p_1015",
+"day": "2026-10-15",
+"repo": "proto",
+"policy": {
+"option_seconds": 60,
+"option_reversal_reserve": 1.0
+},
+"execution": {
+"slice_economics": "plan"
+}
+},
+{
+"name": "A_C60p_1015",
+"day": "2026-10-15",
+"repo": "proto",
+"policy": {
+"option_seconds": 60
+},
+"execution": {
+"slice_economics": "plan"
+}
+},
+{
+"name": "A_B900p_1015",
+"day": "2026-10-15",
+"repo": "proto",
+"policy": {},
+"execution": {
+"slice_economics": "plan"
+}
+},
+{
+"name": "A_P60r1p_1009",
+"day": "2026-10-09",
+"repo": "proto",
+"policy": {
+"option_seconds": 60,
+"option_reversal_reserve": 1.0
+},
+"execution": {
+"slice_economics": "plan"
+}
+},
+{
+"name": "A_C60p_1009",
+"day": "2026-10-09",
+"repo": "proto",
+"policy": {
+"option_seconds": 60
+},
+"execution": {
+"slice_economics": "plan"
+}
+},
+{
+"name": "A_B900p_1009",
+"day": "2026-10-09",
+"repo": "proto",
+"policy": {},
+"execution": {
+"slice_economics": "plan"
+}
+}
+]

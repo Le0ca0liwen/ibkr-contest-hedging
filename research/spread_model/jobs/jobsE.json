@@ -1,0 +1,56 @@
+[
+{
+"name": "T_P60r1ph_1020",
+"day": "2026-10-20",
+"repo": "proto",
+"fill": "touch",
+"policy": {
+"option_seconds": 60,
+"option_reversal_reserve": 1.0,
+"gross_headroom": 0.98
+},
+"execution": {
+"slice_economics": "plan"
+}
+},
+{
+"name": "T_B900_1020",
+"day": "2026-10-20",
+"fill": "touch"
+},
+{
+"name": "T_C300_1020",
+"day": "2026-10-20",
+"fill": "touch",
+"policy": {
+"option_seconds": 300
+}
+},
+{
+"name": "T_P60r1ph_1015",
+"day": "2026-10-15",
+"repo": "proto",
+"fill": "touch",
+"policy": {
+"option_seconds": 60,
+"option_reversal_reserve": 1.0,
+"gross_headroom": 0.98
+},
+"execution": {
+"slice_economics": "plan"
+}
+},
+{
+"name": "T_B900_1015",
+"day": "2026-10-15",
+"fill": "touch"
+},
+{
+"name": "T_C300_1015",
+"day": "2026-10-15",
+"fill": "touch",
+"policy": {
+"option_seconds": 300
+}
+}
+]

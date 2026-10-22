@@ -1,0 +1,5 @@
+#!/bin/bash
+# usage: wsj_fetch.sh KEY STEP TIMEFRAME OUTFILE   (KEY like STOCK/US/XNAS/RKLB)
+UA='Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36'
+J='{"Step":"'$2'","TimeFrame":"'$3'","EntitlementToken":"57494d5ed7ad44af85bc59a51dd87c90","IncludeMockTick":true,"FilterNullSlots":false,"FilterClosedPoints":true,"IncludeClosedSlots":false,"IncludeOfficialClose":true,"InjectOpen":false,"ShowPreMarket":false,"ShowAfterHours":false,"UseExtendedTimeFrame":true,"WantPriorClose":false,"IncludeCurrentQuotes":false,"ResetTodaysAfterHoursPercentChange":false,"Series":[{"Key":"'$1'","Dialect":"Charting","Kind":"Ticker","SeriesId":"s1","DataTypes":["Open","High","Low","Last"],"Indicators":[{"Parameters":[],"Kind":"Volume","SeriesId":"i3"}]}]}'
+curl -sS -G -A "$UA" --max-time 60 -H 'Dylan2010.EntitlementToken: 57494d5ed7ad44af85bc59a51dd87c90' -H 'Accept: application/json' --data-urlencode "json=$J" --data-urlencode "ckey=57494d5ed7" -o "$4" -w "$1 $2 $3 -> %{http_code} %{size_download}\n" "https://api.wsj.net/api/michelangelo/timeseries/history"

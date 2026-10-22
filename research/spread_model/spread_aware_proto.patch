@@ -1,0 +1,707 @@
+diff -ruN -x __pycache__ -x .ruff_cache -x .pytest_cache base/hedge/config.py proto/hedge/config.py
+--- base/hedge/config.py	2026-10-21 17:50:18.000000000 +0000
++++ proto/hedge/config.py	2026-10-21 22:07:27.751692734 +0000
+@@ -58,6 +58,22 @@
+     commission_option: float = Field(default=0.65, ge=0)
+     minimum_commission: float = Field(default=1, ge=0)
+     slippage_spread_fraction: float = Field(default=0.1, ge=0)
++    # Spread-aware decision rule (decision penalty only, never a NAV cost): each unit a plan trades
++    # is also charged this multiple of its modeled one-way crossing cost (spread share + per-unit
++    # commission), the expected cost of reversing or re-adjusting it later. The optimizer then
++    # keeps current holdings unless a change beats entry + expected exit (a no-trade band whose
++    # width scales with each contract's own spread), and a plan is eligible only if its modeled
++    # improvement net of entry costs AND this reserve exceeds max(score_threshold, z x SE).
++    # 0 keeps the original one-way cost model. 1 = a trade must pay for its own round trip.
++    option_reversal_reserve: float = Field(default=0.0, ge=0, le=5)
++    stock_reversal_reserve: float = Field(default=0.0, ge=0, le=5)
++    # Hysteresis inside the (unchanged) risk caps, so a solve never parks the book on a cap edge
++    # where the next tick breaches it and each breach is cured by another tiny corrective trade:
++    # new plans may not raise discretionary gross notional above 97% of its cap (or its current
++    # level, if higher), a plan curing a gross breach restores 97%, and a plan curing a delta breach
++    # of a symbol without tradable shares restores 90% of the delta cap. The RiskGate still enforces
++    # the full caps. False keeps the original edge-of-cap targets.
++    cap_hysteresis: bool = False
+     borrow_rate: float = Field(default=0.05, ge=0)
+     financing_rate: float = Field(default=0.06, ge=0)
+     cash_rate: float = Field(default=0, ge=0)
+@@ -116,6 +132,17 @@
+     setup_wait_seconds: int = Field(default=120, ge=30, le=600)
+     stock_lifetime_seconds: int = Field(default=60, ge=30, le=300)
+     option_lifetime_seconds: int = Field(default=180, ge=60, le=900)
++    # Largest share of the quoted spread a NORMAL-urgency (non-corrective, non-deadline) option
++    # order may concede beyond the midpoint while it is repriced: 0.5 reaches the touch (original);
++    # 0.25 stays passive inside the book. Corrective and deadline orders still cross.
++    option_passive_fraction: float = Field(default=0.5, ge=0, le=0.5)
++    # How each execution slice of an approved plan is judged. "standalone" (original): the slice
++    # alone must improve the modeled score by more than max(minimum_slice_improvement, z x SE).
++    # "plan": the plan (re-validated before every slice) carries the significance test; a slice only
++    # must not be a statistically significant standalone loss, may not push gross notional above 98%
++    # of its cap or a symbol's |delta| above 95% of its cap while raising it (path headroom), and the
++    # legs executable now must by themselves clear the plan threshold (no ride-along legs alone).
++    slice_economics: Literal["standalone", "plan"] = "standalone"
+     setup_lifetime_seconds: int = Field(default=300, ge=120, le=1800)
+     setup_opening_wait_minutes: int = Field(default=5, ge=0, le=60)
+     setup_cutoff_minutes: int = Field(default=1, ge=1, le=30)
+diff -ruN -x __pycache__ -x .ruff_cache -x .pytest_cache base/hedge/execution.py proto/hedge/execution.py
+--- base/hedge/execution.py	2026-10-21 17:50:18.000000000 +0000
++++ proto/hedge/execution.py	2026-10-21 22:30:57.418927430 +0000
+@@ -14,6 +14,12 @@
+ from .scenarios import ScenarioEngine
+ from .storage import TERMINAL, burn_leg_id, plan_record_id
+ 
++# slice_economics "plan": a slice may not raise gross notional above 98% of its cap, or a symbol's
++# |delta| above 95% of its cap (optimizer targets sit inside: 97% gross with cap_hysteresis, 90%
++# delta for symbols without tradable shares).
++PATH_GROSS_BAND = 0.98
++PATH_DELTA_BAND = 0.95
++
+ 
+ class ExecutionManager:
+     def __init__(self, manifest, store, broker, gate):
+@@ -76,8 +82,25 @@
+         await self.broker.cancel(order_id)
+ 
+     def economic_check(self, snapshot, quotes, scenarios, quantities, now):
+-        if self.score_context is None:
++        gain = self.slice_gain(snapshot, quotes, scenarios, quantities, now)
++        if gain is None:
+             return True
++        exposure, net, uncertainty = gain
++        z = self.manifest.policy.uncertainty_multiplier
++        if self.manifest.execution.slice_economics == "plan":
++            # The plan already cleared max(score_threshold, z x SE) net of costs and its spread
++            # reserve, and is re-validated before every slice. A slice only has to move toward it
++            # without a statistically significant standalone loss: hedge legs that pay only jointly
++            # (shares offsetting an option's delta) may execute, clearly harmful ones may not.
++            return net >= -z * uncertainty
++        return exposure > 0.01 and net > max(
++            self.manifest.execution.minimum_slice_improvement, z * uncertainty
++        )
++
++    def slice_gain(self, snapshot, quotes, scenarios, quantities, now):
++        """(exposure-only gain, gain net of costs, its standard error) of moving to `quantities`."""
++        if self.score_context is None:
++            return None
+         quote_coverage(quotes, scenarios.ids)
+         from .optimizer import HedgeOptimizer
+ 
+@@ -99,12 +122,9 @@
+             snapshot, quotes, scenarios, target, previous, estimate, include_costs=False
+         )
+         return (
+-            exposure_only.current_score - exposure_only.expected_score > 0.01
+-            and evaluated.current_score - evaluated.expected_score
+-            > max(
+-                self.manifest.execution.minimum_slice_improvement,
+-                self.manifest.policy.uncertainty_multiplier * evaluated.uncertainty,
+-            )
++            exposure_only.current_score - exposure_only.expected_score,
++            evaluated.current_score - evaluated.expected_score,
++            evaluated.uncertainty,
+         )
+ 
+     def burn_open(self):
+@@ -201,10 +221,64 @@
+                     ):
+                         path_safe = False
+                         break
+-                if path_safe:
++                if path_safe and not (
++                    self.manifest.execution.slice_economics == "plan"
++                    and current_risk.passed
++                    and not setup
++                    and self._crowds_cap(snapshot, current_risk, result, c.symbol)
++                ):
+                     candidates.append((result.metrics.get("stress_loss", float("inf")), i, signed, result))
+         return candidates
+ 
++    def _executable_part_clears(self, target, snapshot, quotes, scenarios, now, candidates):
++        """Plan mode: the part of the remaining plan whose next slice is executable now must clear
++        max(score_threshold, z x SE) net of costs and its spread reserve, like the whole plan did."""
++        if self.score_context is None:
++            return True
++        from .optimizer import HedgeOptimizer
++
++        actual = snapshot.quantities()
++        executable = {i for _, i, _, _ in candidates}
++        part = dict(actual)
++        for i in executable:
++            part[i] = target.quantities.get(i, 0)
++        previous, estimate = self.score_context(snapshot, quotes, now)
++        evaluated = HedgeOptimizer(self.manifest).evaluate_target(
++            snapshot,
++            quotes,
++            scenarios,
++            Target(
++                quantities={i: q for i, q in part.items() if q},
++                expected_score=0,
++                current_score=0,
++                uncertainty=0,
++                status="SLICE",
++                snapshot_id=snapshot.version,
++                scenario_id=scenarios.identifier,
++                config_hash=self.manifest.config_hash,
++            ),
++            previous,
++            estimate,
++        )
++        threshold = max(
++            self.manifest.policy.score_threshold,
++            self.manifest.policy.uncertainty_multiplier * evaluated.uncertainty,
++        )
++        return evaluated.current_score - evaluated.expected_score - evaluated.reversal_reserve > threshold
++
++    def _crowds_cap(self, snapshot, before, after, symbol):
++        """Plan-mode path headroom: a slice may not push a capped exposure into the last band below
++        its cap (where an ordinary tick turns the working order into a breach). The bands are looser
++        than the optimizer's own target headroom, so a target never needs to cross them."""
++        budget = min(self.gate.engine.baseline_nav, float(snapshot.nav))
++        risk = self.manifest.risk
++        gross0, gross1 = before.metrics.get("gross_notional", 0.0), after.metrics.get("gross_notional", 0.0)
++        if gross1 > gross0 + 1e-6 and gross1 > PATH_GROSS_BAND * risk.gross_notional * budget:
++            return True
++        delta0 = abs(before.metrics.get(f"delta:{symbol}", 0.0))
++        delta1 = abs(after.metrics.get(f"delta:{symbol}", 0.0))
++        return delta1 > delta0 + 1e-6 and delta1 > PATH_DELTA_BAND * risk.residual_delta * budget
++
+     async def submit_slice(self, target, decision_id, snapshot, quotes, scenarios, now, setup=False):
+         self.current_scenarios = scenarios
+         async with self.lock:
+@@ -231,6 +305,19 @@
+                     "submitted": False,
+                     "reason": "No economical execution slice meets score, uncertainty, liquidity and risk checks",
+                 }
++            if (
++                self.manifest.execution.slice_economics == "plan"
++                and not setup
++                and self.gate.engine.evaluate(snapshot, quotes, scenarios, actual).passed
++                and not self._executable_part_clears(target, snapshot, quotes, scenarios, now, candidates)
++            ):
++                # The legs that carry the plan are blocked (path headroom, quotes, risk); the legs
++                # executable now do not clear the plan threshold alone: do not trade them on their own.
++                return {
++                    "submitted": False,
++                    "reason": "No economical execution slice: the plan's executable legs alone do not clear "
++                    "its threshold",
++                }
+             _, identifier, signed, result = min(candidates, key=lambda x: (x[0], x[1]))
+             partial = dict(actual)
+             partial[identifier] = partial.get(identifier, 0) + signed
+@@ -1109,7 +1196,11 @@
+                         row["con_id"]: snapshot.quantities().get(row["con_id"], 0) + remaining,
+                     }
+                     fraction = (
+-                        0.5 if urgency in ("CORRECTIVE", "DEADLINE") else min(0.5, 0.25 * int(elapsed / wait))
++                        0.5
++                        if urgency in ("CORRECTIVE", "DEADLINE")
++                        else min(
++                            p.option_passive_fraction if c.kind == "OPT" else 0.5, 0.25 * int(elapsed / wait)
++                        )
+                     )
+                     value = (
+                         (q.ask if signed > 0 else q.bid)
+diff -ruN -x __pycache__ -x .ruff_cache -x .pytest_cache base/hedge/models.py proto/hedge/models.py
+--- base/hedge/models.py	2026-10-21 17:50:18.000000000 +0000
++++ proto/hedge/models.py	2026-10-21 19:37:32.643694668 +0000
+@@ -146,6 +146,8 @@
+     scenario_id: str
+     config_hash: str
+     estimated_cost: float = 0
++    # Decision-only spread reserve for the planned trade (policy.*_reversal_reserve); not a NAV cost.
++    reversal_reserve: float = 0
+     binding: tuple[str, ...] = ()
+     explanation: str = ""
+     solver_metrics: dict[str, Any] = Field(default_factory=dict)
+diff -ruN -x __pycache__ -x .ruff_cache -x .pytest_cache base/hedge/optimizer.py proto/hedge/optimizer.py
+--- base/hedge/optimizer.py	2026-10-21 17:50:18.000000000 +0000
++++ proto/hedge/optimizer.py	2026-10-21 22:07:27.747932676 +0000
+@@ -12,6 +12,7 @@
+ from .order_policy import spread_error
+ 
+ DELTA_HEADROOM = 0.9  # target share of the residual-delta cap for symbols without tradable shares
++GROSS_HEADROOM = 0.97  # policy.cap_hysteresis: target share of the gross-notional cap
+ LIQUIDITY_CUSHION = 0.0002  # of budget, on top of risk.liquidity_buffer
+ 
+ 
+@@ -39,6 +40,41 @@
+     return float(cost)
+ 
+ 
++def _unit_reserve(manifest, contract, quote, signed):
++    """Per-unit decision reserve: policy multiple x the modeled one-way crossing cost of one unit."""
++    rho = (
++        manifest.policy.option_reversal_reserve
++        if contract.kind == "OPT"
++        else manifest.policy.stock_reversal_reserve
++    )
++    if not rho:
++        return 0.0
++    available = quote.ask_size if signed > 0 else quote.bid_size
++    size = max(
++        1,
++        min(
++            manifest.execution.option_slice if contract.kind == "OPT" else manifest.execution.stock_slice,
++            available,
++        ),
++    )
++    rate = manifest.policy.commission_option if contract.kind == "OPT" else manifest.policy.commission_share
++    fee = max(manifest.policy.minimum_commission, rate * size) / size
++    spread = (quote.ask - quote.bid) * (0.5 + manifest.policy.slippage_spread_fraction) * contract.multiplier
++    return rho * (spread + fee)
++
++
++def reversal_reserve(manifest, quotes, identifiers, delta):
++    """Decision-only spread reserve of a trade (expected cost of reversing/re-adjusting it later).
++
++    It ranks and gates decisions; it is never booked as a NAV cost or used in risk checks.
++    """
++    total = 0.0
++    for i, d in zip(identifiers, delta, strict=True):
++        if d:
++            total += abs(d) * _unit_reserve(manifest, manifest.contract_map[i], quotes[i], d)
++    return float(total)
++
++
+ def _positive_part(expression, lower, upper, constraints):
+     """Exact max(expression, 0), with no binary when its sign is proved."""
+     if lower >= 0:
+@@ -86,6 +122,7 @@
+         desired = np.array([target.quantities.get(i, 0) for i in ids])
+         delta = desired - current
+         costs = execution_cost(m, quotes, ids, delta) if include_costs else 0
++        reserve = reversal_reserve(m, quotes, ids, delta) if include_costs else 0
+         cash = float(snapshot.cash)
+         planned_cash = (
+             cash
+@@ -117,8 +154,9 @@
+                 "current_score": old["score"],
+                 "expected_score": new["score"],
+                 "estimated_cost": costs,
++                "reversal_reserve": reserve,
+                 "uncertainty": uncertainty,
+-                "components": new["components"],
++                "components": {**new["components"], "reversal_reserve": reserve},
+                 "snapshot_id": snapshot.version,
+                 "scenario_id": scenarios.identifier,
+             }
+@@ -413,6 +451,17 @@
+                 commissions.append(fees_buy[j] * buy_count + fees_sell[j] * sell_count)
+         commissions = cp.hstack(commissions)
+         costs = np.array(spread_cost) @ (buy + sell) + cp.sum(commissions)
++        # Spread-aware no-trade band: a decision-only reserve per unit traded (see reversal_reserve).
++        reserve_buy = np.array(
++            [_unit_reserve(m, m.contract_map[i], quotes[i], 1) for i in candidates], dtype=float
++        )
++        reserve_sell = np.array(
++            [_unit_reserve(m, m.contract_map[i], quotes[i], -1) for i in candidates], dtype=float
++        )
++        reserve_term = (
++            reserve_buy @ buy + reserve_sell @ sell if reserve_buy.any() or reserve_sell.any() else None
++        )
++        reserve_bound = float(reserve_buy @ buy_bounds + reserve_sell @ sell_bounds)
+         all_h = [h[candidates.index(i)] if i in candidates else actual.get(i, 0) for i in ids]
+         total_h = cp.hstack(all_h)
+         absolute_h = cp.hstack(
+@@ -489,6 +538,8 @@
+         objective_score = closing(error + scenarios.changes @ total_h + carry, scored_costs)
+         if strategy == "historical_l1":
+             objective_score = closing(scenarios.changes @ total_h + carry, costs)
++        if reserve_term is not None:
++            objective_score += reserve_term
+         # two_close already prices the whole next session through next_changes.
+         overnight = (
+             self._overnight(scenarios, target_nav) if strategy in ("dynamic_l1", "historical_l1") else None
+@@ -556,7 +607,14 @@
+         spots = np.array(
+             [0.0 if i in m.mandatory else quotes[i].spot * m.contract_map[i].multiplier for i in ids]
+         )
+-        constraints += [spots @ absolute_h <= m.risk.gross_notional * budget]
++        gross_cap = m.risk.gross_notional * budget
++        if m.policy.cap_hysteresis:
++            # Hysteresis inside the unchanged cap: never force a trade while the book sits between
++            # the headroom and the cap, and cure a breach back to the headroom, not to the cap edge.
++            held_gross = float(spots @ np.abs(quantities))
++            inner = GROSS_HEADROOM * gross_cap
++            gross_cap = inner if held_gross > gross_cap else min(gross_cap, max(inner, held_gross))
++        constraints += [spots @ absolute_h <= gross_cap]
+         increment = cp.Variable(n, nonneg=True)
+         constraints += [increment >= ah - np.abs(current)]
+         margin_rates = np.array(
+@@ -592,7 +650,11 @@
+                 # Without tradable shares (SPY shares are forbidden) a breach can only be cured with
+                 # options: keep headroom so an ordinary move does not create one, without forcing a
+                 # trade when the book already sits closer to the cap.
+-                cap = min(cap, max(DELTA_HEADROOM * cap, abs(float(delta_vector @ quantities))))
++                held = abs(float(delta_vector @ quantities))
++                if m.policy.cap_hysteresis and held > cap:
++                    cap = DELTA_HEADROOM * cap  # cure a breach to the headroom, not to the cap edge
++                else:
++                    cap = min(cap, max(DELTA_HEADROOM * cap, held))
+             constraints += [cp.abs(delta_vector @ total_h) <= cap]
+             stock_vector = np.array(
+                 [
+@@ -719,7 +781,7 @@
+             else 0.0
+         )
+         primary_bound = abs(error) + float(np.max(np.abs(scenarios.changes) @ max_holdings))
+-        primary_bound += carry_bound + cost_bound
++        primary_bound += carry_bound + cost_bound + reserve_bound
+         if overnight is not None:
+             primary_bound += overnight_weight * (
+                 float(np.max(np.abs(scenarios.overnight_changes) @ max_holdings))
+@@ -865,6 +927,7 @@
+             result = {i: q for i, q in result.items() if q}
+             delta = [result.get(i, 0) - actual.get(i, 0) for i in candidates]
+             cost = execution_cost(m, quotes, candidates, delta)
++            reserve = reversal_reserve(m, quotes, candidates, delta)
+             target_vector = np.array([result.get(i, 0) for i in ids])
+             planned_cash = float(snapshot.cash) - prices @ (target_vector[idx] - current) - cost
+             new = self._score(
+@@ -877,13 +940,16 @@
+                 planned_cash,
+                 0 if unscored_setup else cost,
+             )
+-            numerical_primary = new["score"]
++            numerical_primary = new["score"] + reserve
+             if strategy == "historical_l1":
+-                numerical_primary = self._score(
+-                    snapshot, quotes, scenarios, 0, target_nav, target_vector, planned_cash, cost
+-                )["score"]
++                numerical_primary = (
++                    self._score(
++                        snapshot, quotes, scenarios, 0, target_nav, target_vector, planned_cash, cost
++                    )["score"]
++                    + reserve
++                )
+             elif strategy == "two_close":
+-                numerical_primary = new["components"]["closing"]
++                numerical_primary = new["components"]["closing"] + reserve
+                 if scenarios.next_changes is not None:
+                     numerical_primary += float(
+                         scenarios.weights @ np.abs(scenarios.next_changes @ target_vector)
+@@ -915,7 +981,8 @@
+                 quantities=result,
+                 expected_score=new["score"],
+                 current_score=old["score"],
+-                components=new["components"],
++                components={**new["components"], "reversal_reserve": reserve},
++                reversal_reserve=reserve,
+                 uncertainty=uncertainty,
+                 status="OPTIMAL",
+                 snapshot_id=snapshot.version,
+diff -ruN -x __pycache__ -x .ruff_cache -x .pytest_cache base/hedge/service.py proto/hedge/service.py
+--- base/hedge/service.py	2026-10-21 17:50:18.000000000 +0000
++++ proto/hedge/service.py	2026-10-21 19:38:09.075941917 +0000
+@@ -1346,7 +1346,7 @@
+                 self.manifest.policy.uncertainty_multiplier * target.uncertainty,
+             )
+             recovery_baseline = target
+-            if target.current_score - target.expected_score <= ordinary_floor:
++            if target.current_score - target.expected_score - target.reversal_reserve <= ordinary_floor:
+                 recovery_baseline = self.optimizer.evaluate_target(
+                     snap,
+                     quotes,
+@@ -1410,7 +1410,9 @@
+                 )
+                 if extra:
+                     gate = gate.model_copy(update={"passed": False, "reasons": (*gate.reasons, *extra)})
+-            improvement = target.current_score - target.expected_score
++            # Net of entry costs (inside expected_score) and of the decision-only spread reserve.
++            gross_improvement = target.current_score - target.expected_score
++            improvement = gross_improvement - target.reversal_reserve
+             threshold = max(
+                 self.manifest.policy.score_threshold,
+                 self.manifest.policy.uncertainty_multiplier * target.uncertainty,
+@@ -1425,6 +1427,8 @@
+                 "risk_reasons": gate.reasons,
+                 "risk_metrics": gate.metrics,
+                 "improvement": improvement,
++                "gross_improvement": gross_improvement,
++                "reversal_reserve": target.reversal_reserve,
+                 "threshold": threshold,
+                 "trade_eligible": gate.passed
+                 and target.status == "OPTIMAL"
+@@ -1446,7 +1450,15 @@
+                     list(gate.reasons)
+                     + ([f"Solver: {target.status}"] if target.status != "OPTIMAL" else [])
+                     + (
+-                        [f"Modeled improvement ${improvement:.2f} does not exceed threshold ${threshold:.2f}"]
++                        [
++                            f"Modeled improvement ${improvement:.2f}"
++                            + (
++                                f" (after ${target.reversal_reserve:.2f} spread reserve)"
++                                if target.reversal_reserve
++                                else ""
++                            )
++                            + f" does not exceed threshold ${threshold:.2f}"
++                        ]
+                         if improvement <= threshold and gate.passed and not corrective
+                         else []
+                     )
+@@ -1590,7 +1602,10 @@
+             self.manifest.policy.score_threshold,
+             self.manifest.policy.uncertainty_multiplier * target.uncertainty,
+         )
+-        if target.current_score - target.expected_score <= threshold and not corrective:
++        if (
++            target.current_score - target.expected_score - target.reversal_reserve <= threshold
++            and not corrective
++        ):
+             self.pending_target = None
+             self.active_plan_started = False
+             return
+diff -ruN -x __pycache__ -x .ruff_cache -x .pytest_cache base/tests/test_spread_reserve.py proto/tests/test_spread_reserve.py
+--- base/tests/test_spread_reserve.py	1970-01-01 00:00:00.000000000 +0000
++++ proto/tests/test_spread_reserve.py	2026-10-21 22:07:27.907033376 +0000
+@@ -0,0 +1,251 @@
++"""Spread-aware decision rule: decision-only reversal reserve and passive option repricing."""
++
++import asyncio
++
++import numpy as np
++import pytest
++
++from hedge.models import Target
++from hedge.optimizer import GROSS_HEADROOM, HedgeOptimizer, execution_cost, reversal_reserve
++from hedge.scenarios import ScenarioEngine, ScenarioSet
++from hedge.service import TradingService
++
++
++def with_policy(manifest, **values):
++    return manifest.model_copy(update={"policy": manifest.policy.model_copy(update=values)})
++
++
++def hedge_fixture(manifest):
++    """Two scenarios; each contract of 103 sold removes exactly $10 of expected |closing gap|."""
++    ids = (101, 102, 103)
++    changes = np.array([[100.0, 0.0, 10.0], [-100.0, 0.0, -10.0]])
++    return ScenarioSet(ids, changes, np.array([0.5, 0.5]), np.zeros((1, 3)), None, 0.1, "fixture", "band")
++
++
++def test_default_reserve_is_zero_and_changes_nothing(manifest, snapshot, quotes, now):
++    assert manifest.policy.option_reversal_reserve == 0 == manifest.policy.stock_reversal_reserve
++    scenarios = ScenarioEngine(manifest).build(snapshot, quotes, now)
++    result = HedgeOptimizer(manifest).solve(snapshot, quotes, scenarios, manifest.initial_nav)
++    assert result.status == "OPTIMAL"
++    assert result.reversal_reserve == 0 and result.components["reversal_reserve"] == 0
++
++
++def test_reserve_is_policy_multiple_of_each_units_one_way_crossing_cost(manifest, quotes):
++    m = with_policy(manifest, option_reversal_reserve=1.5, stock_reversal_reserve=0.5)
++    option, stock = quotes[103], quotes[10]
++    per_contract = (option.ask - option.bid) * 0.6 * 100 + 1.0  # spread share + $1 minimum fee per slice
++    per_share = (stock.ask - stock.bid) * 0.6 + 1.0 / 100  # $1 per 100-share slice
++    assert reversal_reserve(m, quotes, [103], [-3]) == pytest.approx(1.5 * 3 * per_contract)
++    assert reversal_reserve(m, quotes, [10], [200]) == pytest.approx(0.5 * 200 * per_share)
++    assert reversal_reserve(m, quotes, [103, 10], [0, 0]) == 0
++    # The reserve never enters the modeled execution (NAV) cost.
++    assert execution_cost(m, quotes, [103], [-3]) == execution_cost(manifest, quotes, [103], [-3])
++
++
++def test_reserve_creates_a_no_trade_band(manifest, snapshot, quotes):
++    # Additive costs, as in the contest configuration (burn_surplus: false).
++    m = with_policy(manifest.model_copy(update={"allowlist": (103,)}), burn_surplus=False)
++    per_contract = (quotes[103].ask - quotes[103].bid) * 0.6 * 100 + 1.0
++    assert per_contract < 10 < 2 * per_contract  # benefit beats entry, not entry + exit
++    scenarios = hedge_fixture(m)
++    one_way = HedgeOptimizer(m).solve(snapshot, quotes, scenarios, m.initial_nav)
++    assert one_way.status == "OPTIMAL" and one_way.quantities.get(103, 0) < 0
++    assert one_way.reversal_reserve == 0
++    banded = HedgeOptimizer(with_policy(m, option_reversal_reserve=1.0)).solve(
++        snapshot, quotes, scenarios, m.initial_nav
++    )
++    assert banded.status == "OPTIMAL"
++    assert banded.quantities.get(103, 0) == 0 and banded.reversal_reserve == 0
++    assert banded.expected_score == pytest.approx(banded.current_score)
++
++
++def test_reserve_is_charged_on_the_planned_trade_and_on_its_remainder(manifest, snapshot, quotes):
++    m = with_policy(manifest.model_copy(update={"allowlist": (103,)}), burn_surplus=False)
++    scenarios = hedge_fixture(m)
++    small = with_policy(m, option_reversal_reserve=0.2)
++    target = HedgeOptimizer(small).solve(snapshot, quotes, scenarios, m.initial_nav)
++    sold = target.quantities.get(103, 0)
++    assert sold < 0
++    assert target.reversal_reserve == pytest.approx(reversal_reserve(small, quotes, [103], [sold]))
++    assert target.components["reversal_reserve"] == pytest.approx(target.reversal_reserve)
++    # Plan re-validation charges the reserve on what is still to trade (here: all of it).
++    evaluated = HedgeOptimizer(small).evaluate_target(snapshot, quotes, scenarios, target, m.initial_nav, 1e6)
++    assert evaluated.reversal_reserve == pytest.approx(target.reversal_reserve)
++    exposure_only = HedgeOptimizer(small).evaluate_target(
++        snapshot, quotes, scenarios, target, m.initial_nav, 1e6, include_costs=False
++    )
++    assert exposure_only.reversal_reserve == 0
++
++
++@pytest.fixture
++async def paper(manifest, store, quotes, now):
++    m = with_policy(manifest, option_reversal_reserve=1.0)
++    service = TradingService(m, store, demo=True)
++    service.now = lambda: now
++    await service.broker.connect()
++    fresh = {i: q.model_copy(update={"data_type": "synthetic"}) for i, q in quotes.items()}
++    service.broker.update_quotes(fresh, now)
++    service.last_snapshot, service.last_quotes = service.broker.snapshot(), fresh
++    service.last_scenarios = ScenarioEngine(m).build(service.last_snapshot, fresh, now)
++    service.ledger.import_close(m.day_zero, m.initial_nav, "fixture", m.account)
++    task = asyncio.create_task(service._event_loop())
++    await service.control("paper")
++    yield service
++    task.cancel()
++    await asyncio.gather(task, return_exceptions=True)
++
++
++def plan(service, reserve, gross=150.0):
++    held = service.broker.snapshot().quantities()
++    return Target(
++        quantities={**held, 103: held.get(103, 0) - 1},
++        expected_score=1000 - gross,
++        current_score=1000,
++        uncertainty=0,
++        status="OPTIMAL",
++        snapshot_id="s",
++        scenario_id="x",
++        config_hash="h",
++        reversal_reserve=reserve,
++    )
++
++
++@pytest.mark.parametrize("reserve,eligible", [(0.0, True), (60.0, False)])
++async def test_decision_nets_the_reserve_against_the_threshold(paper, monkeypatch, reserve, eligible):
++    service = paper
++    target = plan(service, reserve)
++    monkeypatch.setattr(service.optimizer, "solve", lambda *a, **k: target)
++    monkeypatch.setattr(
++        service.gate,
++        "validate",
++        lambda *a, **k: service.gate.engine.evaluate(*a[:4]).model_copy(
++            update={"passed": True, "reasons": ()}
++        ),
++    )
++    service.force_optimize = True
++    await service.optimize()
++    record = service.store.records("decision", service.manifest.account, 1)[0]
++    assert record["gross_improvement"] == pytest.approx(150)
++    assert record["reversal_reserve"] == pytest.approx(reserve)
++    assert record["improvement"] == pytest.approx(150 - reserve)
++    assert record["trade_eligible"] is eligible
++    assert (service.pending_target is not None) is eligible
++    if not eligible:
++        assert any("spread reserve" in reason for reason in record["blocking_reasons"])
++
++
++async def test_pending_plan_dropped_once_its_net_improvement_falls_below_threshold(paper, monkeypatch):
++    service = paper
++    service.pending_target = plan(service, 0.0)
++    service.active_plan_started = True  # no cooldown: an already started plan
++    monkeypatch.setattr(service.optimizer, "evaluate_target", lambda *a, **k: plan(service, 60.0))
++    await service._execute_pending()
++    assert service.pending_target is None and not service.broker.orders
++
++
++def test_passive_fraction_is_validated(manifest):
++    execution = manifest.execution.model_copy(update={"option_passive_fraction": 0.25})
++    assert manifest.model_copy(update={"execution": execution}).execution.option_passive_fraction == 0.25
++    with pytest.raises(ValueError):
++        type(manifest.execution).model_validate({"option_passive_fraction": 0.6})
++    with pytest.raises(ValueError):
++        type(manifest.policy).model_validate({"option_reversal_reserve": -1})
++
++
++@pytest.mark.parametrize(
++    "mode,gain,accepted",
++    [
++        ("standalone", (5.0, 40.0, 10.0), True),  # 40 > 1.645 x 10
++        ("standalone", (5.0, 12.0, 10.0), False),  # beneficial but not significant alone
++        ("standalone", (-5.0, -8.0, 10.0), False),
++        ("plan", (5.0, 12.0, 10.0), True),
++        ("plan", (-5.0, -8.0, 10.0), True),  # a leg that pays only jointly with the rest of the plan
++        ("plan", (-50.0, -50.0, 10.0), False),  # a significant standalone loss is still refused
++    ],
++)
++def test_slice_economics_modes(manifest, store, mode, gain, accepted):
++    from hedge.execution import ExecutionManager
++
++    m = manifest.model_copy(
++        update={"execution": manifest.execution.model_copy(update={"slice_economics": mode})}
++    )
++    manager = ExecutionManager(m, store, None, None)
++    manager.slice_gain = lambda *a: gain
++    assert manager.economic_check(None, None, None, None, None) is accepted
++
++
++def _gross(m, quantities, quotes):
++    return sum(
++        abs(q) * m.contract_map[i].multiplier * quotes[i].spot
++        for i, q in quantities.items()
++        if i not in m.mandatory
++    )
++
++
++def test_cap_hysteresis_targets_inside_the_unchanged_gross_cap(manifest, snapshot, quotes, now):
++    # A tight cap that binds the original solution.
++    tight = manifest.model_copy(update={"risk": manifest.risk.model_copy(update={"gross_notional": 0.2})})
++    tight = with_policy(tight, burn_surplus=False)
++    cap = tight.risk.gross_notional * float(min(tight.initial_nav, snapshot.nav))
++    scenarios = ScenarioEngine(tight).build(snapshot, quotes, now)
++    original = HedgeOptimizer(tight).solve(snapshot, quotes, scenarios, tight.initial_nav)
++    assert original.status == "OPTIMAL" and _gross(tight, original.quantities, quotes) > 0.95 * cap
++    banded = HedgeOptimizer(with_policy(tight, cap_hysteresis=True)).solve(
++        snapshot, quotes, scenarios, tight.initial_nav
++    )
++    assert banded.status == "OPTIMAL"
++    assert _gross(tight, banded.quantities, quotes) <= GROSS_HEADROOM * cap + 1e-6
++    assert with_policy(tight, cap_hysteresis=True).risk.gross_notional == 0.2  # the limit is unchanged
++
++
++def test_plan_slices_keep_path_headroom_below_caps(manifest, store):
++    from types import SimpleNamespace
++
++    from hedge.execution import PATH_DELTA_BAND, PATH_GROSS_BAND, ExecutionManager
++    from hedge.optimizer import DELTA_HEADROOM
++    from hedge.risk import RiskEngine
++
++    # Path bands sit outside the optimizer's own target headroom.
++    assert GROSS_HEADROOM < PATH_GROSS_BAND < 1 and DELTA_HEADROOM < PATH_DELTA_BAND < 1
++    gate = SimpleNamespace(engine=RiskEngine(manifest))
++    manager = ExecutionManager(manifest, store, None, gate)
++    snapshot = SimpleNamespace(nav=1_000_000)
++    delta_cap = manifest.risk.residual_delta * 1_000_000
++    gross_cap = manifest.risk.gross_notional * 1_000_000
++
++    def risk(delta, gross):
++        return SimpleNamespace(metrics={"delta:BA": delta, "gross_notional": gross})
++
++    # Raising |delta| into the last 5% below the cap is refused; reducing it or staying lower is not.
++    assert manager._crowds_cap(snapshot, risk(0.90 * delta_cap, 0), risk(0.97 * delta_cap, 0), "BA")
++    assert not manager._crowds_cap(snapshot, risk(0.97 * delta_cap, 0), risk(0.96 * delta_cap, 0), "BA")
++    assert not manager._crowds_cap(snapshot, risk(0.5 * delta_cap, 0), risk(0.9 * delta_cap, 0), "BA")
++    # Same for gross notional above 98% of its cap.
++    assert manager._crowds_cap(snapshot, risk(0, 0.97 * gross_cap), risk(0, 0.99 * gross_cap), "BA")
++    assert not manager._crowds_cap(snapshot, risk(0, 0.99 * gross_cap), risk(0, 0.985 * gross_cap), "BA")
++
++
++def test_plan_mode_does_not_trade_ride_along_legs_alone(manifest, store, monkeypatch):
++    from types import SimpleNamespace
++
++    from hedge.execution import ExecutionManager
++
++    m = manifest.model_copy(
++        update={"execution": manifest.execution.model_copy(update={"slice_economics": "plan"})}
++    )
++    manager = ExecutionManager(m, store, None, None)
++    manager.score_context = lambda *a: (1_000_000, 1_000_000.0)
++    target = SimpleNamespace(quantities={10: 7, 103: -1})
++    snapshot = SimpleNamespace(quantities=lambda: {}, version="s")
++    scenarios = SimpleNamespace(identifier="x")
++    seen = {}
++
++    def evaluate(self, snapshot, quotes, scenarios, part, previous, estimate):
++        seen["part"] = dict(part.quantities)
++        # Only the stock leg is executable: it alone improves the score by $5 (threshold $100).
++        return part.model_copy(update={"current_score": 1000, "expected_score": 995, "uncertainty": 1})
++
++    monkeypatch.setattr("hedge.optimizer.HedgeOptimizer.evaluate_target", evaluate)
++    stock_only = [(0.0, 10, 7, None)]
++    assert not manager._executable_part_clears(target, snapshot, {}, scenarios, None, stock_only)
++    assert seen["part"] == {10: 7}  # the blocked option leg is not credited

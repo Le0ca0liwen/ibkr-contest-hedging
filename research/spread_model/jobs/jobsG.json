@@ -1,0 +1,1 @@
+[{"name": "T2_B900_1020", "day": "2026-10-20", "fill": "touch"}, {"name": "T2_P60_1020", "day": "2026-10-20", "repo": "proto", "fill": "touch", "policy": {"option_seconds": 60, "option_reversal_reserve": 1.0, "cap_hysteresis": true}, "execution": {"slice_economics": "plan"}}]
