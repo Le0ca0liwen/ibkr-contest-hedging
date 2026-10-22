@@ -785,12 +785,16 @@ class TradingService:
             "No quotes yet (they are read once IBKR is connected and the contracts are verified)"
             if not self.last_quotes
             else f"{live} of {total} quotes live"
-            + (f" ({modeled} options valued from their live underlying after hours)" if modeled else "")
+            + (
+                f" ({modeled} options valued from their live underlying outside regular hours)"
+                if modeled
+                else ""
+            )
             + (
                 ""
                 if live
                 else " (Moomoo quotes are live 09:30-16:00 ET"
-                + ("; shares also 16:00-20:00 ET)" if m.extended_hours else ")")
+                + ("; shares also 04:00-09:30 and 16:00-20:00 ET)" if m.extended_hours else ")")
             )
             + (
                 f"; no quote at all for {total - len(self.last_quotes)}"

@@ -18,6 +18,9 @@ NY = ZoneInfo("America/New_York")
 # trading and NAV changes count (operator instruction, Oct 22): the official close is read after it
 # and SPCX/RKLB (and other allowlisted) shares keep hedging through it. Options never trade in it.
 EXTENDED_HOURS = timedelta(hours=4)
+# Pre-market session before the regular open (04:00-09:30 ET): shares hedge through it as well
+# (operator instruction, Oct 22). The day's NAV runs from the previous scored close (20:00 ET).
+PRE_MARKET = timedelta(hours=5, minutes=30)
 # Implied vol rises when spot falls (leverage effect); broad index ETFs show it most strongly.
 BROAD_INDEX_ETFS = frozenset({"SPY", "IVV", "VOO", "SPLG", "QQQ", "IWM", "DIA"})
 INDEX_SPOT_VOL_CORRELATION = -0.7
@@ -455,6 +458,20 @@ class Manifest(Frozen):
         close = self.session_close(day)
         return day if close <= now < close + EXTENDED_HOURS else None
 
+    def pre_market(self, now: datetime) -> date | None:
+        """The contest session whose pre-market window [open - 5 h 30, open) contains now."""
+        day = self.active_session(now)
+        if not self.extended_hours or day is None:
+            return None
+        opened = self.session_open(day)
+        return day if opened - PRE_MARKET <= now < opened else None
+
+    def extended_session(self, now: datetime) -> str | None:
+        """ "pre" or "post" while a contest session's shares trade outside regular hours."""
+        if self.pre_market(now) is not None:
+            return "pre"
+        return "post" if self.post_market(now) is not None else None
+
     def next_close(self, now: datetime) -> datetime | None:
         return next(
             (self.scoring_close(d) for d in self.scoring_sessions if self.scoring_close(d) > now), None
@@ -473,13 +490,15 @@ class Manifest(Frozen):
         )
         if self.session_open(day) <= now < self.session_close(day) - timedelta(minutes=cutoff):
             return True
-        # Contest post-market session: shares only, until the same cutoff before 20:00 ET.
-        return (
-            kind == "STK"
-            and not setup
-            and self.post_market(now) is not None
-            and now < self.session_close(day) + EXTENDED_HOURS - timedelta(minutes=cutoff)
-        )
+        # Contest pre-market session (until the open) and post-market session (until the same
+        # cutoff before 20:00 ET): shares only.
+        if kind != "STK" or setup:
+            return False
+        if self.pre_market(now) is not None:
+            return True
+        return self.post_market(now) is not None and now < self.session_close(
+            day
+        ) + EXTENDED_HOURS - timedelta(minutes=cutoff)
 
     def accrual_days(self, day: date) -> int:
         days = (self.day_zero, *self.scoring_sessions)

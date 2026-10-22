@@ -206,13 +206,14 @@ def test_after_hours_urgency_uses_the_post_market_cutoff_and_never_a_market_orde
     assert order["order_type"] == "LMT"
 
 
-async def test_paper_trading_starts_after_hours_and_plans_shares_only(manifest, store, quotes):
+@pytest.mark.parametrize("session, hour", [(0, 17), (1, 7)])  # post-market, pre-market
+async def test_paper_trading_starts_after_hours_and_plans_shares_only(manifest, store, quotes, session, hour):
     from hedge.config import Manifest
     from hedge.scenarios import ScenarioEngine
     from hedge.service import TradingService
 
     m = contest(Manifest.model_validate({**manifest.model_dump(), "autostart": "paper"}))
-    now = at(m.scoring_sessions[0], 17)
+    now = at(m.scoring_sessions[session], hour)
     service = TradingService(m, store, demo=True)
     service.now = lambda: now
     await service.broker.connect()
@@ -225,6 +226,7 @@ async def test_paper_trading_starts_after_hours_and_plans_shares_only(manifest, 
     service.last_snapshot, service.last_quotes = service.broker.snapshot(), fresh
     service.last_scenarios = ScenarioEngine(m).build(service.last_snapshot, fresh, now)
     service.ledger.import_close(m.day_zero, m.initial_nav, "fixture", m.account)
+    service.ledger.import_close(m.scoring_sessions[0], m.initial_nav, "fixture", m.account)
     service.restore_autostart()
     service._autostart_step([])
     snapshot = service.broker.snapshot()
@@ -365,3 +367,91 @@ def test_after_hours_a_quiet_book_values_a_held_stock_but_a_trade_needs_a_fresh_
     assert not any(r.startswith(("Stale/future quote", "Non-live quote")) for r in held.reasons), held.reasons
     traded = gate.validate(snap, quiet, scenarios, {**snap.quantities(), 10: 150}, now)
     assert "Stale/future quote: 10" in traded.reasons
+
+
+def test_shares_trade_in_the_pre_market_session_and_options_wait_for_the_open(manifest):
+    m, day = contest(manifest), manifest.scoring_sessions[1]
+    assert m.pre_market(at(day, 4)) == day and m.pre_market(at(day, 3, 59)) is None
+    assert m.extended_session(at(day, 7)) == "pre" and m.extended_session(at(day, 17)) == "post"
+    assert m.extended_session(at(day, 11)) is None
+    assert m.can_trade(at(day, 4), "STK") and m.can_trade(at(day, 9, 29, 59), "STK")
+    assert not m.can_trade(at(day, 3, 59), "STK") and not m.can_trade(at(day, 7), "OPT")
+    assert not m.can_trade(at(day, 7), "STK", setup=True)
+    assert m.can_trade(at(day, 9, 30), "OPT")  # the regular session
+    assert not manifest.can_trade(at(day, 7), "STK") and manifest.extended_session(at(day, 7)) is None
+
+
+def test_the_overnight_gap_is_spread_over_post_market_overnight_and_pre_market(manifest):
+    from hedge.scenarios import PRE_MARKET_VARIANCE
+
+    day, following = manifest.scoring_sessions[:2]
+    rest = 0.30 - POST_MARKET_VARIANCE - PRE_MARKET_VARIANCE
+    assert trading_variance(at(following, 6, 45), at(following, 9, 30)) == pytest.approx(
+        PRE_MARKET_VARIANCE * 2.75 / 5.5
+    )
+    assert trading_variance(at(day, 20), at(following, 4)) == pytest.approx(rest)
+    assert trading_variance(at(day, 23, 30), at(following, 4)) == pytest.approx(rest * 4.5 / 8)
+    # From a pre-market start the forecast to the scored close covers what is left of the day.
+    assert trading_variance(at(following, 7), at(following, 20)) == pytest.approx(
+        PRE_MARKET_VARIANCE * 2.5 / 5.5 + 1 + POST_MARKET_VARIANCE
+    )
+
+
+def test_pre_market_options_are_valued_from_the_live_underlying(tmp_path):
+    m = contest(demo_manifest())
+    now = at(m.scoring_sessions[1], 7, 15)
+    path = tmp_path / "latest.json"
+    path.write_text(json.dumps(feed(m, now)))
+    quotes = MoomooData(m, path).quotes(now)
+    stock = next(c for c in m.contracts if c.kind == "STK")
+    option = next(c for c in m.contracts if c.kind == "OPT")
+    assert quotes[stock.con_id].data_type == "live" and quotes[option.con_id].data_type == "model"
+
+
+def test_pre_market_share_orders_are_limits_flagged_outside_regular_hours(manifest, monkeypatch):
+    import hedge.broker as broker_module
+    from hedge.broker import IBKRBroker
+    from hedge.models import OrderRequest
+
+    m = contest(manifest)
+    day = m.scoring_sessions[1]
+    broker = IBKRBroker(m, asyncio.Queue())
+    placed = []
+    broker.ib = SimpleNamespace(
+        isConnected=lambda: True,
+        placeOrder=lambda contract, order: (
+            placed.append(order) or SimpleNamespace(order=SimpleNamespace(orderId=1, permId=2))
+        ),
+    )
+    broker.readonly, broker.qualified, broker.reconciled = False, True, True
+    broker.native = {10: object()}
+    monkeypatch.setattr(broker_module, "utcnow", lambda: at(day, 7))
+    request = OrderRequest(
+        intent_id="x",
+        con_id=10,
+        signed_quantity=100,
+        limit_price=Decimal("195.00"),
+        account=m.account,
+        snapshot_id="s",
+        decision_id="d",
+    )
+    asyncio.run(broker.submit(request, 1))
+    assert placed[-1].outsideRth is True
+
+
+def test_the_nav_stream_starts_a_new_base_at_the_open(manifest, snapshot):
+    from hedge.valuation import NAVTracker
+
+    m = contest(manifest)
+    day = m.scoring_sessions[1]
+    tracker = NAVTracker(m)
+    pre = at(day, 9, 29)
+    base = snapshot.model_copy(
+        update={"at": pre, "account_at": pre, "pnl_daily": Decimal("0"), "pnl_at": pre}
+    )
+    assert tracker.estimate(base, {}, m.contract_map) == pytest.approx(1_000_000)
+    assert tracker.pnl_phase == "pre"
+    opened = at(day, 9, 30, 2)
+    regular = base.model_copy(update={"at": opened, "pnl_daily": Decimal("40"), "pnl_at": opened})
+    tracker.estimate(regular, {}, m.contract_map)
+    assert tracker.source == "fill attribution" and tracker.pnl_anchor is None  # waits for a settled push

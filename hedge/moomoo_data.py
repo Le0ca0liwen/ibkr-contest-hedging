@@ -70,17 +70,19 @@ class MoomooData:
         return min(at, max(times)) if times else at
 
     def _in_session(self, contract, now):
-        """Regular session for everything; the contest post-market session for shares too."""
+        """Regular session for everything; the contest pre/post-market sessions for shares too."""
         day = now.astimezone(NY).date()
-        if self.manifest.session_open(day) <= now < self.manifest.session_close(day):
+        if self.manifest.is_session(day) and self.manifest.session_open(
+            day
+        ) <= now < self.manifest.session_close(day):
             return True
-        return contract.kind == "STK" and self.manifest.post_market(now) is not None
+        return contract.kind == "STK" and self.manifest.extended_session(now) is not None
 
-    def _post_market_option(self, contract, raw, stock_item, stock_at, spot, bid, ask, vendor_iv, now):
-        """After the close options do not trade, but IBKR keeps marking them from the moving
-        underlying (model-style; observed Oct 22). Value a held option the same way: the live
-        after-hours stock book and the IV calibrated during the day (else the vendor's). Never
-        tradable: no size, data_type "model". None when the underlying book is not live."""
+    def _extended_hours_option(self, contract, raw, stock_item, stock_at, spot, bid, ask, vendor_iv, now):
+        """Outside regular hours options do not trade, but IBKR keeps marking them from the moving
+        underlying (model-style; observed after the close Oct 22). Value a held option the same way:
+        the live pre/post-market stock book and the IV calibrated during the day (else the vendor's).
+        Never tradable: no size, data_type "model". None when the underlying book is not live."""
         rights = raw.get("rights", {})
         if not (
             raw.get("quote_server_connected")
@@ -171,7 +173,7 @@ class MoomooData:
                         # A quiet (unchanged) option book stays valid up to the held-leg bound;
                         # the risk gate still requires option_quote_age for anything traded. After
                         # hours stock books are quiet too: the same bound (trades still need 5 s).
-                        after_hours = self.manifest.post_market(now) is not None
+                        after_hours = self.manifest.extended_session(now) is not None
                         stock_age = (
                             self.manifest.risk.held_option_quote_age
                             if after_hours
@@ -239,8 +241,12 @@ class MoomooData:
                     # Vendor clocks can be slightly ahead of the callback clock;
                     # a verified current book still uses its REAL bounded receipt
                     # timestamp. Never revive an unverified/cached future trade.
-                    if contract.kind == "OPT" and not live and self.manifest.post_market(now) is not None:
-                        model = self._post_market_option(
+                    if (
+                        contract.kind == "OPT"
+                        and not live
+                        and self.manifest.extended_session(now) is not None
+                    ):
+                        model = self._extended_hours_option(
                             contract, raw, stock_item, stock_at, spot, bid, ask, iv, now
                         )
                         if model is not None:

@@ -50,7 +50,7 @@ def choose_order(manifest, broker, contract, quote, signed, now, corrective=Fals
     # narrowly quoted stock books. Its slippage reserve is modeled, not a cap.
     market = (
         policy.urgent_market_stocks
-        and manifest.post_market(now) is None  # outside regular hours IBKR takes limits only
+        and manifest.extended_session(now) is None  # outside regular hours IBKR takes limits only
         and quote.data_type == "live"
         and urgency == "CORRECTIVE"
         and contract.kind == "STK"

@@ -84,11 +84,13 @@ reason in plain words. The badge counts the ✗ rows.
   official closing NAV). Keep the Mac on power with the lid open through 20:20 ET: a sleeping
   Mac records nothing. If it did sleep, the app refreshes its orders and positions from IBKR on
   waking and says so in the alerts.
-- **16:00-19:58 ET (post-market):** paper trading continues with shares only (SPCX, RKLB and any
-  added hedge stocks such as VOO/IVV), with limit orders flagged for outside regular hours. Options
-  do not trade after 16:00; the app values held options from their live underlying, as IBKR's own
-  marks do, so the Quotes row may read "... options valued from their live underlying after hours".
-  The forecast runs to the 20:00 scored close. Keep the Mac awake and on power until 20:20.
+- **04:00-09:30 ET (pre-market) and 16:00-19:58 ET (post-market):** paper trading continues with
+  shares only (SPCX, RKLB and any added hedge stocks such as VOO/IVV), with limit orders flagged for
+  outside regular hours; options trade only 09:30-15:45. Outside regular hours the app values held
+  options from their live underlying, as IBKR's own marks do, so the Quotes row may read "... options
+  valued from their live underlying outside regular hours". The forecast runs to the 20:00 scored
+  close. With Auto paper ON the app starts trading at 04:00 once every check passes, so keep the Mac
+  awake and on power overnight (or press Pause before you leave it, and Enable in the morning).
 - **After about 20:21:** read **Day-end miss explanation** (Overview, under the scoring
   ledger): how far the official close was from the target and why. Nothing to press.
 

@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .config import EXTENDED_HOURS, NY
+from .config import EXTENDED_HOURS, NY, PRE_MARKET
 from .continuity import DataUnavailable
 from .models import digest
 from .valuation import ValuationEngine
@@ -15,10 +15,13 @@ from .valuation import ValuationEngine
 # The app can trade again once the next scored session has been open this long.
 OVERNIGHT_REACTION = timedelta(minutes=15)
 TRADING_DAY = 365 / 252  # calendar days of model variance in one trading day (sigma^2 / 252)
-# The part of each overnight gap carried by the 16:00-20:00 post-market session, accrued evenly over
-# it (an assumption: after-hours moves run at roughly 0.3x a day's standard deviation). The rest of
-# the gap still arrives at the reopen, so a whole close -> reopen interval is unchanged.
+# How each overnight gap's variance (overnight_variance) is spread, evenly within each window (an
+# assumption): 0.08 of a day over the 16:00-20:00 post-market session (after-hours moves run at
+# roughly 0.3x a day's standard deviation), 0.10 over the 04:00-09:30 pre-market session, and the
+# rest over the hours between (20:00-04:00, weekends and holidays included). A whole
+# close -> reopen interval therefore keeps exactly overnight_variance.
 POST_MARKET_VARIANCE = 0.08
+PRE_MARKET_VARIANCE = 0.10
 
 
 def overnight_variance(close_day: date, next_day: date) -> float:
@@ -35,26 +38,34 @@ def trading_variance(start: datetime, end: datetime) -> float:
     """Spot/IV variance from start to end in trading days, on the same clock as overnight_variance.
 
     Open-session time counts in proportion to the session length (early closes included). Each
-    close -> reopen gap counts overnight_variance: POST_MARKET_VARIANCE of it evenly over the
-    post-market session after the close, the rest at the reopen. Intraday variance is therefore
-    not understated by calendar time (a 6-hour remainder is ~0.9 days, not 0.25).
+    close -> reopen gap counts overnight_variance, spread over the post-market session, the hours
+    between and the pre-market session (POST_MARKET_VARIANCE, the rest, PRE_MARKET_VARIANCE).
+    Intraday variance is therefore not understated by calendar time (a 6-hour remainder is ~0.9
+    days, not 0.25).
     """
     import exchange_calendars as xcals
 
+    def share(a, b, weight):
+        overlap = (min(end, b) - max(start, a)).total_seconds()
+        return weight * max(0.0, overlap) / (b - a).total_seconds() if b > a else 0.0
+
     calendar = xcals.get_calendar("XNYS")
-    first, last = start.astimezone(NY).date(), end.astimezone(NY).date()
-    sessions = calendar.sessions_in_range(pd.Timestamp(first), pd.Timestamp(last))
+    # A week back, so an interval starting overnight still sees the session before it.
+    first = start.astimezone(NY).date() - timedelta(days=7)
+    last = end.astimezone(NY).date()
     total, previous = 0.0, None
-    for session in sessions:
+    for session in calendar.sessions_in_range(pd.Timestamp(first), pd.Timestamp(last)):
         opened = calendar.session_open(session).to_pydatetime()
         closed = calendar.session_close(session).to_pydatetime()
-        overlap = (min(end, closed) - max(start, opened)).total_seconds()
-        total += max(0.0, overlap) / (closed - opened).total_seconds()
-        if previous is not None and start < opened <= end:
-            total += overnight_variance(previous, session.date()) - POST_MARKET_VARIANCE
-        post = (min(end, closed + EXTENDED_HOURS) - max(start, closed)).total_seconds()
-        total += POST_MARKET_VARIANCE * max(0.0, post) / EXTENDED_HOURS.total_seconds()
-        previous = session.date()
+        if previous is not None:
+            rest = (
+                overnight_variance(previous[0], session.date()) - POST_MARKET_VARIANCE - PRE_MARKET_VARIANCE
+            )
+            total += share(previous[1] + EXTENDED_HOURS, opened - PRE_MARKET, max(0.0, rest))
+        total += share(opened - PRE_MARKET, opened, PRE_MARKET_VARIANCE)
+        total += share(opened, closed, 1.0)
+        total += share(closed, closed + EXTENDED_HOURS, POST_MARKET_VARIANCE)
+        previous = (session.date(), closed)
     return max(total, 1 / 23400)
 
 

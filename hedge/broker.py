@@ -572,10 +572,10 @@ class IBKRBroker:
             raise ValueError("Discretionary trading of mandatory/unapproved instruments is forbidden")
         if request.time_in_force == "IOC" and request.order_type != "LMT":
             raise ValueError("Immediate-or-cancel orders must be marketable limits")
-        # Contest post-market session: share orders must be limits flagged outside regular hours.
+        # Contest pre/post-market sessions: share orders must be limits flagged outside regular hours.
         after_hours = (
             self.manifest.contract_map[request.con_id].kind == "STK"
-            and self.manifest.post_market(utcnow()) is not None
+            and self.manifest.extended_session(utcnow()) is not None
         )
         if after_hours and request.order_type != "LMT":
             raise ValueError("Only limit orders trade outside regular hours")
@@ -708,7 +708,7 @@ class IBKRBroker:
             account=request.account,
             tif="DAY",
             outsideRth=self.manifest.contract_map[request.con_id].kind == "STK"
-            and self.manifest.post_market(utcnow()) is not None,
+            and self.manifest.extended_session(utcnow()) is not None,
         )
         return await self.ib.whatIfOrderAsync(self.native[request.con_id], order)
 

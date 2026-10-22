@@ -200,13 +200,13 @@ class NAVTracker:
         self.last_check = None  # latest settled push vs the stream's prediction
 
     def _phase(self, now):
-        """Regular session, contest post-market session or closed: a stream base never crosses one
-        (IBKR's P&L stops repricing options after the close)."""
+        """Regular session, contest pre/post-market session or closed: a stream base never crosses
+        one (IBKR's P&L keeps options static outside regular hours)."""
         m = self.manifest
         if m is None:
             return None
-        if m.post_market(now) is not None:
-            return "post"
+        if extended := m.extended_session(now):
+            return extended
         day = now.astimezone(NY).date()
         return (
             "regular" if m.is_session(day) and m.session_open(day) <= now < m.session_close(day) else "closed"
