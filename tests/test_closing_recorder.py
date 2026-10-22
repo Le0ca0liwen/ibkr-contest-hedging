@@ -640,7 +640,7 @@ async def test_contest_missed_bell_and_post_close_require_a_manual_close(store, 
     await recorder.tick()
     assert day not in ledger.closes()
     assert store.records("closing_capture", contest.account)[0]["status"] == "MISSED"
-    assert any("enter IBKR's closing NAV" in a[1] for a in alerts)
+    assert any("official end-of-day NAV is still recorded" in a[1] for a in alerts)
 
 
 async def test_contest_post_close_reading_far_from_the_pre_close_nav_is_not_used(store, manifest):
@@ -705,3 +705,83 @@ async def test_closing_observation_does_not_wait_for_a_reconnect(manifest):
     async with broker.reconcile_lock:  # e.g. connect() re-qualifying every contract
         result = await asyncio.wait_for(broker.closing_nav_observation(), 1)
     assert result["nav"] == Decimal("1000123.45")
+
+
+async def test_contest_end_of_day_reading_after_the_post_market_close_is_the_official_close(store, manifest):
+    contest, ledger, clock, broker, recorder, alerts = contest_prepared(store, manifest)
+    day, close = contest.scoring_sessions[0], clock[0]
+    await recorder.tick()  # 16:00 bell
+    clock[0] = close + timedelta(minutes=20)
+    broker.changes = {"nav": Decimal("1000050.00")}
+    await recorder.tick()  # 16:20 post-close
+    assert ledger.closes()[day] == Decimal("1000050.00")
+    calls = broker.calls
+    clock[0] = close + timedelta(hours=4, minutes=4, seconds=59)
+    await recorder.tick()
+    assert broker.calls == calls  # not before 20:05 ET
+    assert recorder.state()["end_of_day"] == (close + timedelta(hours=4, minutes=5)).isoformat()
+    clock[0] = close + timedelta(hours=4, minutes=5)
+    broker.changes = {"nav": Decimal("999812.34")}  # after-hours stock marks moved NAV
+    await recorder.tick()
+    assert ledger.closes()[day] == Decimal("999812.34")
+    assert ledger.previous_close(contest.scoring_sessions[1]) == Decimal("999812.34")
+    source = ledger.latest_report()["source"]
+    assert (
+        "end-of-day observation (after the 20:00 ET post-market close" in source
+        and "official close" in source
+    )
+    assert recorder.state()["last"]["phase"] == "end_of_day"
+    clock[0] += timedelta(minutes=1)
+    await recorder.tick()
+    await ClosingRecorder(contest, ledger, broker, lambda: clock[0], lambda *x: None).tick()
+    assert broker.calls == calls + 1 and not alerts
+
+
+async def test_contest_end_of_day_is_taken_even_when_the_bell_was_missed(store, manifest):
+    contest, ledger, clock, broker, recorder, alerts = contest_prepared(store, manifest)
+    day, close = contest.scoring_sessions[0], clock[0]
+    broker.fail = True
+    for minutes in (0, 4, 20, 26):
+        clock[0] = close + timedelta(minutes=minutes)
+        await recorder.tick()
+    assert day not in ledger.closes()
+    broker.fail = False
+    clock[0] = close + timedelta(hours=4, minutes=6)
+    await recorder.tick()
+    assert ledger.closes()[day] == Decimal("1000100.12")
+    assert "end-of-day observation" in ledger.latest_report()["source"]
+
+
+async def test_contest_missed_end_of_day_window_asks_for_the_value_and_keeps_the_interim_close(
+    store, manifest
+):
+    contest, ledger, clock, broker, recorder, alerts = contest_prepared(store, manifest)
+    day, close = contest.scoring_sessions[0], clock[0]
+    await recorder.tick()
+    clock[0] = close + timedelta(hours=4, minutes=20, seconds=1)  # asleep through 20:05-20:20
+    await recorder.tick()
+    assert ledger.closes()[day] == Decimal("1000100.12")  # the 16:00 reading stays meanwhile
+    rows = [r for r in store.records("closing_capture", contest.account) if r["status"] == "MISSED"]
+    assert [r["phase"] for r in rows] == ["end_of_day"]
+    assert any("End-of-day NAV capture missed" in a[1] for a in alerts)
+    await ClosingRecorder(contest, ledger, broker, lambda: clock[0], lambda *x: alerts.append(x)).tick()
+    assert sum("End-of-day NAV capture missed" in a[1] for a in alerts) == 1
+
+
+@pytest.mark.parametrize("case", ["manual", "practice"])
+async def test_no_end_of_day_reading_for_a_hand_entered_close_or_outside_the_contest(store, manifest, case):
+    if case == "manual":
+        contest, ledger, clock, broker, recorder, alerts = contest_prepared(store, manifest)
+    else:
+        contest = manifest
+        ledger, clock, broker, recorder, alerts = prepared(store, manifest)
+    day, close = contest.scoring_sessions[0], clock[0]
+    await recorder.tick()
+    if case == "manual":
+        ledger.import_close(day, Decimal("1000400"), "Operator entry", contest.account)
+    calls = broker.calls
+    for minutes in (245, 262):
+        clock[0] = close + timedelta(minutes=minutes)
+        await recorder.tick()
+    assert broker.calls == calls and not alerts
+    assert not any(r.get("phase") == "end_of_day" for r in store.records("closing_capture", contest.account))

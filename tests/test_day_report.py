@@ -383,20 +383,20 @@ def test_report_runs_once_after_settle_and_again_after_a_correction(tmp_path, mo
     def ready_alerts():
         return [a for a in service.store.records("alert", account, 20) if "Day-end report" in a["message"]]
 
-    assert service.day_reports.settle(D) == et(D, 16, 26)
-    service.day_reports.tick(et(D, 16, 25))
+    assert service.day_reports.settle(D) == et(D, 20, 21)
+    service.day_reports.tick(et(D, 20, 20))
     assert reports() == []
-    service.day_reports.tick(et(D, 16, 27))
+    service.day_reports.tick(et(D, 20, 22))
     assert len(reports()) == 1 and reports()[0]["trigger"] == "automatic"
     assert len(ready_alerts()) == 1 and ready_alerts()[0]["severity"] == "info"
     assert ready_alerts()[0]["message"].startswith(f"Day-end report for {D} ready: miss ")
-    service.day_reports.tick(et(D, 16, 28))
+    service.day_reports.tick(et(D, 20, 23))
     restarted = make_service(tmp_path, monkeypatch, manifest, store=service.store)
     restarted.day_reports.load()
-    restarted.day_reports.tick(et(D, 16, 40))
+    restarted.day_reports.tick(et(D, 20, 35))
     assert len(reports()) == 1 and len(ready_alerts()) == 1
     restarted.ledger.import_close(D, Decimal("1000150.00"), "Manual correction (IBKR closing NAV)", account)
-    restarted.day_reports.tick(et(D, 16, 45))
+    restarted.day_reports.tick(et(D, 20, 40))
     assert len(reports()) == 2 and len(ready_alerts()) == 2
     newest = restarted.day_reports.latest()[0]
     assert newest["official"]["nav"].startswith("1000150") and newest["official"]["provenance"] == "statement"
@@ -490,10 +490,10 @@ async def test_automatic_explanation_runs_once_for_the_newest_day(tmp_path, monk
     service.store.record(
         "close_marks", service.manifest.account, {**PREV_MARKS}, mark_id(service, D0, "pre_close")
     )
-    service.day_reports.tick(et(D, 16, 27))
+    service.day_reports.tick(et(D, 20, 22))
     assert {r["date"] for r in service.day_reports.latest()} == {str(P), str(D)}
     await asyncio.gather(*service.ai_tasks)
-    service.day_reports.tick(et(D, 16, 28))
+    service.day_reports.tick(et(D, 20, 23))
     await asyncio.gather(*service.ai_tasks)
     assert len(calls) == 1  # only the newest day, and only once
     latest = service.day_reports.latest()
@@ -510,7 +510,7 @@ async def test_automatic_explanation_runs_once_for_the_newest_day(tmp_path, monk
 def test_numbers_visible_with_ai_off(tmp_path, monkeypatch, manifest):
     service = make_service(tmp_path, monkeypatch, manifest)
     seed(service)
-    service.day_reports.tick(et(D, 16, 27))
+    service.day_reports.tick(et(D, 20, 22))
     state = service.state()
     report = state["day_reports"][0]
     assert report["drivers"] and report["ai"] is None and report["ai_note"] == "AI off: numbers only"
@@ -593,7 +593,9 @@ async def test_an_explanation_after_ai_is_turned_off_is_dropped(tmp_path, monkey
 
 def test_day_selector_offers_closed_sessions_without_a_report(tmp_path, monkeypatch, manifest):
     service = make_service(tmp_path, monkeypatch, manifest)
-    service.now = lambda: et(D, 16, 5)  # D closed; its automatic report comes at 16:26
+    service.now = lambda: et(
+        D, 16, 5
+    )  # D closed; its automatic report comes after the 20:05-20:20 end-of-day reading
     state = service.state()
     assert state["day_reports"] == [] and state["day_report_sessions"] == [str(D), str(P)]
     service.now = lambda: et(D, 15, 59)

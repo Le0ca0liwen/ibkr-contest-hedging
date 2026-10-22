@@ -13,6 +13,13 @@ POST_CLOSE = "post-close observation"
 POST_CLOSE_WINDOW = timedelta(minutes=5)
 # A hung broker request must not stall the recorder past its window.
 OBSERVE_TIMEOUT_SECONDS = 30
+# Contest (API close official): NAV keeps changing in the post-market session and that trading
+# counts (operator instruction, Oct 22), so the official close is read once the post-market
+# session (regular close + 4 h: 20:00 ET) has ended. It supersedes the 16:00 and 16:20 readings.
+END_OF_DAY = "end-of-day observation"
+EXTENDED_HOURS = timedelta(hours=4)
+END_OF_DAY_DELAY = timedelta(minutes=5)
+END_OF_DAY_WINDOW = timedelta(minutes=15)
 
 
 def post_close_window(manifest, day):
@@ -44,6 +51,7 @@ class ClosingRecorder:
         self.last = None
         self.missed = set()
         self.post_close_done = set()  # diverged or skipped post-close observations (bell value kept)
+        self.eod_missed = set()  # days whose end-of-day window passed without a reading
         self.loaded = False
         # SPCX/RKLB/SPY contest: the IBKR API closing NAV is the official scoring close.
         self.api_official = manifest.contest_rules == "spcx_rklb_spy"
@@ -63,7 +71,34 @@ class ClosingRecorder:
             "last": self.last,
             "window_seconds": self.manifest.closing_capture.window_seconds,
             "late_capture_minutes": self.manifest.closing_capture.late_capture_minutes,
+            "end_of_day": self.end_of_day_window(min(pending))[0].isoformat()
+            if self.api_official and (pending := self._pending_end_of_day(now))
+            else None,
         }
+
+    def end_of_day_window(self, day):
+        """Contest only: when the official end-of-day NAV is read, 5-20 minutes after the
+        post-market session ends (20:05-20:20 ET on a normal day). None outside the contest."""
+        if not self.api_official:
+            return None
+        start = self.manifest.session_close(day) + EXTENDED_HOURS + END_OF_DAY_DELAY
+        return start, start + END_OF_DAY_WINDOW
+
+    def _pending_end_of_day(self, now):
+        revisions = self.ledger.revisions()
+        return [
+            day
+            for day in (self.manifest.day_zero, *self.manifest.scoring_sessions)
+            if self.end_of_day_window(day)[1] >= now and not self._end_of_day_settled(day, revisions)
+        ]
+
+    @staticmethod
+    def _end_of_day_settled(day, revisions):
+        """Its end-of-day reading is recorded, or the operator entered the day's close by hand."""
+        return any(
+            r["day"] == day and (END_OF_DAY in r["source"] or r["provenance"] == "statement")
+            for r in revisions
+        )
 
     def _post_close_settled(self, day, revisions):
         """A statement exists for the day, or its post-close observation is already recorded."""
@@ -106,11 +141,13 @@ class ClosingRecorder:
         # The service constructs components before initializing database tables.
         if not self.loaded:
             rows = self.ledger.store.records("closing_capture", self.manifest.account, 100)
-            self.missed = {
-                row["date"]
+            missed = [
+                row
                 for row in rows
                 if row.get("contest") == self.manifest.contest_id and row.get("status") == "MISSED"
-            }
+            ]
+            self.missed = {row["date"] for row in missed if row.get("phase") != "end_of_day"}
+            self.eod_missed = {row["date"] for row in missed if row.get("phase") == "end_of_day"}
             self.last = next(
                 (
                     row
@@ -127,7 +164,34 @@ class ClosingRecorder:
             close = self.manifest.session_close(day)
             if now < close:
                 continue
-            if day in closes:
+            eod = self.end_of_day_window(day)
+            eod_due = eod is not None and now >= eod[0] and not self._end_of_day_settled(day, revisions)
+            if eod_due and now > eod[1]:
+                if str(day) not in self.eod_missed:
+                    self.eod_missed.add(str(day))
+                    self.ledger.store.record(
+                        "closing_capture",
+                        self.manifest.account,
+                        {
+                            "contest": self.manifest.contest_id,
+                            "date": str(day),
+                            "status": "MISSED",
+                            "phase": "end_of_day",
+                            "scheduled_close": eod[0].isoformat(),
+                            "reason": "End-of-day window missed",
+                        },
+                    )
+                    self.alert(
+                        "warning",
+                        f"End-of-day NAV capture missed for {day}; enter IBKR's end-of-day NAV (after "
+                        "the 20:00 ET post-market close) in Settings & alerts > Import an official "
+                        "closing NAV",
+                    )
+                self.status = f"End-of-day NAV capture missed for {day}; enter the end-of-day NAV manually"
+                continue
+            if eod_due:
+                phase, start, deadline = "end_of_day", *eod
+            elif day in closes:
                 start = close + timedelta(minutes=policy.late_capture_minutes)
                 deadline = start + POST_CLOSE_WINDOW
                 settled = day in self.post_close_done or self._post_close_settled(day, revisions)
@@ -173,8 +237,8 @@ class ClosingRecorder:
                         self.missed.add(str(day))
                         self.alert(
                             "warning",
-                            f"Closing NAV capture missed for {day}; enter IBKR's closing NAV in Settings & "
-                            "alerts > Import an official closing NAV"
+                            f"16:00 closing NAV capture missed for {day}; the official end-of-day NAV is "
+                            "still recorded after the 20:00 ET post-market close"
                             if self.api_official
                             else f"Closing NAV capture missed for {day}; import the IBKR statement",
                         )
@@ -186,7 +250,7 @@ class ClosingRecorder:
             if self.retry_at is not None and now < self.retry_at:
                 return
             self.retry_at = now + timedelta(seconds=policy.retry_seconds)
-            label = "Post-close NAV" if phase == "post_close" else "Closing NAV"
+            label = {"post_close": "Post-close NAV", "end_of_day": "End-of-day NAV"}.get(phase, "Closing NAV")
             self.status = f"{label} requested for {day}"
             try:
                 value, at = await self._observe(start, deadline)
@@ -194,6 +258,9 @@ class ClosingRecorder:
                 # No await separates this recheck and the synchronous ledger write.
                 if (phase == "close" or fallback) and day in self.ledger.closes():
                     self.status = f"Closing NAV for {day} already recorded; existing value retained"
+                    return
+                if phase == "end_of_day" and self._end_of_day_settled(day, self.ledger.revisions()):
+                    self.status = f"Close for {day} already recorded; end-of-day observation discarded"
                     return
                 if (
                     phase == "post_close"
@@ -261,7 +328,15 @@ class ClosingRecorder:
                         ),
                     )
                     return
-                if phase == "post_close":
+                if phase == "end_of_day":
+                    extended = (close + EXTENDED_HOURS).astimezone(NY)
+                    source = (
+                        f"SYNTHETIC simulator {END_OF_DAY}"
+                        if self.demo
+                        else f"IBKR API {END_OF_DAY} (after the {extended:%H:%M} ET post-market close; "
+                        "NetLiquidation; official close)"
+                    )
+                elif phase == "post_close":
                     options_close = (close + timedelta(minutes=15)).astimezone(NY)
                     source = (
                         f"SYNTHETIC simulator {POST_CLOSE} (after {options_close:%H:%M} options close)"

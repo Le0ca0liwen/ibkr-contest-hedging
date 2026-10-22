@@ -34,7 +34,14 @@ Oct 21 applies instead: the IBKR API closing NAV is the official close. Its API 
 and, when taken, the post-close observation) are final, not provisional: no statement import is
 needed, no import warning is raised, and the dashboard, readiness row and AI prompts call the API
 close official. A manual entry (Settings & alerts > Import an official closing NAV) only corrects a
-missed or wrong capture, and then wins over the API rows for that day. In this contest a missed bell
+missed or wrong capture, and then wins over the API rows for that day. Post-market trading and NAV
+changes count too (operator instruction, Oct 22), so the official close is an **end-of-day**
+NetLiquidation reading 5-20 minutes after the post-market session ends (regular close + 4 h, i.e.
+20:05-20:20 ET), stored as `IBKR API end-of-day observation (...; official close)`. Being the latest
+API row, it replaces the 16:00 and 16:20 readings, which are interim. It is taken even if both of
+those were missed, and skipped for a day whose close was entered by hand. A missed window is
+recorded (MISSED, phase `end_of_day`) and raises one alert asking for a manual entry. The day-end
+report waits for it (20:21 ET). In this contest a missed bell
 capture gets one more try: the post-close observation (16:20-16:25 ET) is recorded as the close,
 with "; bell capture missed" in its source, unless it differs from the NAV of the last broker
 snapshot taken before the close by more than `late_capture_max_delta` x initial NAV. The day is

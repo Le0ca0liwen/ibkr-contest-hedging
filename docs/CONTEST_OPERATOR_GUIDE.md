@@ -42,7 +42,7 @@ reason in plain words. The badge counts the ✗ rows.
 | Contest configuration | Press **Confirm contest configuration** (enabled once IBKR has verified every contract), check the seven legs in the dialog, confirm. Needed once per configuration. |
 | Quotes | Moomoo quotes are live 09:30-16:00 ET. Outside those hours this row is a !, not a problem. |
 | Price history | Press **Refresh price history now** if it failed or is old. The app also refreshes it by itself between 08:30 and 09:29 ET. |
-| Previous official close | Recorded automatically: the IBKR API closing NAV is the official close for this contest. Only if it is missing (capture missed), enter IBKR's closing NAV in Settings & alerts > Import an official closing NAV. Missing blocks paper trading. |
+| Previous official close | Recorded automatically: the IBKR API end-of-day NAV (read after the 20:00 ET post-market close) is the official close for this contest. Only if it is missing (capture missed), enter IBKR's end-of-day NAV in Settings & alerts > Import an official closing NAV. Missing blocks paper trading. |
 | Automatic paper start | Shows whether it is on and what it waits for. |
 | Trading | The current mode and why it waits, if it does. |
 
@@ -76,14 +76,15 @@ reason in plain words. The badge counts the ✗ rows.
 - **Any time:** if paper trading is not on and the Today panel is unclear, type the
   question in **Why isn't it trading? Ask the app** (Overview). The answer is advice;
   the Today rows and the app's checks decide.
-- **16:00 and about 16:20:** the closing NAV is recorded automatically
-  (Settings & alerts > Automatic closing NAV recorder) and is the official close. A
-  DIVERGED warning means the 16:20 value differed from the 16:00 one; the 16:00 value is
-  kept. Check IBKR's closing NAV and correct it in Settings & alerts if needed. If the
-  16:00 capture is missed, the 16:20 reading is recorded instead; only if that also fails
-  does it ask you to enter the close. Keep the Mac on power with the lid open from 15:30
-  to 16:30: a sleeping Mac records nothing.
-- **After about 16:26:** read **Day-end miss explanation** (Overview, under the scoring
+- **16:00, about 16:20 and 20:05-20:20 ET:** the NAV is recorded automatically (Settings &
+  alerts > Automatic closing NAV recorder). Post-market trading and NAV changes count, so the
+  **official close is the end-of-day reading after the 20:00 ET post-market close**; the 16:00
+  and 16:20 readings are interim and are replaced by it. Only if the end-of-day reading is
+  missed does the app ask you to enter IBKR's end-of-day NAV (Settings & alerts > Import an
+  official closing NAV). Keep the Mac on power with the lid open through 20:20 ET: a sleeping
+  Mac records nothing. If it did sleep, the app refreshes its orders and positions from IBKR on
+  waking and says so in the alerts.
+- **After about 20:21:** read **Day-end miss explanation** (Overview, under the scoring
   ledger): how far the official close was from the target and why. Nothing to press.
 
 ## After the contest (Nov 4)

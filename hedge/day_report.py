@@ -745,8 +745,12 @@ class DayReporter(AIFeature):
         return sessions[sessions.index(day) - 1]
 
     def settle(self, day):
-        """When a day's inputs are final: after the post-close NAV observation window (16:26 ET by
-        default), or 6 minutes after the bell when late capture is off (post-close marks by then)."""
+        """When a day's inputs are final: in the contest after the end-of-day NAV window (20:21 ET);
+        otherwise after the post-close NAV observation window (16:26 ET by default), or 6 minutes
+        after the bell when late capture is off (post-close marks by then)."""
+        eod = self.service.closing_recorder.end_of_day_window(day)
+        if eod is not None:  # contest: the official close is read after the post-market session
+            return eod[1] + timedelta(minutes=1)
         late = self.manifest.closing_capture.late_capture_minutes
         close = self.manifest.session_close(day)
         return (
