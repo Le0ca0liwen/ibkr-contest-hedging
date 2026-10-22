@@ -349,3 +349,42 @@ def test_operator_borrow_allowance_reaches_moomoo_stock_quotes(tmp_path):
     assert MoomooData(borrowed, path).quotes(now)[10].shortable_shares == 500
     with pytest.raises(ValueError):
         Manifest.model_validate({**data, "stock_borrow_source": ""})
+
+
+def test_option_with_no_trade_today_keeps_its_current_book(tmp_path):
+    from datetime import datetime
+
+    m = demo_manifest()
+    now = datetime.combine(m.scoring_sessions[0], datetime.min.time(), NY).replace(hour=11)
+    raw = fixture(m, now)
+    raw.update(
+        quote_server_connected=True,
+        rights={"us_qot_right": "LV3", "us_option_qot_right": "LV1"},
+        identities={},
+    )
+    for c in m.contracts:
+        item = raw["securities"][code_for(c)]
+        item.update(book_push_at=now.isoformat(), book_push_count=2)
+        if c.kind == "OPT":
+            raw["identities"][code_for(c)] = {
+                "stock_owner": "US.BA",
+                "strike_time": str(c.expiry),
+                "option_type": "CALL" if c.right == "C" else "PUT",
+                "strike_price": c.strike,
+            }
+    untraded = raw["securities"][code_for(m.contract_map[101])]
+    # Moomoo's row for a contract with no trade yet today
+    untraded["quote"][0].update(data_date="", data_time="", last_price=0.0, volume=0, sec_status="N/A")
+    path = tmp_path / "quotes.json"
+    path.write_text(json.dumps(raw))
+    feed = MoomooData(m, path)
+    quote = feed.quotes(now)[101]
+    assert quote.data_type == "live" and quote.observed_at == now
+    assert abs(quote.model_price - quote.mid) < 0.0001
+    assert not any(m.contract_map[101].label in e for e in feed.errors)
+    raw["quote_server_connected"] = False  # not live, but still dated by its book receipt
+    path.write_text(json.dumps(raw))
+    assert MoomooData(m, path).quotes(now)[101].observed_at == now
+    untraded["book_push_count"] = 1  # no trade time and no dated book: still dropped
+    path.write_text(json.dumps(raw))
+    assert 101 not in MoomooData(m, path).quotes(now)

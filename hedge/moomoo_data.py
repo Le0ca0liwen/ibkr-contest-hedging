@@ -84,7 +84,16 @@ class MoomooData:
                     item = securities[code_for(contract)]
                     row = item["quote"][0]
                     book = item["order_book"]
-                    at = datetime.fromisoformat(row["data_date"] + "T" + row["data_time"]).replace(tzinfo=NY)
+                    if row.get("data_date") and row.get("data_time"):
+                        at = datetime.fromisoformat(row["data_date"] + "T" + row["data_time"]).replace(
+                            tzinfo=NY
+                        )
+                    else:
+                        # No trade yet today: blank last-trade fields. The book still counts, dated by
+                        # its receipt time.
+                        at = self.book_time(item)
+                        if at is None:
+                            raise ValueError("No provider timestamp")
                     stock_item = securities[f"US.{contract.symbol}"]
                     stock_book = stock_item["order_book"]
                     spot = (float(stock_book["Bid"][0][0]) + float(stock_book["Ask"][0][0])) / 2
