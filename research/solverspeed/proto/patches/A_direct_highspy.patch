@@ -1,0 +1,909 @@
+diff --git a/hedge/linmodel.py b/hedge/linmodel.py
+new file mode 100644
+index 0000000..722cabe
+--- /dev/null
++++ b/hedge/linmodel.py
+@@ -0,0 +1,280 @@
++"""Minimal affine-expression layer that builds the optimizer's MILP for HiGHS directly (no CVXPY).
++
++It mirrors the subset of CVXPY used by HedgeOptimizer._solve: integer/boolean/nonneg variables,
++affine arithmetic with numpy broadcasting, hstack/sum/multiply/indexing, and |x| through the epigraph
++CVXPY's abs canonicalizer produces (valid only in DCP-convex positions: minimized with nonnegative
++weights, or bounded above).
++
++The compiled model reproduces CVXPY 1.9's HiGHS input exactly, column and row order included:
++columns follow the first appearance of each variable in the canonicalized problem (objective, then
++each constraint preceded by its abs epigraph constraints), and rows put equalities before
++inequalities, each in constraint order. HiGHS therefore receives the same LP it would get through
++CVXPY, which keeps branch-and-bound paths (and so returned hedges) unchanged.
++
++Expressions are dense coefficient matrices over the model's columns; models here have a few hundred
++columns and rows, so dense arithmetic is cheaper than sparse bookkeeping.
++"""
++
++from __future__ import annotations
++
++import numpy as np
++from scipy import sparse
++
++
++def _unique(items):
++    return tuple(dict.fromkeys(items))
++
++
++class Expr:
++    """Affine expression A @ x + b; `shape` is () for scalars or (m,) for vectors.
++
++    `vars` lists the variable ids in CVXPY's traversal order (abs nodes contribute their epigraph
++    variable) and `aux` the abs epigraphs in canonicalization order.
++    """
++
++    __array_ufunc__ = None  # make ndarray @ Expr / ndarray * Expr defer to our reflected operators
++    __slots__ = ("model", "A", "b", "shape", "vars", "aux")
++
++    def __init__(self, model, A, b, shape, vars=(), aux=()):
++        self.model, self.A, self.b, self.shape, self.vars, self.aux = model, A, b, shape, vars, aux
++
++    @property
++    def size(self):
++        return 1 if self.shape == () else self.shape[0]
++
++    def _coef(self, width):
++        A = self.A
++        if A.shape[1] < width:
++            A = np.hstack([A, np.zeros((A.shape[0], width - A.shape[1]))])
++        return A
++
++    def _like(self, A, b, shape=None):
++        return Expr(self.model, A, b, self.shape if shape is None else shape, self.vars, self.aux)
++
++    @staticmethod
++    def _lift(model, other):
++        if isinstance(other, Expr):
++            return other
++        value = np.asarray(other, dtype=float)
++        if value.ndim == 0:
++            return Expr(model, np.zeros((1, 0)), value.reshape(1), ())
++        return Expr(model, np.zeros((len(value), 0)), value.astype(float), value.shape)
++
++    def _binary(self, other, sign):
++        other = Expr._lift(self.model, other)
++        width = max(self.A.shape[1], other.A.shape[1])
++        a, b = self._coef(width), other._coef(width)
++        sb, ob, shape = self.b, other.b, self.shape
++        if self.size != other.size:  # scalar broadcast
++            if self.shape == ():
++                a, sb, shape = np.repeat(a, other.size, axis=0), np.repeat(sb, other.size), other.shape
++            else:
++                b, ob = np.repeat(b, self.size, axis=0), np.repeat(ob, self.size)
++        elif self.shape == () and other.shape != ():
++            shape = other.shape
++        return Expr(
++            self.model, a + sign * b, sb + sign * ob, shape, _unique(self.vars + other.vars), self.aux + other.aux
++        )
++
++    def __add__(self, other):
++        return self._binary(other, 1.0)
++
++    def __radd__(self, other):
++        return Expr._lift(self.model, other)._binary(self, 1.0)
++
++    def __sub__(self, other):
++        return self._binary(other, -1.0)
++
++    def __rsub__(self, other):
++        return Expr._lift(self.model, other)._binary(self, -1.0)
++
++    def __neg__(self):
++        return self._like(-self.A, -self.b)
++
++    def __mul__(self, other):
++        if isinstance(other, Expr):
++            raise TypeError("Nonlinear product")
++        value = np.asarray(other, dtype=float)
++        if value.ndim == 0:
++            return self._like(self.A * float(value), self.b * float(value))
++        return multiply(value, self)
++
++    __rmul__ = __mul__
++
++    def __truediv__(self, other):
++        return self * (1.0 / float(other))
++
++    def __rmatmul__(self, other):
++        matrix = np.asarray(other, dtype=float)
++        # Constant parts accumulate left to right over nonzero entries, like CVXPY's sparse backend
++        # (numpy's pairwise dot would differ from CVXPY's offsets in the last bits).
++        offset = np.zeros(matrix.shape[:-1])
++        for k in np.flatnonzero(self.b):
++            offset += matrix[..., k] * self.b[k]
++        if matrix.ndim == 1:
++            return self._like((matrix @ self.A)[None, :], np.atleast_1d(offset), ())
++        return self._like(matrix @ self.A, offset, (matrix.shape[0],))
++
++    def __getitem__(self, key):
++        if self.shape == ():
++            raise IndexError("Scalar expression")
++        if isinstance(key, (int, np.integer)):
++            return self._like(self.A[key : key + 1], self.b[key : key + 1], ())
++        key = np.asarray(key, dtype=int)
++        return self._like(self.A[key], self.b[key], (len(key),))
++
++    # CVXPY: a <= b is Inequality(a, b); a >= b is Inequality(b, a); a == b is Equality(a, b).
++    def __le__(self, other):
++        return Constraint.inequality(self, Expr._lift(self.model, other))
++
++    def __ge__(self, other):
++        return Constraint.inequality(Expr._lift(self.model, other), self)
++
++    def __eq__(self, other):  # noqa: D105 - constraint builder, like CVXPY
++        other = Expr._lift(self.model, other)
++        return Constraint(self - other, True, self.vars + other.vars, self.aux + other.aux)
++
++    __hash__ = None
++
++    @property
++    def value(self):
++        x = self.model.values
++        if x is None:
++            return None
++        out = self._coef(len(x)) @ x + self.b
++        return float(out[0]) if self.shape == () else out
++
++
++class Constraint:
++    """lhs - rhs <= 0 (inequality) or == 0, with CVXPY's variable/epigraph order."""
++
++    __slots__ = ("expr", "equality", "vars", "aux")
++
++    def __init__(self, expr, equality, vars, aux):
++        self.expr, self.equality, self.vars, self.aux = expr, equality, vars, aux
++
++    @staticmethod
++    def inequality(lhs, rhs):
++        return Constraint(lhs - rhs, False, lhs.vars + rhs.vars, lhs.aux + rhs.aux)
++
++
++class Model:
++    def __init__(self):
++        self.lower, self.upper, self.integer = [], [], []
++        self.variables = []  # (first column, size)
++        self.constraints = []
++        self.abs_groups = []  # (epigraph variable id, source expression)
++        self.values = None  # semantic column values after a solve (creation order, full width)
++        self.user_scalars = 0
++        self.user_integers = 0
++
++    @property
++    def width(self):
++        return len(self.lower)
++
++    def variable(self, size=None, integer=False, boolean=False, nonneg=False, _user=True):
++        count = 1 if size is None else size
++        start = self.width
++        self.lower += [0.0 if (nonneg or boolean) else -np.inf] * count
++        self.upper += [1.0 if boolean else np.inf] * count
++        self.integer += [integer or boolean] * count
++        if _user:
++            self.user_scalars += count
++            self.user_integers += count if (integer or boolean) else 0
++        vid = len(self.variables)
++        self.variables.append((start, count))
++        A = np.zeros((count, start + count))
++        A[np.arange(count), start + np.arange(count)] = 1.0
++        return Expr(self, A, np.zeros(count), () if size is None else (count,), (vid,))
++
++    def add(self, constraints):
++        if isinstance(constraints, Constraint):
++            constraints = [constraints]
++        self.constraints.extend(constraints)
++
++    def abs(self, expr):
++        """|expr| as a free epigraph t with t >= expr, t >= -expr (CVXPY's abs_canon)."""
++        t = self.variable(expr.size if expr.shape else None, _user=False)
++        group = len(self.abs_groups)
++        self.abs_groups.append((t.vars[0], expr))
++        t.aux = expr.aux + (group,)
++        return t
++
++    def compile(self, objectives):
++        """Column-wise HiGHS arrays in CVXPY's order; `rows[k]` maps constraint k to its first row."""
++        width = self.width
++        sequence = []  # canonicalized constraints: (expr, equality, vars, owner constraint or None)
++        order = [v for e in objectives for v in e.vars]
++        emitted = set()
++        for k, c in enumerate(self.constraints):
++            for g in _unique(c.aux):
++                if g in emitted:
++                    continue
++                emitted.add(g)
++                tid, x = self.abs_groups[g]
++                start, size = self.variables[tid]
++                t = Expr(self, np.eye(size, start + size, start), np.zeros(size), x.shape, (tid,))
++                for lhs in (x, -x):  # t >= x, t >= -x: Inequality(x, t), Inequality(-x, t)
++                    sequence.append((lhs - t, False, lhs.vars + t.vars, None))
++            sequence.append((c.expr, c.equality, c.vars, k))
++        for _, _, vars, _ in sequence:
++            order.extend(vars)
++        order = _unique(order)
++        columns = np.concatenate(
++            [np.arange(self.variables[v][0], self.variables[v][0] + self.variables[v][1]) for v in order]
++        )
++        self.columns = columns
++        blocks, upper, lower, rows, row = [], [], [], {}, 0
++        for equality in (True, False):
++            for expr, eq, _, owner in sequence:
++                if eq != equality:
++                    continue
++                if owner is not None:
++                    rows[owner] = row
++                blocks.append(expr._coef(width)[:, columns])
++                upper.append(-expr.b)
++                lower.append(-expr.b if eq else np.full(expr.size, -np.inf))
++                row += expr.size
++        objective = [e._coef(width)[0, columns] for e in objectives]
++        return {
++            "A": sparse.csc_matrix(np.vstack(blocks)),
++            "row_lower": np.concatenate(lower),
++            "row_upper": np.concatenate(upper),
++            "col_lower": np.array(self.lower)[columns],
++            "col_upper": np.array(self.upper)[columns],
++            "integer": np.array(self.integer)[columns],
++            "objective": objective,
++            "offsets": [float(e.b[0]) for e in objectives],
++            "rows": rows,
++        }
++
++    def set_values(self, x):
++        """Store solver columns (compiled order), replacing epigraph columns by the |source| they model."""
++        full = np.zeros(self.width)
++        full[self.columns] = x
++        for tid, source in self.abs_groups:
++            start, size = self.variables[tid]
++            full[start : start + size] = np.abs(source._coef(self.width) @ full + source.b)
++        self.values = full
++
++
++def hstack(items, model):
++    parts = [Expr._lift(model, item) for item in items]
++    width = max(p.A.shape[1] for p in parts)
++    return Expr(
++        model,
++        np.vstack([p._coef(width) for p in parts]),
++        np.concatenate([np.atleast_1d(p.b) for p in parts]),
++        (sum(p.size for p in parts),),
++        _unique(v for p in parts for v in p.vars),
++        tuple(g for p in parts for g in p.aux),
++    )
++
++
++def total(expr):
++    return expr._like(expr.A.sum(axis=0, keepdims=True), np.atleast_1d(expr.b.sum()), ())
++
++
++def multiply(array, expr):
++    array = np.broadcast_to(np.asarray(array, dtype=float), (expr.size,))
++    return expr._like(expr.A * array[:, None], expr.b * array)
+diff --git a/hedge/optimizer.py b/hedge/optimizer.py
+index 5424555..8a2cf7f 100644
+--- a/hedge/optimizer.py
++++ b/hedge/optimizer.py
+@@ -3,10 +3,12 @@ from __future__ import annotations
+ from datetime import timedelta
+ from time import monotonic
+ 
+-import cvxpy as cp
++import highspy
+ import numpy as np
++from scipy import sparse
+ 
+ from .cashflows import cash_carry
++from .linmodel import Model, hstack, multiply, total
+ from .config import NY
+ from .models import Target
+ from .order_policy import spread_error
+@@ -39,14 +41,14 @@ def execution_cost(manifest, quotes, identifiers, delta):
+     return float(cost)
+ 
+ 
+-def _positive_part(expression, lower, upper, constraints):
++def _positive_part(model, expression, lower, upper, constraints):
+     """Exact max(expression, 0), with no binary when its sign is proved."""
+     if lower >= 0:
+         return expression
+     if upper <= 0:
+-        return cp.Constant(0)
+-    positive, negative = cp.Variable(nonneg=True), cp.Variable(nonneg=True)
+-    sign = cp.Variable(boolean=True)
++        return 0.0
++    positive, negative = model.variable(nonneg=True), model.variable(nonneg=True)
++    sign = model.variable(boolean=True)
+     constraints.extend(
+         [
+             positive - negative == expression,
+@@ -70,6 +72,106 @@ def _stress_projection(stress, idx, fixed):
+     return matrix, offset
+ 
+ 
++class SolverError(Exception):
++    pass
++
++
++class _Limit:
++    """Row upper bound changed between lexicographic stages (CVXPY Parameter stand-in)."""
++
++    def __init__(self, value):
++        self.value, self.block, self.row = value, None, None
++
++
++# CVXPY's HiGHS status map (cvxpy/reductions/solvers/conic_solvers/highs_conif.py).
++_STATUS = {
++    "kNotset": "solver_error",
++    "kModelError": "solver_error",
++    "kSolveError": "solver_error",
++    "kOptimal": "optimal",
++    "kInfeasible": "infeasible",
++    "kUnboundedOrInfeasible": "infeasible_or_unbounded",
++    "kUnbounded": "unbounded",
++    "kObjectiveBound": "user_limit",
++    "kObjectiveTarget": "user_limit",
++    "kTimeLimit": "user_limit",
++    "kIterationLimit": "user_limit",
++    "kSolutionLimit": "user_limit",
++}
++_SOLUTION_PRESENT = ("optimal", "optimal_inaccurate", "user_limit")
++
++
++class _HighsProblem:
++    """One compiled MILP solved per stage like CVXPY's HiGHS interface: a fresh Highs instance,
++    the same options, and the previous stage's solution as the warm start."""
++
++    def __init__(self, model, data):
++        self.model, self.data = model, data
++        self.row_upper = data["row_upper"].copy()
++        self.status, self.value, self.info, self.solve_time = None, np.nan, None, 0.0
++        self._previous = None  # (status, HighsSolution)
++        a = data["A"]
++        self._start, self._index, self._value = a.indptr, a.indices, a.data
++        self._integrality = (
++            [
++                highspy.HighsVarType.kInteger if flag else highspy.HighsVarType.kContinuous
++                for flag in data["integer"]
++            ]
++            if data["integer"].any()
++            else None
++        )
++
++    def track(self, limit):
++        limit.row = self.data["rows"][limit.block]
++
++    def set_limit(self, limit, value):
++        limit.value = value
++        self.row_upper[limit.row] = value
++
++    def solve(self, weight, options):
++        data, weight = self.data, np.asarray(weight, dtype=float)
++        cost = sum(w * row for w, row in zip(weight, data["objective"], strict=True))
++        offset = float(weight @ np.array(data["offsets"]))
++        model = highspy.HighsModel()
++        lp = model.lp_
++        lp.num_col_, lp.num_row_ = data["A"].shape[1], data["A"].shape[0]
++        lp.offset_ = 0
++        lp.col_cost_ = cost
++        lp.row_lower_ = data["row_lower"]
++        lp.row_upper_ = self.row_upper
++        lp.a_matrix_.format_ = highspy.MatrixFormat.kColwise
++        lp.a_matrix_.start_ = self._start
++        lp.a_matrix_.index_ = self._index
++        lp.a_matrix_.value_ = self._value
++        if self._integrality is not None:
++            lp.integrality_ = self._integrality
++        lp.col_lower_ = data["col_lower"]
++        lp.col_upper_ = data["col_upper"]
++        solver = highspy.Highs()
++        solver.setOptionValue("log_to_console", False)
++        for name, value in options.items():
++            if solver.setOptionValue(name, value) == highspy.HighsStatus.kError:
++                raise ValueError(f"HIGHS returned status kError for option (name, value): ({name}, {value})")
++        solver.passModel(model)
++        if self._previous is not None and self._previous[0] in _SOLUTION_PRESENT:
++            solver.setSolution(self._previous[1])
++        try:
++            solver.run()
++            solution, info = solver.getSolution(), solver.getInfo()
++            status = _STATUS.get(solver.getModelStatus().name, "unknown")
++            self.solve_time = solver.getRunTime()
++        except ValueError as exc:
++            raise SolverError(exc) from exc
++        self._previous = (status, solution)
++        self.status, self.info = status, info
++        if status in _SOLUTION_PRESENT:
++            self.value = info.objective_function_value + offset
++            self.model.set_values(np.array(solution.col_value))
++        else:
++            self.value = np.inf if status == "infeasible" else np.nan
++            self.model.values = None
++
++
+ class HedgeOptimizer:
+     def __init__(self, manifest):
+         self.manifest = manifest
+@@ -305,12 +407,13 @@ class HedgeOptimizer:
+         buy_bounds, sell_bounds = np.maximum(upper - current, 0), np.maximum(current - lower, 0)
+         # Only net holdings need integer domains. Exact sign/direction gates
+         # imply integrality of the positive/negative and buy/sell auxiliaries.
+-        h = cp.Variable(n, integer=True)
+-        hpos, hneg = cp.Variable(n, nonneg=True), cp.Variable(n, nonneg=True)
+-        buy, sell = cp.Variable(n, nonneg=True), cp.Variable(n, nonneg=True)
+-        buying = cp.hstack([cp.Variable(boolean=True) if b > 0 else 0 for b in buy_bounds])
+-        selling = cp.hstack([cp.Variable(boolean=True) if b > 0 else 0 for b in sell_bounds])
+-        sign = cp.hstack(
++        M = Model()
++        h = M.variable(n, integer=True)
++        hpos, hneg = M.variable(n, nonneg=True), M.variable(n, nonneg=True)
++        buy, sell = M.variable(n, nonneg=True), M.variable(n, nonneg=True)
++        buying = hstack([M.variable(boolean=True) if b > 0 else 0 for b in buy_bounds], M)
++        selling = hstack([M.variable(boolean=True) if b > 0 else 0 for b in sell_bounds], M)
++        sign = hstack(
+             [
+                 1
+                 if lower[j] >= 0
+@@ -318,31 +421,33 @@ class HedgeOptimizer:
+                 if upper[j] <= 0
+                 else buying[j]
+                 if current[j] == 0
+-                else cp.Variable(boolean=True)
++                else M.variable(boolean=True)
+                 for j in range(n)
+-            ]
++            ],
++            M,
+         )
+-        selected = cp.hstack(
++        selected = hstack(
+             [
+                 1
+                 if lower[j] > 0 or upper[j] < 0
+                 else buying[j] + selling[j]
+                 if current[j] == 0
+-                else cp.Variable(boolean=True)
++                else M.variable(boolean=True)
+                 for j in range(n)
+-            ]
++            ],
++            M,
+         )
+         ah = hpos + hneg
+         constraints = [
+             h == hpos - hneg,
+             h >= lower,
+             h <= upper,
+-            hpos <= cp.multiply(np.maximum(upper, 0), sign),
+-            hneg <= cp.multiply(np.maximum(-lower, 0), 1 - sign),
+-            ah <= cp.multiply(bounds, selected),
++            hpos <= multiply(np.maximum(upper, 0), sign),
++            hneg <= multiply(np.maximum(-lower, 0), 1 - sign),
++            ah <= multiply(bounds, selected),
+             ah >= selected,
+-            buy <= cp.multiply(buy_bounds, buying),
+-            sell <= cp.multiply(sell_bounds, selling),
++            buy <= multiply(buy_bounds, buying),
++            sell <= multiply(sell_bounds, selling),
+             buy >= buying,
+             sell >= selling,
+             buying + selling <= 1,
+@@ -380,8 +485,8 @@ class HedgeOptimizer:
+             if size == 1:
+                 return amount
+             if limit == 0:
+-                return cp.Constant(0)
+-            count = cp.Variable(integer=True)
++                return 0.0
++            count = M.variable(integer=True)
+             constraints.extend(
+                 [
+                     count >= active,
+@@ -411,12 +516,12 @@ class HedgeOptimizer:
+                 buy_count = slice_count(buy[j], buy_sizes[j], buy_bounds[j], buying[j])
+                 sell_count = slice_count(sell[j], sell_sizes[j], sell_bounds[j], selling[j])
+                 commissions.append(fees_buy[j] * buy_count + fees_sell[j] * sell_count)
+-        commissions = cp.hstack(commissions)
+-        costs = np.array(spread_cost) @ (buy + sell) + cp.sum(commissions)
++        commissions = hstack(commissions, M)
++        costs = np.array(spread_cost) @ (buy + sell) + total(commissions)
+         all_h = [h[candidates.index(i)] if i in candidates else actual.get(i, 0) for i in ids]
+-        total_h = cp.hstack(all_h)
+-        absolute_h = cp.hstack(
+-            [ah[candidates.index(i)] if i in candidates else abs(actual.get(i, 0)) for i in ids]
++        total_h = hstack(all_h, M)
++        absolute_h = hstack(
++            [ah[candidates.index(i)] if i in candidates else abs(actual.get(i, 0)) for i in ids], M
+         )
+         # Cash sign is exact, so financing is not a fictitious adjustable loss.
+         prices = np.array([quotes[i].mid * m.contract_map[i].multiplier for i in candidates])
+@@ -434,16 +539,17 @@ class HedgeOptimizer:
+         cash_lower = max(-cash_bound, float(snapshot.cash) + prices @ (current - upper) - cost_bound)
+         cash_upper = min(cash_bound, float(snapshot.cash) + prices @ (current - lower))
+         constraints += [cash_after >= -cash_bound, cash_after <= cash_bound]
+-        cash_minus = _positive_part(-cash_after, -cash_upper, -cash_lower, constraints)
++        cash_minus = _positive_part(M, -cash_after, -cash_upper, -cash_lower, constraints)
+         days = scenarios.calendar_days
+         short_stock = (
+-            cp.sum(
+-                cp.hstack(
++            total(
++                hstack(
+                     [
+                         hneg[j] * quotes[i].spot
+                         for j, i in enumerate(candidates)
+                         if m.contract_map[i].kind == "STK"
+-                    ]
++                    ],
++                    M,
+                 )
+             )
+             if any(m.contract_map[i].kind == "STK" for i in candidates)
+@@ -468,9 +574,9 @@ class HedgeOptimizer:
+             eligible_bound, cash_upper - 1.02 * frozen_short - m.policy.cash_interest_free_balance
+         )
+         eligible_plus = (
+-            _positive_part(eligible_cash, eligible_lower, eligible_upper, constraints)
++            _positive_part(M, eligible_cash, eligible_lower, eligible_upper, constraints)
+             if m.policy.cash_rate
+-            else cp.Constant(0)
++            else 0.0
+         )
+         annual_carry = (
+             m.policy.cash_rate * min(1, float(snapshot.nav) / 100000) * eligible_plus
+@@ -483,8 +589,8 @@ class HedgeOptimizer:
+         def closing(gap, cost):
+             # burn_surplus: costs inside the gap spend down a surplus; otherwise an additive penalty.
+             if m.policy.burn_surplus:
+-                return scenarios.weights @ cp.abs(gap - cost)
+-            return scenarios.weights @ cp.abs(gap) + cost
++                return scenarios.weights @ M.abs(gap - cost)
++            return scenarios.weights @ M.abs(gap) + cost
+ 
+         objective_score = closing(error + scenarios.changes @ total_h + carry, scored_costs)
+         if strategy == "historical_l1":
+@@ -497,14 +603,14 @@ class HedgeOptimizer:
+             overnight_weight, overnight_days, overnight_offset = overnight
+             objective_score += overnight_weight * (
+                 scenarios.weights
+-                @ cp.abs(
++                @ M.abs(
+                     scenarios.overnight_changes @ total_h
+                     + overnight_days / m.policy.cash_day_count * annual_carry
+                     - overnight_offset
+                 )
+             )
+         if strategy == "two_close" and scenarios.next_changes is not None:
+-            objective_score += scenarios.weights @ cp.abs(scenarios.next_changes @ total_h)
++            objective_score += scenarios.weights @ M.abs(scenarios.next_changes @ total_h)
+         fixed_quantities = quantities.copy()
+         fixed_quantities[idx] = 0
+         stress_matrix, stress_fixed = _stress_projection(
+@@ -527,7 +633,7 @@ class HedgeOptimizer:
+             recovery_costs = (
+                 (
+                     np.array(spread_cost)[recovery_j] @ (buy[recovery_j] + sell[recovery_j])
+-                    + cp.sum(commissions[recovery_j])
++                    + total(commissions[recovery_j])
+                 )
+                 if recovery_j
+                 else 0
+@@ -539,14 +645,15 @@ class HedgeOptimizer:
+                 recovery_matrix @ h + recovery_fixed - 2 * recovery_costs >= -recovery_stress * budget
+             ]
+             constraints += [
+-                cp.sum(
+-                    cp.hstack(
++                total(
++                    hstack(
+                         [
+-                            quotes[i].spot * cp.abs(total_h[j] - ref[j])
++                            quotes[i].spot * M.abs(total_h[j] - ref[j])
+                             for j, i in enumerate(ids)
+                             if m.contract_map[i].kind == "STK"
+                             and m.contract_map[i].symbol in recovery_symbols
+-                        ]
++                        ],
++                        M,
+                     )
+                 )
+                 <= recovery_gross * budget
+@@ -557,7 +664,7 @@ class HedgeOptimizer:
+             [0.0 if i in m.mandatory else quotes[i].spot * m.contract_map[i].multiplier for i in ids]
+         )
+         constraints += [spots @ absolute_h <= m.risk.gross_notional * budget]
+-        increment = cp.Variable(n, nonneg=True)
++        increment = M.variable(n, nonneg=True)
+         constraints += [increment >= ah - np.abs(current)]
+         margin_rates = np.array(
+             [
+@@ -593,7 +700,7 @@ class HedgeOptimizer:
+                 # options: keep headroom so an ordinary move does not create one, without forcing a
+                 # trade when the book already sits closer to the cap.
+                 cap = min(cap, max(DELTA_HEADROOM * cap, abs(float(delta_vector @ quantities))))
+-            constraints += [cp.abs(delta_vector @ total_h) <= cap]
++            constraints += [M.abs(delta_vector @ total_h) <= cap]
+             stock_vector = np.array(
+                 [
+                     quotes[i].spot
+@@ -616,12 +723,12 @@ class HedgeOptimizer:
+                 and m.contract_map[i].kind == "OPT"
+             )
+             if option_j:
+-                constraints += [cp.sum(selected[option_j]) + frozen_names <= m.risk.option_names]
++                constraints += [total(selected[option_j]) + frozen_names <= m.risk.option_names]
+         # Screening baselines choose numerical quantities, still using same hard constraints.
+         baseline = None
+         baseline_vectors = []
+         if strategy == "delta":
+-            baseline = cp.sum(cp.hstack([cp.abs(v @ total_h) for v in delta_vectors.values()]))
++            baseline = total(hstack([M.abs(v @ total_h) for v in delta_vectors.values()], M))
+         elif strategy == "greek":
+             rows = []
+             for symbol in symbols:
+@@ -652,7 +759,7 @@ class HedgeOptimizer:
+                             for i in ids
+                         ]
+                     )
+-                    rows.append(cp.abs(vector @ total_h))
++                    rows.append(M.abs(vector @ total_h))
+                     baseline_vectors.append(vector)
+             if all(m.contract_map[i].symbol in scenarios.betas for i in ids):
+                 vector = np.array(
+@@ -665,12 +772,14 @@ class HedgeOptimizer:
+                         for i in ids
+                     ]
+                 )
+-                rows.append(cp.abs(vector @ total_h))
++                rows.append(M.abs(vector @ total_h))
+                 baseline_vectors.append(vector)
+-            baseline = cp.sum(cp.hstack(rows))
++            baseline = total(hstack(rows, M))
+         if strategy == "min_variance":
+             # QP baseline supplies a desired continuous target, then integer L1
+             # projection enforces identical trade/risk constraints.
++            import cvxpy as cp
++
+             continuous = cp.Variable(n)
+             fixed = scenarios.changes @ quantities - scenarios.changes[:, idx] @ current
+             matrix = scenarios.changes[:, idx]
+@@ -687,7 +796,7 @@ class HedgeOptimizer:
+             problem.solve(solver=cp.OSQP, max_iter=10000)
+             if problem.status != "optimal":
+                 return self._unchanged(snapshot, scenarios, error, target_nav, quotes, "BASELINE_FAILED")
+-            baseline = cp.norm1(h - continuous.value)
++            baseline = total(M.abs(h - continuous.value))
+         options = {
+             "threads": 1,
+             "random_seed": m.policy.seed,
+@@ -709,7 +818,7 @@ class HedgeOptimizer:
+         carry_bound = days / m.policy.cash_day_count * annual_carry_bound
+         # The next-close tie-breaker would re-rank by the exposure the overnight term already prices.
+         next_objective = (
+-            scenarios.weights @ cp.abs(scenarios.next_changes @ total_h)
++            scenarios.weights @ M.abs(scenarios.next_changes @ total_h)
+             if baseline is None and scenarios.next_changes is not None and overnight is None
+             else None
+         )
+@@ -736,33 +845,37 @@ class HedgeOptimizer:
+             primary_bound = np.sum(
+                 np.maximum(np.abs(lower - continuous.value), np.abs(upper - continuous.value))
+             )
+-        weights = cp.Parameter(3, nonneg=True, value=[1, 0, 0])
+-        primary_limit = cp.Parameter(nonneg=True, value=float(primary_bound + max(1, primary_bound * 1e-9)))
+-        primary_epigraph = cp.Variable(nonneg=True)
+-        constraints += [primary_epigraph >= primary, primary_epigraph <= primary_limit]
+-        next_epigraph = cp.Variable(nonneg=True) if next_objective is not None else cp.Constant(0)
++        primary_limit = _Limit(float(primary_bound + max(1, primary_bound * 1e-9)))
++        primary_epigraph = M.variable(nonneg=True)
++        constraints += [primary_epigraph >= primary]
++        primary_limit.block = len(constraints)
++        constraints += [primary_epigraph <= primary_limit.value]
++        next_epigraph = M.variable(nonneg=True) if next_objective is not None else 0.0
+         if next_objective is not None:
+-            next_limit = cp.Parameter(nonneg=True, value=next_bound + max(1, next_bound * 1e-9))
+-            constraints += [next_epigraph >= next_objective, next_epigraph <= next_limit]
++            next_limit = _Limit(next_bound + max(1, next_bound * 1e-9))
++            constraints += [next_epigraph >= next_objective]
++            next_limit.block = len(constraints)
++            constraints += [next_epigraph <= next_limit.value]
+         # Original turnover/cardinality/stable-ID preference, unchanged.
+         tie = prices @ (buy + sell)
+-        tie += cp.sum(selected) * 0.001 + np.arange(1, n + 1) @ h * 1e-9
+-        problem = cp.Problem(
+-            cp.Minimize(weights[0] * primary_epigraph + weights[1] * next_epigraph + weights[2] * tie),
+-            constraints,
+-        )
+-        metrics["integer_variables"] = sum(
+-            v.size for v in problem.variables() if v.attributes["integer"] or v.attributes["boolean"]
+-        )
+-        metrics["scalar_variables"] = problem.size_metrics.num_scalar_variables
++        tie += total(selected) * 0.001 + np.arange(1, n + 1) @ h * 1e-9
++        M.add(constraints)
++        objectives = [
++            primary_epigraph,
++            next_epigraph if next_objective is not None else 0 * primary_epigraph,
++            tie,
++        ]
++        problem = _HighsProblem(M, M.compile(objectives))
++        problem.track(primary_limit)
++        if next_objective is not None:
++            problem.track(next_limit)
++        metrics["integer_variables"] = M.user_integers
++        metrics["scalar_variables"] = M.user_scalars
+ 
+         accepted = {}
+ 
+         def stage(name, weight, absolute_gap, stage_budget=None):
+             started = monotonic()
+-            weights.value = weight
+-            # Canonicalize before computing the remaining solver budget.
+-            problem.get_problem_data(cp.HIGHS, enforce_dpp=True)
+             remaining = deadline - monotonic()
+             if stage_budget is not None:
+                 remaining = min(remaining, stage_budget)
+@@ -773,15 +886,15 @@ class HedgeOptimizer:
+             options["mip_abs_gap"] = absolute_gap
+             if stage_budget is not None:
+                 options["mip_max_nodes"] = m.policy.ranking_nodes
+-            problem.solve(solver=cp.HIGHS, warm_start=True, enforce_dpp=True, highs_options=options)
+-            info = problem.solver_stats.extra_stats
++            problem.solve(weight, options)
++            info = problem.info
+             gap, bound = info.mip_gap, info.mip_dual_bound
+             metrics["stages"].append(
+                 {
+                     "stage": name,
+                     "status": problem.status,
+                     "total_ms": round((monotonic() - started) * 1000, 3),
+-                    "solver_ms": round(problem.solver_stats.solve_time * 1000, 3),
++                    "solver_ms": round(problem.solve_time * 1000, 3),
+                     "nodes": info.mip_node_count,
+                     "mip_gap": float(gap) if np.isfinite(gap) else None,
+                     "dual_bound": float(bound) if np.isfinite(bound) else None,
+@@ -825,8 +938,8 @@ class HedgeOptimizer:
+             # $1 selection band. Every final portfolio is therefore <= true
+             # global optimum + $1 even when the first stage stops with a small
+             # absolute gap. Baselines retain their original 0.01 band.
+-            primary_bound = float(problem.solver_stats.extra_stats.mip_dual_bound)
+-            primary_limit.value = primary_bound + primary_band
++            primary_bound = float(problem.info.mip_dual_bound)
++            problem.set_limit(primary_limit, primary_bound + primary_band)
+             metrics.update(
+                 {
+                     "primary_incumbent": optimum,
+@@ -839,7 +952,7 @@ class HedgeOptimizer:
+             if next_objective is not None:
+                 if stage("next_close", [0, 1, 0], 0.25, m.policy.ranking_seconds / 2):
+                     next_ranked = True
+-                    next_limit.value = float(problem.solver_stats.extra_stats.mip_dual_bound) + 1
++                    problem.set_limit(next_limit, float(problem.info.mip_dual_bound) + 1)
+                     metrics["next_selection_limit"] = float(next_limit.value)
+             ranking_remaining = m.policy.ranking_seconds - (monotonic() - ranking_started)
+             if next_ranked and ranking_remaining > 0:
+@@ -937,7 +1050,7 @@ class HedgeOptimizer:
+                     )
+                 ),
+             )
+-        except cp.error.SolverError as exc:
++        except SolverError as exc:
+             return self._unchanged(snapshot, scenarios, error, target_nav, quotes, f"SOLVER_ERROR:{exc}")
+ 
+     def _unchanged(self, snapshot, scenarios, error, target_nav, quotes, status):
+diff --git a/tests/test_optimizer_performance.py b/tests/test_optimizer_performance.py
+index 6eed494..6806aae 100644
+--- a/tests/test_optimizer_performance.py
++++ b/tests/test_optimizer_performance.py
+@@ -3,27 +3,31 @@
+ from dataclasses import replace
+ from decimal import Decimal
+ 
+-import cvxpy as cp
+ import numpy as np
+ import pytest
+ 
+ from hedge.cashflows import cash_carry
+ from hedge.models import Position
++from hedge import optimizer as optimizer_module
++from hedge.linmodel import Model
+ from hedge.optimizer import HedgeOptimizer, _positive_part, _stress_projection, execution_cost
+ from hedge.scenarios import ScenarioSet
+ 
+ 
+ @pytest.mark.parametrize("lower,upper,value", [(-10, 10, -5), (-10, 10, 5), (-10, 0, -5), (0, 10, 5)])
+ def test_exact_positive_part_cannot_invent_cashflow(lower, upper, value):
+-    x = cp.Variable()
++    model = Model()
++    x = model.variable()
+     constraints = [x == value]
+-    positive = _positive_part(x, lower, upper, constraints)
++    positive = _positive_part(model, x, lower, upper, constraints)
++    model.add(constraints)
+     # Maximize the expense/credit to expose any freely adjustable split.
+-    problem = cp.Problem(cp.Maximize(positive), constraints)
+-    problem.solve(solver=cp.HIGHS, highs_options={"threads": 1})
++    objective = -1 * (positive if not isinstance(positive, float) else 0 * x + positive)
++    problem = optimizer_module._HighsProblem(model, model.compile([objective]))
++    problem.solve([1], {"threads": 1})
+     assert problem.status == "optimal"
+-    assert problem.value == pytest.approx(max(value, 0))
+-    binaries = sum(v.size for v in problem.variables() if v.attributes["boolean"])
++    assert -problem.value == pytest.approx(max(value, 0))
++    binaries = sum(model.integer)
+     assert binaries == (1 if lower < 0 < upper else 0)
+ 
+ 
+@@ -138,18 +142,17 @@ def test_overnight_and_cost_treatment_match_enumerated_objective(manifest, snaps
+ 
+ def test_ranking_timeout_never_uses_failed_solution(manifest, snapshot, quotes, monkeypatch):
+     m, s, qs, sc, estimate = small_problem(manifest, snapshot, quotes, 100000, -2, -25)
+-    original, calls = cp.Problem.solve, []
++    original, calls = optimizer_module._HighsProblem.solve, []
+ 
+     def fail_ranking(problem, *args, **kwargs):
+         result = original(problem, *args, **kwargs)
+         calls.append(1)
+         if len(calls) > 1:
+-            problem._status = cp.USER_LIMIT
+-            for variable in problem.variables():
+-                variable.save_value(np.full(variable.shape, 1000000))
++            problem.status = "user_limit"
++            problem.model.values = np.full(problem.model.width, 1000000.0)
+         return result
+ 
+-    monkeypatch.setattr(cp.Problem, "solve", fail_ranking)
++    monkeypatch.setattr(optimizer_module._HighsProblem, "solve", fail_ranking)
+     target = HedgeOptimizer(m).solve(s, qs, sc, s.nav, estimate)
+     assert target.status == "OPTIMAL"
+     assert target.solver_metrics["accepted_stage"] == "primary"
+@@ -160,14 +163,14 @@ def test_ranking_timeout_never_uses_failed_solution(manifest, snapshot, quotes,
+ 
+ def test_nonfinite_certificate_rejects_primary(manifest, snapshot, quotes, monkeypatch):
+     m, s, qs, sc, estimate = small_problem(manifest, snapshot, quotes, 100000, -2, -25)
+-    original = cp.Problem.solve
++    original = optimizer_module._HighsProblem.solve
+ 
+     def invalid_bound(problem, *args, **kwargs):
+         result = original(problem, *args, **kwargs)
+-        problem.solver_stats.extra_stats.mip_dual_bound = float("nan")
++        problem.info.mip_dual_bound = float("nan")
+         return result
+ 
+-    monkeypatch.setattr(cp.Problem, "solve", invalid_bound)
++    monkeypatch.setattr(optimizer_module._HighsProblem, "solve", invalid_bound)
+     target = HedgeOptimizer(m).solve(s, qs, sc, s.nav, estimate)
+     assert target.status == "OBJECTIVE_CERTIFICATE_FAILED"
+     assert target.quantities == s.quantities()
+@@ -205,16 +208,16 @@ def test_cardinality_constant_does_not_invalidate_turnover_certificate(manifest,
+ def test_failed_next_close_is_not_reported_as_complete_ranking(manifest, snapshot, quotes, monkeypatch):
+     m, s, qs, sc, estimate = small_problem(manifest, snapshot, quotes, 100000, -2, -25)
+     sc = replace(sc, next_changes=sc.changes.copy())
+-    original, calls = cp.Problem.solve, []
++    original, calls = optimizer_module._HighsProblem.solve, []
+ 
+     def fail_next(problem, *args, **kwargs):
+         result = original(problem, *args, **kwargs)
+         calls.append(1)
+         if len(calls) == 2:
+-            problem._status = cp.USER_LIMIT
++            problem.status = "user_limit"
+         return result
+ 
+-    monkeypatch.setattr(cp.Problem, "solve", fail_next)
++    monkeypatch.setattr(optimizer_module._HighsProblem, "solve", fail_next)
+     target = HedgeOptimizer(m).solve(s, qs, sc, s.nav, estimate)
+     assert target.status == "OPTIMAL"
+     assert target.solver_metrics["accepted_stage"] == "primary"
+@@ -230,7 +233,7 @@ def test_deadline_includes_model_building(manifest, snapshot, quotes, monkeypatc
+     def no_solve(*args, **kwargs):
+         raise AssertionError("Solver must not run after its budget expires")
+ 
+-    monkeypatch.setattr(cp.Problem, "solve", no_solve)
++    monkeypatch.setattr(optimizer_module._HighsProblem, "solve", no_solve)
+     target = HedgeOptimizer(m).solve(s, qs, sc, s.nav, estimate)
+     assert target.status == "TIMEOUT"
+     assert target.quantities == s.quantities()

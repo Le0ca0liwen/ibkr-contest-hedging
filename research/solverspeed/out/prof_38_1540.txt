@@ -1,0 +1,165 @@
+=== first get_problem_data (canonicalization) n=38 15:40: wall 1.939s (cProfile-inflated) ===
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    1.938    1.938 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/problems/problem.py:703(get_problem_data)
+        1    0.001    0.001    1.884    1.884 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/chain.py:75(apply)
+        1    0.000    0.000    1.192    1.192 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/dcp2cone/cone_matrix_stuffing.py:393(apply)
+372009/29599    0.194    0.000    0.950    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/performance_utils.py:74(_compute_once)
+        2    0.000    0.000    0.900    0.450 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/coeff_extractor.py:46(affine)
+        1    0.000    0.000    0.475    0.475 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/cvx_attr2constr.py:189(apply)
+26848/157    0.019    0.000    0.404    0.003 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/atoms/atom.py:232(is_convex)
+27768/273    0.012    0.000    0.402    0.001 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/expressions/expression.py:343(is_affine)
+       59    0.000    0.000    0.374    0.006 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/atoms/atom.py:300(is_dpp)
+       59    0.000    0.000    0.374    0.006 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/expressions/expression.py:381(is_dcp)
+    25615    0.023    0.000    0.352    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/canonical.py:86(copy)
+ 48527/59    0.032    0.000    0.347    0.006 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/canonical.py:76(tree_copy)
+   372009    0.095    0.000    0.297    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/performance_utils.py:48(_cache_key)
+57048/47104    0.009    0.000    0.296    0.000 {built-in method builtins.all}
+ 48574/59    0.035    0.000    0.294    0.005 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/performance_utils.py:29(_lazyprop)
+ 26512/59    0.006    0.000    0.294    0.005 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/canonical.py:47(canonical_form)
+ 25768/59    0.037    0.000    0.294    0.005 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/atoms/atom.py:408(canonicalize)
+        2    0.002    0.001    0.232    0.116 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/canonInterface.py:260(get_problem_matrix)
+        2    0.001    0.000    0.229    0.115 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/cppbackend.py:34(build_matrix)
+        1    0.000    0.000    0.220    0.220 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/solvers/solving_chain_utils.py:9(get_canon_backend)
+        1    0.000    0.000    0.220    0.220 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/problems/problem.py:308(_supports_cpp)
+       60    0.000    0.000    0.220    0.004 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/problems/problem.py:313(<genexpr>)
+ 48635/59    0.008    0.000    0.220    0.004 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/canonical.py:199(_all_support_cpp)
+ 25990/59    0.028    0.000    0.220    0.004 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/canonical.py:173(_aggregate_metrics)
+48635/120    0.010    0.000    0.220    0.002 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/canonical.py:194(_max_ndim)
+
+
+
+--- by self time ---
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+372009/29599    0.194    0.000    0.950    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/performance_utils.py:74(_compute_once)
+  1064684    0.162    0.000    0.162    0.000 {built-in method builtins.getattr}
+   372009    0.095    0.000    0.297    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/performance_utils.py:48(_cache_key)
+53323/44334    0.076    0.000    0.126    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/expressions/expression.py:336(is_constant)
+        2    0.074    0.037    0.074    0.037 {built-in method _cvxcore.build_matrix}
+142324/120261    0.059    0.000    0.160    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/deterministic.py:1(unique_list)
+   421829    0.046    0.000    0.079    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/scopes.py:49(dpp_scope_active)
+   420583    0.045    0.000    0.152    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/scopes.py:73(quad_form_dpp_scope_active)
+   468780    0.038    0.000    0.059    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/expressions/expression.py:980(__hash__)
+ 25768/59    0.037    0.000    0.294    0.005 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/atoms/atom.py:408(canonicalize)
+    31435    0.036    0.000    0.118    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/cppbackend.py:160(make_linC_from_linPy)
+ 48574/59    0.035    0.000    0.294    0.005 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/performance_utils.py:29(_lazyprop)
+145690/177    0.034    0.000    0.093    0.001 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/debug_tools.py:22(node_count)
+    26744    0.033    0.000    0.177    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/atoms/atom.py:42(__init__)
+   427072    0.033    0.000    0.033    0.000 {method 'get' of 'dict' objects}
+ 48527/59    0.032    0.000    0.347    0.006 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/canonical.py:76(tree_copy)
+   244641    0.032    0.000    0.059    0.000 {method 'add' of 'set' objects}
+    44628    0.031    0.000    0.031    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/atoms/affine/reshape.py:63(<genexpr>)
+ 25990/59    0.028    0.000    0.220    0.004 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/canonical.py:173(_aggregate_metrics)
+147324/1811    0.028    0.000    0.094    0.000 {built-in method builtins.sum}
+   247893    0.028    0.000    0.050    0.000 {built-in method builtins.isinstance}
+   542307    0.026    0.000    0.026    0.000 {built-in method builtins.id}
+51450/126    0.025    0.000    0.162    0.001 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/canonical.py:58(variables)
+65628/1341    0.024    0.000    0.041    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/canonical.py:64(parameters)
+291203/470    0.024    0.000    0.093    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/utilities/debug_tools.py:24(<genexpr>)
+
+
+
+--- reductions (cumulative) ---
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.001    0.001    1.884    1.884 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/chain.py:75(apply)
+        1    0.000    0.000    1.192    1.192 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/dcp2cone/cone_matrix_stuffing.py:393(apply)
+        1    0.000    0.000    0.475    0.475 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/cvx_attr2constr.py:189(apply)
+       59    0.000    0.000    0.374    0.006 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/atoms/atom.py:300(is_dpp)
+       59    0.000    0.000    0.374    0.006 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/expressions/expression.py:381(is_dcp)
+        2    0.002    0.001    0.232    0.116 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/canonInterface.py:260(get_problem_matrix)
+        2    0.001    0.000    0.229    0.115 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/cppbackend.py:34(build_matrix)
+        1    0.000    0.000    0.220    0.220 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/solvers/solving_chain_utils.py:9(get_canon_backend)
+       59    0.023    0.000    0.152    0.003 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/cppbackend.py:204(build_lin_op_tree)
+        1    0.000    0.000    0.127    0.127 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/eliminate_zero_sized.py:56(apply)
+    31435    0.036    0.000    0.118    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/cppbackend.py:160(make_linC_from_linPy)
+        1    0.000    0.000    0.082    0.082 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/dcp2cone/dcp2cone.py:66(apply)
+        2    0.000    0.000    0.074    0.037 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/cvxcore.py:992(build_matrix)
+        2    0.074    0.037    0.074    0.037 {built-in method _cvxcore.build_matrix}
+        1    0.000    0.000    0.054    0.054 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/problems/problem.py:902(_construct_chain)
+  1355/49    0.002    0.000    0.050    0.001 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/dcp2cone/dcp2cone.py:126(canonicalize_tree)
+      934    0.001    0.000    0.039    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/dcp2cone/dcp2cone.py:202(canonicalize_expr)
+        2    0.000    0.000    0.031    0.016 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/problems/problem.py:271(is_dcp)
+       88    0.000    0.000    0.026    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/constraints/nonpos.py:220(is_dcp)
+        1    0.000    0.000    0.017    0.017 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/problems/problem.py:346(is_dpp)
+     2571    0.001    0.000    0.011    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/cppbackend.py:148(set_linC_data)
+    94413    0.010    0.000    0.010    0.000 {built-in method _functools.reduce}
+        1    0.000    0.000    0.008    0.008 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/solvers/conic_solvers/highs_conif.py:151(apply)
+        1    0.000    0.000    0.008    0.008 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/solvers/conic_solvers/conic_solver.py:367(apply)
+    21468    0.006    0.000    0.007    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/lin_ops/lin_utils.py:479(reshape)
+    26645    0.005    0.000    0.007    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/cppbackend.py:136(get_type)
+     1747    0.002    0.000    0.005    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/cppbackend.py:189(set_slice_data)
+        2    0.000    0.000    0.004    0.002 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/problems/objective.py:151(is_dcp)
+      650    0.001    0.000    0.003    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/cppbackend.py:230(set_matrix_data)
+        1    0.000    0.000    0.003    0.003 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/dcp2cone/cone_matrix_stuffing.py:238(apply_parameters)
+    26934    0.003    0.000    0.003    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/lin_ops/lin_utils.py:45(get_id)
+      824    0.001    0.000    0.002    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/cppbackend.py:251(format_matrix)
+    25915    0.002    0.000    0.002    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/lin_ops/lin_op.py:24(__init__)
+        1    0.000    0.000    0.002    0.002 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/canonInterface.py:67(reduce_problem_data_tensor)
+        2    0.000    0.000    0.001    0.001 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/canonInterface.py:183(get_matrix_from_tensor)
+     1747    0.001    0.000    0.001    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/lin_ops/lin_utils.py:412(index)
+        8    0.000    0.000    0.001    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/constraints/zero.py:133(is_dcp)
+        1    0.000    0.000    0.001    0.001 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/cvxcore/python/cppbackend.py:1(<module>)
+      818    0.000    0.000    0.000    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/lin_ops/lin_utils.py:159(sum_expr)
+        1    0.000    0.000    0.000    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/cvxpy/reductions/utilities.py:142(get_matrix_from_tensor)
+
+
+
+=== ScenarioEngine.build (warm) n=38 15:40: wall 0.901s (cProfile) ===
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.001    0.001    0.901    0.901 /home/leo/ibkr-contest-hedging/hedge/scenarios.py:170(build)
+    12015    0.046    0.000    0.810    0.000 /home/leo/ibkr-contest-hedging/hedge/valuation.py:136(scenario_change)
+    14921    0.184    0.000    0.774    0.000 /home/leo/ibkr-contest-hedging/hedge/valuation.py:35(price)
+        3    0.014    0.005    0.489    0.163 /home/leo/ibkr-contest-hedging/hedge/scenarios.py:354(_reprice)
+        1    0.010    0.010    0.389    0.389 /home/leo/ibkr-contest-hedging/hedge/scenarios.py:440(stress_matrix)
+    29842    0.008    0.000    0.066    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:9572(__init__)
+    14921    0.052    0.000    0.066    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:19170(__init__)
+    14921    0.003    0.000    0.050    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:17081(NPV)
+    14921    0.048    0.000    0.048    0.000 {built-in method QuantLib._QuantLib.Instrument_NPV}
+    14921    0.004    0.000    0.044    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:13053(__init__)
+    29842    0.043    0.000    0.043    0.000 {built-in method QuantLib._QuantLib.new_FlatForward}
+    29842    0.008    0.000    0.040    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:9290(__init__)
+    14921    0.032    0.000    0.032    0.000 {built-in method QuantLib._QuantLib.new_BlackConstantVol}
+     8730    0.006    0.000    0.030    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:2245(clip)
+    14921    0.005    0.000    0.029    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:16654(__init__)
+    29842    0.008    0.000    0.028    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:3932(__init__)
+    14921    0.004    0.000    0.025    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:16099(__init__)
+     8730    0.003    0.000    0.024    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:48(_wrapfunc)
+    14921    0.004    0.000    0.024    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:17997(__init__)
+    14921    0.004    0.000    0.022    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:3837(yearFraction)
+    14921    0.004    0.000    0.022    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:581(__add__)
+    14921    0.004    0.000    0.021    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:12192(__init__)
+    14921    0.004    0.000    0.020    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:6473(__init__)
+     8640    0.006    0.000    0.019    0.000 {method 'clip' of 'numpy.generic' objects}
+    14921    0.019    0.000    0.019    0.000 {built-in method QuantLib._QuantLib.DayCounter_yearFraction}
+
+
+
+--- by self time ---
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+    14921    0.184    0.000    0.774    0.000 /home/leo/ibkr-contest-hedging/hedge/valuation.py:35(price)
+    14921    0.052    0.000    0.066    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:19170(__init__)
+    14921    0.048    0.000    0.048    0.000 {built-in method QuantLib._QuantLib.Instrument_NPV}
+    12015    0.046    0.000    0.810    0.000 /home/leo/ibkr-contest-hedging/hedge/valuation.py:136(scenario_change)
+    29842    0.043    0.000    0.043    0.000 {built-in method QuantLib._QuantLib.new_FlatForward}
+    14921    0.032    0.000    0.032    0.000 {built-in method QuantLib._QuantLib.new_BlackConstantVol}
+    14921    0.019    0.000    0.019    0.000 {built-in method QuantLib._QuantLib.DayCounter_yearFraction}
+    29842    0.018    0.000    0.018    0.000 {built-in method QuantLib._QuantLib.new_YieldTermStructureHandle}
+    14921    0.017    0.000    0.017    0.000 {built-in method QuantLib._QuantLib.Date___add__}
+    14921    0.016    0.000    0.016    0.000 {built-in method QuantLib._QuantLib.new_BlackScholesMertonProcess}
+    29842    0.015    0.000    0.015    0.000 {built-in method QuantLib._QuantLib.Actual365Fixed_swiginit}
+    13340    0.015    0.000    0.015    0.000 /home/leo/ibkr-contest-hedging/hedge/config.py:391(contract_map)
+    29842    0.015    0.000    0.015    0.000 {built-in method QuantLib._QuantLib.FlatForward_swiginit}
+    29842    0.015    0.000    0.015    0.000 {built-in method QuantLib._QuantLib.YieldTermStructureHandle_swiginit}
+        3    0.014    0.005    0.489    0.163 /home/leo/ibkr-contest-hedging/hedge/scenarios.py:354(_reprice)
+    14921    0.013    0.000    0.013    0.000 {built-in method QuantLib._QuantLib.new_AmericanExercise}
+     8730    0.013    0.000    0.013    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/numpy/_core/_methods.py:96(_clip)
+    14921    0.012    0.000    0.012    0.000 {built-in method QuantLib._QuantLib.new_VanillaOption}
+    44763    0.010    0.000    0.010    0.000 {built-in method QuantLib._QuantLib.Settings_instance}
+    14921    0.010    0.000    0.010    0.000 {built-in method QuantLib._QuantLib.Instrument_setPricingEngine}
+        1    0.010    0.010    0.389    0.389 /home/leo/ibkr-contest-hedging/hedge/scenarios.py:440(stress_matrix)
+    14921    0.009    0.000    0.009    0.000 {built-in method QuantLib._QuantLib.new_BlackVolTermStructureHandle}
+    14921    0.009    0.000    0.009    0.000 {built-in method QuantLib._QuantLib.Date_swiginit}
+    14921    0.009    0.000    0.009    0.000 {built-in method QuantLib._QuantLib.new_QuoteHandle}
+    29842    0.008    0.000    0.028    0.000 /home/leo/ibkr-contest-hedging/.venv/lib/python3.12/site-packages/QuantLib/QuantLib.py:3932(__init__)
+
+
+

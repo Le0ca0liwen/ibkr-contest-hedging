@@ -1,0 +1,81 @@
+diff --git a/hedge/valuation.py b/hedge/valuation.py
+index 1077575..eab103c 100644
+--- a/hedge/valuation.py
++++ b/hedge/valuation.py
+@@ -31,6 +31,7 @@ class ValuationEngine:
+ 
+     def __init__(self, manifest: Manifest):
+         self.manifest = manifest
++        self._sessions = {}  # (contract, valuation time) -> reusable QuantLib option; see _session
+ 
+     def price(
+         self, c: Contract, spot: float, iv: float, at: datetime, european=False, *, risk_free_rate=None
+@@ -51,10 +52,17 @@ class ValuationEngine:
+             original = ql.Settings.instance().evaluationDate
+             start = ql.Date(1, 1, 2020)
+             end = start + 3650
+-            represented = ql.Actual365Fixed().yearFraction(start, end)
+-            ratio = remaining / represented
+             try:
+                 ql.Settings.instance().evaluationDate = start
++                session = self._session(c, at, european, start, end, remaining)
++                if session is not None:
++                    spot_quote, rate_quote, vol_quote, option, ratio = session
++                    spot_quote.setValue(spot)
++                    rate_quote.setValue(annual_rate * ratio)
++                    vol_quote.setValue(iv * math.sqrt(ratio))
++                    return float(option.NPV())
++                represented = ql.Actual365Fixed().yearFraction(start, end)
++                ratio = remaining / represented
+                 day_count = ql.Actual365Fixed()
+                 rate = ql.YieldTermStructureHandle(ql.FlatForward(start, annual_rate * ratio, day_count))
+                 yield_rate = self.manifest.dividend_yields.get(c.symbol, 0)
+@@ -88,6 +96,48 @@ class ValuationEngine:
+             finally:
+                 ql.Settings.instance().evaluationDate = original
+ 
++    _SESSIONS = 4096
++
++    def _session(self, c, at, european, start, end, remaining):
++        """Reusable QuantLib option for a contract/valuation time without cash dividends.
++
++        Scenarios reprice the same contract at the same instant thousands of times with only spot,
++        volatility and rate changing; those three are mutable quotes, so the objects (and the engine)
++        are built once. The result equals the one-shot construction: same inputs, same engine.
++        Contracts with dividends keep the one-shot path (their schedule depends on the horizon).
++        Called with _QL_LOCK held.
++        """
++        if self.manifest.dividends.get(c.symbol):
++            return None
++        key = (c.symbol, c.expiry, c.strike, c.right, european, at)
++        cache = self._sessions
++        hit = cache.get(key)
++        if hit is not None:
++            return hit
++        represented = ql.Actual365Fixed().yearFraction(start, end)
++        ratio = remaining / represented
++        day_count = ql.Actual365Fixed()
++        spot_quote, rate_quote = ql.SimpleQuote(1.0), ql.SimpleQuote(0.0)
++        vol_quote = ql.SimpleQuote(0.2)
++        rate = ql.YieldTermStructureHandle(ql.FlatForward(start, ql.QuoteHandle(rate_quote), day_count))
++        yield_rate = self.manifest.dividend_yields.get(c.symbol, 0)
++        dividends = ql.YieldTermStructureHandle(ql.FlatForward(start, yield_rate * ratio, day_count))
++        vol = ql.BlackVolTermStructureHandle(
++            ql.BlackConstantVol(start, ql.NullCalendar(), ql.QuoteHandle(vol_quote), day_count)
++        )
++        process = ql.BlackScholesMertonProcess(ql.QuoteHandle(spot_quote), dividends, rate, vol)
++        exercise = ql.EuropeanExercise(end) if european else ql.AmericanExercise(start, end)
++        option = ql.VanillaOption(
++            ql.PlainVanillaPayoff(ql.Option.Call if c.right == "C" else ql.Option.Put, c.strike), exercise
++        )
++        option.setPricingEngine(
++            ql.AnalyticEuropeanEngine(process) if european else ql.BjerksundStenslandApproximationEngine(process)
++        )
++        if len(cache) >= self._SESSIONS:
++            cache.clear()
++        cache[key] = (spot_quote, rate_quote, vol_quote, option, ratio)
++        return cache[key]
++
+     def implied_volatility(self, c, spot, market_price, at):
+         """Bounded deterministic inversion of the same American pricing model."""
+         if not math.isfinite(market_price) or market_price <= 0:
