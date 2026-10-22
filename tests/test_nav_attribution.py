@@ -193,3 +193,28 @@ def test_the_push_is_paired_with_the_pnl_when_it_arrived(manifest, snapshot, quo
     first = stream(snapshot, now, 25, 80.0).model_copy(update={"account_pnl_daily": Decimal("50")})
     # NetLiquidation (1,000,000) arrived with P&L 50; P&L is 80 now: the estimate is 30 higher.
     assert tracker.estimate(first, quotes, manifest.contract_map) == pytest.approx(1_000_030)
+
+
+def test_an_older_push_is_never_adopted_after_a_newer_one(manifest, snapshot, quotes, now):
+    tracker = NAVTracker(manifest)
+    newer = stream(snapshot, now, 200, 10.0, nav=1_000_010, pushed=195)
+    assert tracker.estimate(newer, quotes, manifest.contract_map) == pytest.approx(1_000_010)
+    # A caller still holding a snapshot from before that push (account_at = now) must not step back.
+    older = stream(snapshot, now, 201, 12.0)
+    assert tracker.estimate(older, quotes, manifest.contract_map) == pytest.approx(1_000_012)
+
+
+async def test_the_dashboard_reads_a_fresh_snapshot_between_monitor_passes(manifest, store, quotes, now):
+    from hedge.service import TradingService
+
+    service = TradingService(manifest, store, demo=True)
+    service.now = lambda: now
+    await service.broker.connect()
+    fresh = {i: q.model_copy(update={"data_type": "synthetic"}) for i, q in quotes.items()}
+    service.broker.update_quotes(fresh, now)
+    service.last_snapshot, service.last_quotes = service.broker.snapshot(), fresh
+    before = service.state()["nav_estimate"]
+    service.broker.nav += Decimal("123")  # IBKR's account moved; the monitor has not run yet
+    after = service.state()
+    assert after["nav_estimate"] == pytest.approx(before + 123)
+    assert Decimal(after["nav"]) == service.broker.nav

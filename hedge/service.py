@@ -2364,8 +2364,21 @@ class TradingService:
             }
         )
 
+    def live_snapshot(self):
+        """A fresh broker snapshot (it carries the 1-2 s P&L stream) for the NAV shown on the
+        dashboard; the monitor's last snapshot (up to risk_seconds old) when none can be read."""
+        if self.last_snapshot is None:
+            return None
+        try:
+            fresh = self.broker.snapshot()
+        except ValueError:  # DataUnavailable included
+            return self.last_snapshot
+        # Positions must match the monitor's view, or NAV attribution would wait on unseen fills.
+        return fresh if fresh.account == self.last_snapshot.account else self.last_snapshot
+
     def state(self):
         snap = self.last_snapshot
+        live = self.live_snapshot()
         day = self.manifest.active_session(self.now())
         previous_record = self.ledger.previous_close_record(day) if day else None
         previous = previous_record["nav"] if previous_record else None
@@ -2373,8 +2386,8 @@ class TradingService:
         closing_target = self.ledger.target_for(day, previous, allow_estimate=True) if day else None
         try:
             estimate = (
-                self.nav_tracker.estimate(snap, self.last_quotes, self.manifest.contract_map)
-                if snap
+                self.nav_tracker.estimate(live, self.last_quotes, self.manifest.contract_map)
+                if live
                 else None
             )
         except ValueError:
@@ -2441,7 +2454,7 @@ class TradingService:
                 "connected": self.broker.connected if self.demo else self.broker.ib.isConnected(),
                 "broker_qualified": self.broker.qualified,
                 "unavailable_instruments": self.broker.qualification_errors if not self.demo else {},
-                "nav": str(snap.nav) if snap else None,
+                "nav": str(live.nav) if live else None,
                 "cash": str(snap.cash) if snap else None,
                 "accrued_cash": str(snap.accrued_cash) if snap and snap.accrued_cash is not None else None,
                 "interest": {
@@ -2460,7 +2473,7 @@ class TradingService:
                 "closing_target": str(closing_target) if closing_target is not None else None,
                 "closing_target_estimated": self.manifest.scoring_rule == "actual_daily_cash_rate"
                 and day not in self.ledger.daily_rates(),
-                "account_nav_at": snap.account_at.isoformat() if snap else None,
+                "account_nav_at": live.account_at.isoformat() if live else None,
                 # How the live NAV estimate is formed, and the latest settled push vs the stream.
                 "nav_feed": self.nav_tracker.source,
                 "nav_feed_check": self.nav_tracker.last_check,

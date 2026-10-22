@@ -194,6 +194,7 @@ class NAVTracker:
         self.pnl_anchor = None  # (settled NetLiquidation, daily P&L read with it)
         self.pnl_key = None
         self.pnl_phase = None
+        self.pnl_base_at = None  # account_at of the push the base came from
         self.pnl_last = None
         self.option_refs = {}  # after hours: held options' model mid at the base
         self.source = "fill attribution"
@@ -239,7 +240,7 @@ class NAVTracker:
             or (self.pnl_anchor is not None and phase != self.pnl_phase)
         ):
             # Stale or resubscribed stream, or a new session phase: wait for the next settled push.
-            self.pnl_anchor = self.pnl_key = self.pnl_last = None
+            self.pnl_anchor = self.pnl_key = self.pnl_last = self.pnl_base_at = None
             self.option_refs = {}
             return None
         pnl, nav = float(snapshot.pnl_daily), float(snapshot.nav)
@@ -257,7 +258,9 @@ class NAVTracker:
         settled = at_push is not None and not any(
             e.at >= snapshot.account_at - self.PNL_SETTLE for e in self.executions.values()
         )
-        if key != self.pnl_key and settled:
+        # Never step back to an older push (callers may hold snapshots of different ages).
+        newer = self.pnl_base_at is None or snapshot.account_at >= self.pnl_base_at
+        if key != self.pnl_key and settled and newer:
             if self.pnl_anchor is not None:
                 base, pnl0 = self.pnl_anchor
                 predicted = (
@@ -272,6 +275,7 @@ class NAVTracker:
                     "difference": nav - predicted,
                 }
             self.pnl_anchor, self.pnl_key, self.pnl_phase = (nav, at_push), key, phase
+            self.pnl_base_at = snapshot.account_at
             self.option_refs = {}
         self.pnl_last = pnl
         if self.pnl_anchor is None:
