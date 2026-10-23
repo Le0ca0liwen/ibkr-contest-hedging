@@ -1032,3 +1032,138 @@ async def test_an_uncertain_leg_from_an_earlier_session_is_closed_after_a_clean_
     assert not service.execution.unresolved()
     legs = [r for r in service.store.intents(service.manifest.account) if r.get("purpose") == "burn"]
     assert [r["state"] for r in legs] == ["ABANDONED"]
+
+
+# ------------------------------------------------------- contest post-market close (Oct 23 redesign)
+
+
+def test_the_contest_window_closes_at_the_scored_post_market_close(manifest):
+    from hedge.burner_service import ClosingBurner
+
+    m = with_burner(manifest).model_copy(update={"contest_rules": "spcx_rklb_spy"})
+    day = m.scoring_sessions[0]
+    w = ClosingBurner(SimpleNamespace(manifest=m)).window(day)
+    assert w["close"] == close_on(day, 20, 0)
+    assert (w["start"], w["stock_entry_cutoff"]) == (close_on(day, 19, 40), close_on(day, 19, 56))
+    cutoff = m.policy.stock_cutoff_minutes
+    assert w["stock_exit_deadline"] == close_on(day, 20, 0) - timedelta(minutes=cutoff, seconds=15)
+    # Options trade in regular hours only: their entries never open in a post-market window.
+    assert w["option_entry_cutoff"] == w["start"]
+    assert w["option_exit_deadline"] < close_on(day, 16, 0)
+    # Outside the contest the window still closes at the regular close.
+    assert ClosingBurner(SimpleNamespace(manifest=with_burner(manifest))).window(day)["close"] == close_on(
+        day, 16, 0
+    )
+
+
+def test_extended_hours_burn_legs_are_day_orders(manifest, store, quotes, now):
+    m = manifest.model_copy(update={"contest_rules": "spcx_rklb_spy"})
+    execution = ExecutionManager(m, SimBroker(m, asyncio.Queue(), now), store, RiskGate(m, demo=True))
+    stock = next(c.con_id for c in m.contracts if c.kind == "STK")
+    option = next(c.con_id for c in m.contracts if c.kind == "OPT")
+    day = m.scoring_sessions[0]
+    assert execution.burn_time_in_force(stock, close_on(day, 15, 50)) == "IOC"
+    assert execution.burn_time_in_force(stock, close_on(day, 19, 50)) == "DAY"
+    assert execution.burn_time_in_force(stock, close_on(day, 8, 0)) == "DAY"
+    assert execution.burn_time_in_force(option, close_on(day, 15, 50)) == "IOC"
+    plain = ExecutionManager(
+        manifest, SimBroker(manifest, asyncio.Queue(), now), store, RiskGate(manifest, demo=True)
+    )
+    assert plain.burn_time_in_force(stock, close_on(day, 19, 50)) == "IOC"
+
+
+async def test_a_day_leg_is_cancelled_after_a_moment_and_the_cycle_completes(burning, monkeypatch):
+    service, clock = await burning()
+    monkeypatch.setattr(service.execution, "burn_time_in_force", lambda con_id, now: "DAY")
+    await steps(service)
+    entry = next(r for r in service.store.intents(service.manifest.account) if r.get("leg") == "entry")
+    assert entry["time_in_force"] == "DAY" and service.burner.state_name == "ENTRY"
+    await service.broker.fill(entry["broker_order_id"], 120)  # part fills at once, the rest rests
+    await settle(service)
+    await steps(service)
+    assert "CANCEL" not in events(service)  # not yet: the rest may still fill
+    clock.at += timedelta(seconds=4)
+    refresh(service)
+    await steps(service, 2)  # cancels the rest, confirms the 120 filled, sends the exit
+    exit_leg = next(r for r in service.store.intents(service.manifest.account) if r.get("leg") == "exit")
+    assert exit_leg["signed_quantity"] == -120 and exit_leg["time_in_force"] == "DAY"
+    await service.broker.fill(exit_leg["broker_order_id"], 120)
+    await settle(service)
+    await steps(service)
+    result = results(service)[0]
+    assert result["status"] == "CLOSED" and (result["entry_filled"], result["exit_filled"]) == (120, 120)
+    assert events(service).count("CANCEL") == 1
+    assert service.broker.snapshot().quantities().get(10, 0) == 0
+
+
+async def test_an_unfilled_day_leg_is_cancelled_and_the_cycle_closes(burning, monkeypatch):
+    service, clock = await burning()
+    monkeypatch.setattr(service.execution, "burn_time_in_force", lambda con_id, now: "DAY")
+    await steps(service)
+    clock.at += timedelta(seconds=4)
+    await steps(service, 2)
+    result = results(service)[0]
+    assert result["status"] == "CLOSED" and result["entry_filled"] == 0
+    assert not service.execution.burn_open() and not service.broker.snapshot().orders
+
+
+async def test_the_burner_spends_only_on_the_settled_nav_stream(burning):
+    service, clock = await burning(require_pnl_stream=True)
+    await steps(service)
+    # The demo broker has no IBKR P&L stream: its NAV is fill attribution.
+    assert service.burner.state_name == "WAITING" and "settled 1-second NAV" in service.burner.reason
+    assert not service.execution.burn_open()
+    service.nav_tracker.source = "IBKR P&L stream (1 s)"
+    service.nav_tracker.estimate = lambda snapshot, quotes, contracts: float(snapshot.nav)
+    await steps(service)
+    assert service.burner.state_name == "ENTRY"
+
+
+async def test_a_lower_spend_quantile_spends_less_than_the_median(burning):
+    service, clock = await burning(surplus=200, spend_quantile=0.3)
+    await steps(service)
+    decision = service.store.records("burn_decision", service.manifest.account)[0]
+    assert decision["spend_quantile"] == 0.3
+    assert decision["needed"] == pytest.approx(max(0.0, decision["spend_level"]))
+    assert decision["spend_level"] < decision["gap"]["median"]
+
+
+async def test_after_a_cycle_the_burner_waits_for_its_fills_to_settle(burning):
+    service, clock = await burning(surplus=200, settle_seconds=10)
+    await steps(service, 3)
+    assert results(service)[0]["status"] == "CLOSED"
+    refresh(service)
+    await steps(service)
+    assert service.burner.state_name == "WAITING" and "reach the NAV stream" in service.burner.reason
+    clock.at += timedelta(seconds=11)
+    refresh(service)
+    await steps(service)
+    assert service.burner.state_name == "ENTRY"
+
+
+async def test_the_spend_budget_only_ratchets_down_and_survives_a_restart(burning):
+    from hedge.burner_service import ClosingBurner
+
+    service, clock = await burning(surplus=200)
+    day = service.manifest.scoring_sessions[0]
+    await steps(service, 3)
+    cycle = service.store.records("burn_cycle", service.manifest.account)[0]
+    budget = cycle["decision"]["budget"]
+    assert budget == pytest.approx(cycle["decision"]["needed"])  # nothing spent before it
+    # A forecast that drifts up never raises it ...
+    assert service.burner._lower_budget(day, budget + 500) == budget
+    # ... and once spent reaches it, no new cycle is planned however large the gap reads.
+    spent = results(service)[0]["realized_loss"]
+    service.burner.budgets[day] = spent + 1
+    refresh(service)
+    await steps(service)
+    assert service.burner.state_name == "WAITING" and "Spend budget used" in service.burner.reason
+    assert len(results(service)) == 1
+    # A restarted burner takes the lowest budget today's planned cycles recorded.
+    assert ClosingBurner(service)._budget(day) == pytest.approx(budget)
+
+
+def test_spend_quantile_is_validated(manifest):
+    with pytest.raises(ValidationError):
+        with_burner(manifest, spend_quantile=0.6)
+    assert with_burner(manifest, spend_quantile=0.4).burner.spend_quantile == 0.4

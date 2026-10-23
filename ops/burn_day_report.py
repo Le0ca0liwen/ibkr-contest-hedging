@@ -1,13 +1,17 @@
 """Read-only timeline of one session's closing burner: what it believed before each round trip,
 what each one cost, and how the account NAV moved meanwhile. Writes nothing.
 
-    .venv/bin/python ops/burn_day_report.py --day 2026-10-22 [--database URL] [--account DU...]
+    .venv/bin/python ops/burn_day_report.py --day 2026-10-22 [--close 20:00] [--database URL]
+        [--account DU...]
+
+--close is the scored close the burner worked toward: 20:00 (ET) in the contest from Oct 23,
+16:00 for Oct 22 and earlier.
 """
 
 import argparse
 import os
 import sys
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -30,6 +34,7 @@ def main():
     parser.add_argument("--day", required=True, type=date.fromisoformat)
     parser.add_argument("--database", default=os.environ.get("HEDGE_DATABASE_URL"))
     parser.add_argument("--account")
+    parser.add_argument("--close", default="20:00", type=time.fromisoformat, help="Scored close, ET")
     args = parser.parse_args()
     if not args.database:
         sys.exit("Pass --database or set HEDGE_DATABASE_URL")
@@ -42,8 +47,8 @@ def main():
             account = connection.execute(
                 text("SELECT account FROM records WHERE category='burn_cycle' ORDER BY at DESC LIMIT 1")
             ).scalar()
-    start = datetime.combine(args.day, time(15, 35), NY)
-    end = datetime.combine(args.day, time(16, 26), NY)
+    close = datetime.combine(args.day, args.close, NY)
+    start, end = close - timedelta(minutes=25), close + timedelta(minutes=26)
 
     def window(category, limit=20000):
         rows = store.records(category, account, limit)
@@ -100,10 +105,12 @@ def main():
         spent += float(r.get("realized_loss") or 0)
     print(f"\nTotal realized burn: {spent:,.2f}")
 
-    print("\nBurner decisions (state, reason, needed):")
+    print("\nBurner decisions (state, needed, budget, spent, NAV source, reason):")
     for row in window("burn_decision"):
         print(
-            f"  {et(row['at'])}  {row.get('state', ''):12} {money(row.get('needed')):>9}  {row.get('reason', '')[:110]}"
+            f"  {et(row['at'])}  {row.get('state', ''):12} {money(row.get('needed')):>9} "
+            f"{money(row.get('budget')):>9} {money(row.get('spent')):>8} {str(row.get('nav_source') or '-')[:22]:22} "
+            f"{row.get('reason', '')[:100]}"
         )
 
     print("\nData waits and resumes (continuity):")

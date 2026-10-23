@@ -6,6 +6,10 @@ One cycle at a time, durable at every step:
     agree) -> EXIT (IOC sell the CONFIRMED fill at the bid less a widening collar, retried)
     -> CLOSED, or RESIDUAL (alerted once; the inventory becomes an ordinary holding).
 
+In the contest the window ends at the scored 20:00 ET post-market close (shares only). IBKR does
+not accept IOC outside regular hours, so there each leg is a DAY limit that the burner cancels
+DAY_LEG_SECONDS after sending: the same fill-what-is-there-now leg.
+
 Records: 'burn_cycle' (insert-once plan, id=cycle_id), append-only 'burn_cycle_event',
 'burn_cycle_result' (final; releases the hedge block) and throttled 'burn_decision'.
 Fill quantities always come from Store.effective_fills by order reference, never from intent
@@ -34,6 +38,7 @@ from .burner import (
     plan_cap,
     select,
     stock_commission,
+    weighted_quantile,
 )
 from .config import NY
 from .continuity import DataUnavailable
@@ -56,6 +61,8 @@ EXIT_CONFIRMATIONS = 2
 EXIT_SPREAD_GRACE_SECONDS = 30
 EXIT_SPREAD_WAIT_SECONDS = 20  # a wide book that lasts longer is the market, not a glitch
 SCENARIO_AGE_SECONDS = 20
+DAY_LEG_SECONDS = 3  # an extended-hours DAY leg's unfilled rest is cancelled this long after sending
+NAV_STREAM = "IBKR P&L stream (1 s)"  # NAVTracker.source when rolled from a settled push
 DECISION_RECORD_SECONDS = 15
 MODES = ("off", "shadow", "paper")
 
@@ -90,12 +97,17 @@ class ClosingBurner:
         # an execution not seen before is a late fill.
         self.known_exec_ids = set()
         self.exit_wait_since = None  # first wide-book refusal of the current exit
+        self.cancel_requested = set()  # extended-hours DAY legs already sent a cancel
+        # Session -> spend budget (burned so far + what is still needed), lowered at every planned
+        # cycle and never raised: a forecast that drifts up on noise cannot ratchet spending up.
+        self.budgets = {}
         self.quiet_seconds = QUIET_SECONDS
         self.loaded = False
         self.burn_epoch = 0
         self._decision_key = None
         self._decision_at = 0.0
         self._monitor_wake_at = 0.0
+        self._shadow_planned_at = 0.0
         self._stats = None
         self._exit_refusal = None
         # Session date -> True when an approved event caution turned the burner off for that session
@@ -214,16 +226,21 @@ class ClosingBurner:
         )
 
     def window(self, day):
+        """Times around the scored close: the regular close, or 20:00 ET in the contest, where the
+        window falls in the post-market session and options (regular hours only) never open."""
         m, p = self.manifest, self.policy
-        close = m.session_close(day)
+        close, regular = m.scoring_close(day), m.session_close(day)
+        start = close - timedelta(minutes=p.window_minutes)
         return {
             "close": close,
-            "start": close - timedelta(minutes=p.window_minutes),
+            "start": start,
             "stock_entry_cutoff": close - timedelta(minutes=p.stock_entry_cutoff_minutes),
-            "option_entry_cutoff": close - timedelta(minutes=p.option_entry_cutoff_minutes),
+            "option_entry_cutoff": (
+                close - timedelta(minutes=p.option_entry_cutoff_minutes) if close == regular else start
+            ),
             "stock_exit_deadline": close
             - timedelta(minutes=m.policy.stock_cutoff_minutes, seconds=EXIT_MARGIN_SECONDS),
-            "option_exit_deadline": close
+            "option_exit_deadline": regular
             - timedelta(minutes=m.policy.option_cutoff_minutes, seconds=EXIT_MARGIN_SECONDS),
         }
 
@@ -303,6 +320,21 @@ class ClosingBurner:
                 return
             self._set("ENTRY" if leg["leg"] == "entry" else "EXIT", f"Waiting for the {leg['leg']} IOC")
             age = (now - timestamp(leg["created_at"])).total_seconds()
+            sent = s.execution.sent_at.get(leg["id"])
+            if (
+                leg.get("time_in_force") == "DAY"
+                and leg["broker_order_id"] is not None
+                and leg["id"] not in self.cancel_requested
+                and (now - sent if sent is not None else timedelta(seconds=age)).total_seconds()
+                >= DAY_LEG_SECONDS
+            ):
+                # Extended hours: cancel what did not fill at once, exactly as an IOC would.
+                self.cancel_requested.add(leg["id"])
+                self._event(c, "CANCEL", intent_id=leg["id"], reason="Extended-hours DAY leg rest")
+                try:
+                    await s.execution.cancel_order(leg["broker_order_id"])
+                except Exception as exc:  # e.g. already final: the timeout reconcile settles it
+                    self._event(c, "CANCEL_FAILED", intent_id=leg["id"], reason=str(exc))
             if (closed or age > LEG_TIMEOUT_SECONDS) and leg["id"] not in self.reconcile_requested:
                 self.reconcile_requested.add(leg["id"])
                 self._event(c, "RECONCILE", intent_id=leg["id"], reason="IOC leg not terminal")
@@ -560,6 +592,7 @@ class ClosingBurner:
         self.cycle, self.leg_ids, self.mismatch = None, set(), None
         self.reported.clear()
         self.reconcile_requested.clear()
+        self.cancel_requested.clear()
         self.verified.clear()
         self.confirmations.clear()
         self._stats = None
@@ -671,6 +704,14 @@ class ClosingBurner:
             estimate = s._estimate_nav(snapshot, quotes)
         except ValueError as exc:
             return self._wait(f"NAV estimate unavailable: {exc}", info, code="nav")
+        source = getattr(getattr(s, "nav_tracker", None), "source", None)
+        info["nav_source"] = source
+        if p.require_pnl_stream and source != NAV_STREAM:
+            # Fill attribution re-anchors on every NetLiquidation push, including one sent mid-fill
+            # (up to ~$1,000 off on Oct 22): never spend on it.
+            return self._wait(
+                f"Waiting for the settled 1-second NAV (IBKR P&L stream); now {source}", info, code="nav"
+            )
         scenarios = s.last_scenarios
         if (
             scenarios is None
@@ -689,35 +730,54 @@ class ClosingBurner:
             m, scenarios, quotes, quantities, snapshot.cash, snapshot.nav, estimate, target, p.bias
         )
         stats = gap_stats(z, scenarios.weights)
-        needed = max(0.0, stats["median"])
+        level = weighted_quantile(z, scenarios.weights, p.spend_quantile)
+        needed = max(0.0, level)
         self.active = hysteresis(needed, self.active, p.start_threshold, p.stop_threshold)
+        today = self.today(day)
+        # Commission reports arrive late: count an estimate for the ones still missing.
+        spent = today["realized_cost"] + today["fees_estimate_pending"]
+        budget = self._budget(day)
+        room = needed if budget is None else max(0.0, min(needed, budget - spent))
         self.last = info  # the latest full gap evaluation stays visible while later steps wait
         info.update(
             target=float(target),
             nav_estimate=estimate,
             gap=stats,
+            spend_quantile=p.spend_quantile,
+            spend_level=level,
             needed=needed,
-            plan_cap=plan_cap(needed, p.stop_threshold),
+            spent=spent,
+            budget=budget,
+            room=room,
+            plan_cap=plan_cap(room, p.stop_threshold),
             engaged=self.active,
             scenario_id=scenarios.identifier,
         )
+        quantile = "Median" if p.spend_quantile == 0.5 else f"{p.spend_quantile:.0%} quantile"
         if not self.active:
             self._set(
                 "MONITORING",
-                f"Median closing gap ${stats['median']:,.2f} is within the "
+                f"{quantile} closing gap ${level:,.2f} is within the "
                 f"${p.stop_threshold:,.0f}/${p.start_threshold:,.0f} hysteresis band",
             )
             self._record_decision(info, code="hysteresis")
             return
-        today = self.today(day)
+        if budget is not None and budget - spent <= p.stop_threshold:
+            return self._wait(
+                f"Spend budget used: ${spent:,.2f} of ${budget:,.2f} (it only ever ratchets down)",
+                info,
+                code="budget",
+            )
+        settled_at = max(
+            (timestamp(r["finished_at"]) for r in today["results"] if r.get("entry_filled")), default=None
+        )
+        if settled_at is not None and (now - settled_at).total_seconds() < p.settle_seconds:
+            return self._wait(
+                "Letting the last cycle's fills and commissions reach the NAV stream", info, code="settle"
+            )
         if today["cycles"] >= p.max_cycles_per_day:
             return self._wait("Daily cycle limit reached", info)
-        # Commission reports arrive late: count an estimate for the ones still missing.
-        expense_remaining = (
-            float(p.daily_expense_cap) - today["realized_cost"] - today["fees_estimate_pending"]
-            if p.daily_expense_cap is not None
-            else None
-        )
+        expense_remaining = float(p.daily_expense_cap) - spent if p.daily_expense_cap is not None else None
         if expense_remaining is not None and expense_remaining <= 0:
             return self._wait("Daily expense cap reached", info)
         options, rejected = candidates(
@@ -733,7 +793,7 @@ class ClosingBurner:
             options,
             z,
             scenarios.weights,
-            needed,
+            room,
             p,
             expense_remaining=expense_remaining,
             risk_error=lambda c: self._path_risk(snapshot, quotes, scenarios, quantities, c, now),
@@ -756,7 +816,7 @@ class ClosingBurner:
         seconds = cycle_seconds(p.assumed_cycle_seconds, today["cycle_seconds"])
         efficiency = fill_efficiency(today["results"])
         capacity = capacity_per_minute(pace.expected_loss, seconds) * efficiency
-        waiting = jit_waiting(needed, capacity, remaining, p.jit_headroom, p.jit_reserve_minutes)
+        waiting = jit_waiting(room, capacity, remaining, p.jit_headroom, p.jit_reserve_minutes)
         info.update(
             candidate=chosen.as_dict(),
             improvement=improvement,
@@ -772,12 +832,17 @@ class ClosingBurner:
         if waiting:
             return self._wait(
                 f"Just in time: ${capacity:,.2f}/min over {remaining:.1f} min covers the "
-                f"${needed:,.2f} median gap; burning later",
+                f"${room:,.2f} still to spend; burning later",
                 info,
                 code="jit",
             )
         label = f"{chosen.quantity} {chosen.label} (modeled ${chosen.expected_loss:,.2f})"
         if mode == "shadow":
+            # Shadow plans no cycles, so it lowers the budget at most once per assumed cycle, as a
+            # paper burner would, rather than to the minimum of every one-second sample.
+            if time.monotonic() - self._shadow_planned_at >= seconds:
+                self._shadow_planned_at = time.monotonic()
+                info["budget"] = self._lower_budget(day, spent + needed)
             self._set("SHADOW", "Would burn " + label)
             self._record_decision({**info, "would_trade": True}, code="shadow")
             return
@@ -787,7 +852,26 @@ class ClosingBurner:
             if s.execution.burn_open():
                 self.loaded = False  # adopt the open cycle on the next step
             return self._wait(blockers[0], info)
+        # Planning a cycle lowers the budget to what is spent plus what is needed now (the room
+        # used above already equals the lowered budget's remainder).
+        info["budget"] = self._lower_budget(day, spent + needed)
         await self._open(now, day, w, chosen, improvement, info, snapshot, quotes, scenarios, label)
+
+    def _budget(self, day):
+        """Today's spend budget; after a restart, the lowest one today's planned cycles recorded."""
+        if day not in self.budgets:
+            recorded = [
+                c["decision"]["budget"]
+                for c in self.store.records("burn_cycle", self.account, 3 * self.policy.max_cycles_per_day)
+                if c.get("session") == str(day) and (c.get("decision") or {}).get("budget") is not None
+            ]
+            self.budgets[day] = min(recorded, default=None)
+        return self.budgets[day]
+
+    def _lower_budget(self, day, total):
+        budget = self._budget(day)
+        self.budgets[day] = total if budget is None else min(budget, total)
+        return self.budgets[day]
 
     async def _open(self, now, day, w, chosen, improvement, info, snapshot, quotes, scenarios, label):
         s, p = self.service, self.policy
@@ -811,7 +895,22 @@ class ClosingBurner:
             "exit_deadline": deadline.isoformat(),
             "entry_limit": str(price_cap),
             "decision": {
-                k: info.get(k) for k in ("nav_estimate", "target", "gap", "needed", "plan_cap", "jit", "mode")
+                k: info.get(k)
+                for k in (
+                    "nav_estimate",
+                    "nav_source",
+                    "target",
+                    "gap",
+                    "spend_quantile",
+                    "spend_level",
+                    "needed",
+                    "spent",
+                    "budget",
+                    "room",
+                    "plan_cap",
+                    "jit",
+                    "mode",
+                )
             },
             "scenario_id": scenarios.identifier,
             "scenario_at": _iso(s.last_scenario_at),
@@ -988,6 +1087,12 @@ class ClosingBurner:
             "nav_estimate": last.get("nav_estimate"),
             "gap": last.get("gap"),
             "needed": last.get("needed"),
+            "spend_quantile": self.policy.spend_quantile,
+            "spend_level": last.get("spend_level"),
+            "spent": last.get("spent"),
+            "budget": last.get("budget"),
+            "room": last.get("room"),
+            "nav_source": last.get("nav_source"),
             "plan_cap": last.get("plan_cap"),
             "engaged": self.active,
             "jit": last.get("jit"),

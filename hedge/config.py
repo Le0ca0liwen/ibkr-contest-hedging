@@ -154,6 +154,14 @@ class BurnerPolicy(Frozen):
     option_entry_cutoff_minutes: int = Field(default=17, ge=1, le=120)
     start_threshold: float = Field(default=25, ge=0)
     stop_threshold: float = Field(default=5, ge=0)
+    # Spend toward this quantile of the closing gap (0.5 = the L1-optimal median). Lower keeps a
+    # margin for forecast error: a burn cannot be undone if NAV falls before the close.
+    spend_quantile: float = Field(default=0.5, ge=0.05, le=0.5)
+    # Act only on IBKR's 1-second P&L stream rolled from a settled NetLiquidation (never on fill
+    # attribution, whose base can be a NetLiquidation push sent mid-fill), and wait this long after
+    # each cycle so its fills and commissions reach the stream before the next decision.
+    require_pnl_stream: bool = False
+    settle_seconds: float = Field(default=0, ge=0, le=120)
     bias: float = 0.0
     bias_source: str = ""
     jit_headroom: float = Field(default=0.5, ge=0, le=1)

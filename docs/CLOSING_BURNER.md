@@ -7,6 +7,10 @@ against the market. The closing burner does that, but **only near the close**: i
 burned earlier, a later market drop could leave NAV below the target with nothing left
 to undo.
 
+In the contest the scored close is the NAV after the 20:00 ET post-market close, so the
+window ends there: 19:40-19:56 ET by default, shares only (options trade in regular hours
+only). Elsewhere it ends at the regular close.
+
 The burner is off by default (`burner.mode: off`). It shares the single execution owner
 (TradingService, IBKR paper only, Moomoo quotes only) and never trades the seven
 mandated legs or SPY shares.
@@ -28,10 +32,36 @@ z = nav_estimate - target + bias + scenarios.changes @ holdings + cash carry to 
 - `bias` is a signed, calibrated model-versus-official correction. It needs
   `bias_source` when nonzero.
 
-`needed = max(0, median(z))` (the lower weighted median of the 64 scenarios). Spending
-`L` changes the expected score by `E|z| - E|z - L|`, which keeps improving while
-`L < median(z)`. The L1-optimal spend is therefore the median, and the burner never plans
-past it:
+`needed = max(0, quantile(z, spend_quantile))` (lower weighted quantile of the 64 scenarios;
+0.5 is the median). Spending `L` changes the expected score by `E|z| - E|z - L|`, which keeps
+improving while `L < median(z)`. The L1-optimal spend is the median, and the burner never plans
+past it. The contest uses `spend_quantile: 0.4`: near the median the expected-score curve is
+flat, so spending a little less costs little, while a burn cannot be undone if the forecast was
+high.
+
+**What the Oct 22 overspend taught (redesign of Oct 23).** On Oct 22 the burner spent $292
+against a surplus that was gone by the close. Two things drove it:
+
+- Its NAV came from fill attribution, which re-anchors on every NetLiquidation push,
+  including pushes sent seconds after a fill that are briefly off by up to ~$1,000.
+- It re-decided every second on a noisy forecast. Spending cannot be undone, so it spent on
+  every upward blip and never recovered the downward ones.
+
+It now guards against both:
+
+- **Settled NAV only** (`require_pnl_stream`). The burner acts only when the NAV estimate is
+  IBKR's 1-second P&L stream rolled forward from a settled NetLiquidation push (no fill
+  within 20 s of it). On fill attribution it waits.
+- **Post-fill settle** (`settle_seconds`). After a cycle that filled, it waits this long, so
+  the fills and commissions reach the stream before the next decision.
+- **A spend budget that only ratchets down.** Each planned cycle sets
+  `budget = min(budget, spent + needed)`, and a cycle may use at most
+  `min(needed, budget - spent)`. A forecast that drifts up later never raises it; once
+  `budget - spent <= stop_threshold` the burner stops for the session. Shadow lowers it at
+  most once per assumed cycle. After a restart it resumes from the lowest budget recorded on
+  the session's cycles.
+
+The remaining rules:
 
 - **Hysteresis.** The burner engages when `needed > start_threshold` (default $25) and
   stays engaged until `needed <= stop_threshold` (default $5).
@@ -79,9 +109,11 @@ past it:
 ## When it may act
 
 - `burner.mode != off`, on a scored session (never Day 0), with
-  `close - window_minutes <= now < close - stock_entry_cutoff_minutes`. Option entries
-  also need `now < close - option_entry_cutoff_minutes`. Early closes come from the
-  exchange calendar.
+  `close - window_minutes <= now < close - stock_entry_cutoff_minutes`, where `close` is
+  the scored close (`Manifest.scoring_close`: 20:00 ET in the contest, the regular close
+  otherwise). Option entries also need `now < close - option_entry_cutoff_minutes` and a
+  close in regular hours, so a post-market window never opens them. Early closes come
+  from the exchange calendar (the post-market session ends 4 hours after the close).
 - Entry cutoffs are validated to leave at least 2 minutes before the ordinary order
   cutoffs (`stock_entry_cutoff_minutes >= policy.stock_cutoff_minutes + 2`, and the
   same for options), so every exit fits inside the normal `can_trade` window.
@@ -115,6 +147,13 @@ past it:
 
 Cycles are strictly sequential. An entry and an exit are never working at once, and two
 cycles never overlap.
+
+Outside regular hours IBKR does not accept IOC (its outside-RTH flag excludes IOC), so in
+the contest's pre/post-market sessions every share leg is a DAY limit at the same price,
+flagged for outside regular hours, and the burner cancels whatever has not filled 3 s
+(`DAY_LEG_SECONDS`) after sending it. That is the same fill-what-is-there leg; the cancel
+is a `CANCEL` cycle event, and everything below (early Cancelled statuses, confirmations,
+exits sized from fills) applies unchanged.
 
 ```
 IDLE -> ENTRY: IOC buy q at the ask (tick-rounded with broker.price_tick)
@@ -268,7 +307,10 @@ dashboard poll scan the whole history. No schema columns change. Instead:
 | option_burn, option_max_contracts, option_max_spread | false, 5, 0.20 | Optional option round trips |
 | window_minutes | 20 | Active from close minus this |
 | stock_entry_cutoff_minutes / option_entry_cutoff_minutes | 4 / 17 | No new entries after close minus these |
-| start_threshold / stop_threshold | 25 / 5 | USD hysteresis on the median gap |
+| start_threshold / stop_threshold | 25 / 5 | USD hysteresis on the spend quantile of the gap |
+| spend_quantile | 0.5 | Gap quantile spent toward (contest: 0.4); 0.05-0.5 |
+| require_pnl_stream | false | Act only on the settled 1-second IBKR P&L stream NAV (contest: true) |
+| settle_seconds | 0 | Wait after a cycle that filled before the next decision (contest: 8) |
 | bias / bias_source | 0 / "" | Signed model-vs-official calibration |
 | jit_headroom / jit_reserve_minutes | 0.5 / 1 | Just-in-time pacing (headroom <= 1) |
 | assumed_cycle_seconds | 20 | Minimum assumed cycle time (measurements only lengthen it) |

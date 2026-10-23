@@ -69,10 +69,12 @@ reason in plain words. The badge counts the ✗ rows.
   approval expires at that day's close.
 - **09:30 onward:** hedging resumes by itself. Watch the Today panel and
   Settings & alerts > Alerts & required actions.
-- **15:40-15:56 ET:** the closing surplus burner may buy and sell SPCX/RKLB shares
-  to spend a forecast surplus (Overview > Closing surplus burner). **Do not pause
-  or restart between 15:40 and 16:25.** To stop new burn trades only, press
-  **Burner off**; any open round trip still sells back what it bought.
+- **19:40-19:56 ET:** the closing surplus burner may buy and sell SPCX/RKLB shares
+  to spend a forecast surplus before the 20:00 scored close (Overview > Closing surplus
+  burner; details in docs/CLOSING_BURNER.md).
+  **Do not pause or restart between 15:40 and 16:25, nor between 19:35 and 20:25.** To stop
+  new burn trades only, press **Burner off**; any open round trip still sells back what it
+  bought.
 - **Any time:** if paper trading is not on and the Today panel is unclear, type the
   question in **Why isn't it trading? Ask the app** (Overview). The answer is advice;
   the Today rows and the app's checks decide.

@@ -558,6 +558,12 @@ class ExecutionManager:
             return "Burn quote spread wider than the execution limit"
         return None
 
+    def burn_time_in_force(self, con_id, now):
+        """IOC; DAY for shares in a contest pre/post-market session, where IBKR does not accept
+        IOC outside regular hours. The burner cancels a DAY leg's unfilled rest itself."""
+        stock = self.manifest.contract_map[con_id].kind == "STK"
+        return "DAY" if stock and self.manifest.extended_session(now) is not None else "IOC"
+
     async def submit_burn_leg(
         self,
         *,
@@ -579,7 +585,8 @@ class ExecutionManager:
         deadline=None,
         spread_guard=True,
     ):
-        """Durable IOC leg of a closing-burner cycle (entry buy or exit sell).
+        """Durable IOC leg of a closing-burner cycle (entry buy or exit sell; DAY, cancelled by the
+        burner, outside regular hours).
 
         Mirrors submit_slice's durable sequence (intent before transmission; an uncertain send
         is UNKNOWN and never resent) WITHOUT feasible_slices/economic_check, which by design
@@ -617,6 +624,7 @@ class ExecutionManager:
             )
             if not result.passed:
                 return {"submitted": False, "reason": "Burn leg risk: " + "; ".join(result.reasons)}
+            time_in_force = self.burn_time_in_force(con_id, now)
             request = OrderRequest(
                 intent_id=burn_leg_id(cycle_id),
                 con_id=con_id,
@@ -627,7 +635,7 @@ class ExecutionManager:
                 decision_id=decision_id,
                 order_type="LMT",
                 urgency="BURN",
-                time_in_force="IOC",
+                time_in_force=time_in_force,
             )
             self.store.create_burn_leg(
                 request,
@@ -635,7 +643,7 @@ class ExecutionManager:
                     "cycle_id": cycle_id,
                     "leg": leg,
                     "attempt": attempt,
-                    "time_in_force": "IOC",
+                    "time_in_force": time_in_force,
                     "order_type": "LMT",
                     "urgency": "BURN",
                     "initial_limit": str(limit),
@@ -994,8 +1002,9 @@ class ExecutionManager:
                     self.paused = True
                 continue
             if row.get("purpose") == "burn":
-                # IOC burn legs are never repriced or cancelled here: they end at the broker on
-                # their own and the burner sizes every exit from confirmed fills.
+                # Burn legs are never repriced or cancelled here: an IOC ends at the broker on its
+                # own, the burner cancels an extended-hours DAY leg itself, and it sizes every exit
+                # from confirmed fills.
                 continue
             package_id = row.get("package_id")
             sent = self.sent_at.get(row["id"])

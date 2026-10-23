@@ -73,9 +73,11 @@ policy:
 # "Auto paper" switch overrides this; Pause trading stops it. Launch with Start Contest.command.
 autostart: paper
 # Closing surplus burner (docs/CLOSING_BURNER.md): spends a forecast NAV surplus only in the
-# last 20 minutes before the close (never on Day 0), through buy-then-sell IOC round trips in
-# SPCX/RKLB shares. shadow records what it would do and sends nothing; paper trades when the app
-# is also in paper. The dashboard switch can downgrade it (paper -> shadow -> off) at any time.
+# last 20 minutes before the scored close (20:00 ET, after the post-market session; never on
+# Day 0), through buy-then-sell round trips in SPCX/RKLB shares (IOC in regular hours; outside
+# them DAY limits the burner cancels after 3 s, since IBKR takes no IOC there). shadow records
+# what it would do and sends nothing; paper trades when the app is also in paper. The dashboard
+# switch can downgrade it (paper -> shadow -> off) at any time.
 # An enabled burner requires policy.burn_surplus: false.
 burner:
   mode: paper                       # off | shadow | paper
@@ -86,11 +88,14 @@ burner:
   option_burn: false                # 1..option_max_contracts round trips in non-mandated options
   option_max_contracts: 5
   option_max_spread: 0.20
-  window_minutes: 20                # active from close - 20 min
+  window_minutes: 20                # active from close - 20 min (19:40 ET in the contest)
   stock_entry_cutoff_minutes: 4     # >= stock_cutoff_minutes + 2 so every exit fits
   option_entry_cutoff_minutes: 17   # >= option_cutoff_minutes + 2
-  start_threshold: 25               # USD hysteresis on the median closing gap
+  start_threshold: 25               # USD hysteresis on the closing gap quantile below
   stop_threshold: 5
+  spend_quantile: 0.4               # spend toward this gap quantile (0.5 = median); lower = safer
+  require_pnl_stream: true          # act only on the settled 1-second NAV (never fill attribution)
+  settle_seconds: 8                 # after each cycle, let fills and fees reach the NAV stream
   bias: 0                           # signed model-vs-official bias; needs bias_source if nonzero
   bias_source: ""
   jit_headroom: 0.5                 # <= 1; lower starts burning earlier
