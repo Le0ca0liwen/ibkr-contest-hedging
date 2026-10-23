@@ -8,6 +8,15 @@ from hedge.models import Contract, PortfolioSnapshot, Position
 from hedge.storage import Store
 
 
+@pytest.fixture(autouse=True)
+def gemini_unless_a_test_selects_claude(monkeypatch):
+    """The app defaults to Claude Sonnet 5.5; the older AI tests were written against Gemini and keep
+    it explicitly. Claude tests pass model="claude-sonnet-5-5"; no real key ever leaks in."""
+    monkeypatch.setenv("HEDGE_AI_MODEL", "gemini-3.8-flash")
+    for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_WORKSPACE_ID"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def manifest():
     stock = Contract(con_id=10, symbol="BA", kind="STK")

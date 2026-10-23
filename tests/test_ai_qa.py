@@ -275,7 +275,7 @@ async def test_timeout_falls_back(tmp_path, monkeypatch):
 
     service.supervisor.structured = slow
     result = await service.qa.ask("why?")
-    assert result["source"] == "deterministic" and "Google AI timed out" in result["note"]
+    assert result["source"] == "deterministic" and "AI timed out" in result["note"]
 
 
 @pytest.mark.asyncio

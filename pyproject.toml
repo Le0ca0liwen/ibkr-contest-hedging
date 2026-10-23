@@ -10,7 +10,7 @@ requires-python = ">=3.12,<3.13"
 dependencies = [
   "fastapi", "uvicorn", "pydantic>=2", "PyYAML", "SQLAlchemy>=2", "alembic",
   "psycopg[binary]", "numpy", "pandas", "pyarrow", "cvxpy", "highspy", "osqp",
-  "QuantLib", "ib_async", "exchange_calendars", "httpx"
+  "QuantLib", "ib_async", "exchange_calendars", "httpx", "anthropic>=2"
 ]
 
 [project.optional-dependencies]

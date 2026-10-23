@@ -114,10 +114,10 @@ change a setting. One switch, **Enable AI** (Decisions > AI supervisory review),
 all of them on or off; trading never waits for them.
 
 - **Why isn't it trading? Ask the app** (Overview, under Today): type a question, e.g.
-  "Why is paper trading not on?", and press **Ask**. With AI on, Google's model answers
+  "Why is paper trading not on?", and press **Ask**. With AI on, Claude Sonnet answers
   from the app's own status (Today rows, mode, waiting reason, burner, alerts, latest
   decisions, risk checks) and this guide, and shows what it relied on. With AI off, or if
-  Google fails or 60 questions were asked in the last hour, the answer comes straight from
+  the AI fails or 60 questions were asked in the last hour, the answer comes straight from
   the Today rows. One question every 10 seconds. Then do what the Today rows say.
 - **Day-end miss explanation** (Overview, under the scoring ledger): about 16:26 ET on
   each scored day the app splits the miss (official close minus target) into stock and
@@ -129,7 +129,7 @@ all of them on or off; trading never waits for them.
   day shown as "(not computed yet)" in the date list; a large Unexplained line usually means
   an option was marked oddly or close marks are missing.
 - **Event risk today** (Overview, under the latest hedge decision): about 08:45 ET on session
-  days (or **Refresh event calendar**, at most 6 per day) Google Search lists known events for
+  days (or **Refresh event calendar**, at most 6 per day) a web search lists known events for
   SPCX, RKLB, SPY and the market until the next open, with links. The app proposes one caution per
   symbol: ×1.25 or ×1.5 widens that symbol's modeled price and implied-vol moves for this session
   (SPY also covers index ETF hedges), plus "Burner off for this session" for a late-day Fed or

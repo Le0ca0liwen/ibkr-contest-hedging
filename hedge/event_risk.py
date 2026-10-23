@@ -51,7 +51,7 @@ MORNING, AFTERNOON = clock(8, 45), clock(15, 30)  # automatic fetch window (ET, 
 AUTO_ATTEMPTS, SPACING, PER_DAY = 3, timedelta(minutes=10), 6  # Google Search is billed per query
 CALENDAR_LIMIT = 20_000  # bytes of stored Search Suggestions HTML
 EVENTS_PROMPT = (
-    "Build an event-risk calendar for a paper options-hedging contest. Use Google Search to find scheduled "
+    "Build an event-risk calendar for a paper options-hedging contest. Use web search to find scheduled "
     "or already-announced events between `window_start` and `window_end` (US Eastern time) that could move "
     "the listed symbols or the US stock market: company earnings (date, and whether before the open or "
     "after the close); FOMC decisions or minutes and Fed-chair remarks; CPI, PPI, payrolls and other jobs "
@@ -182,7 +182,7 @@ def checked_events(reply, session, start, end, citations, keys):
     """Post-validation: the reply must echo the session; events outside the window (in_window) are
     dropped (counted), duplicates removed, and each URL flagged `cited` when a Google url_citation backs it."""
     if reply.session != session:
-        raise ValueError("Invalid Google AI response rejected")  # a calendar for another day
+        raise ValueError("Invalid AI response rejected")  # a calendar for another day
     cited = {c["url"]: c.get("title") or "" for c in citations}
     order = {k: i for i, k in enumerate((*keys, MARKET))}
     events, seen, dropped, duplicates = [], set(), 0, 0

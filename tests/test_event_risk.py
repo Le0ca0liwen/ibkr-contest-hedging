@@ -348,7 +348,7 @@ def test_calendar_validation():
         Reply.model_validate(calendar_body(extra="x"))
     start, end = et(D1, 8, 46), et(D2, 9, 45)
     reply = Reply.model_validate(calendar_body(D2))
-    with pytest.raises(ValueError, match="Invalid Google AI response rejected"):
+    with pytest.raises(ValueError, match="Invalid AI response rejected"):
         checked_events(reply, D1, start, end, (), KEYS)
     reply = Reply.model_validate(
         calendar_body(

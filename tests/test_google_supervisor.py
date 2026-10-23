@@ -60,7 +60,7 @@ async def test_google_payload_privacy_tools_and_cooldown(tmp_path, monkeypatch):
 
     supervisor = Supervisor(transport=httpx.MockTransport(handler), settings_path=tmp_path / "ai.json")
     result = await supervisor.review(state())
-    assert result["model"] == MODELS[0] and result["advisory_only"]
+    assert result["model"] == "gemini-3.8-flash" and result["advisory_only"]
     assert "test-credential" not in json.dumps(result) + json.dumps(supervisor.status())
     assert await supervisor.review(state()) is None
     assert len(calls) == 1
@@ -239,9 +239,9 @@ async def test_turning_ai_off_never_waits_for_a_queued_review(tmp_path, monkeypa
     await asyncio.sleep(0.05)
     assert supervisor.lock.locked() and not review.done() and len(calls) == 2
     with pytest.raises(ValueError, match="before changing the model"):
-        supervisor.configure(MODELS[1], True)  # a model change still waits for the review
-    assert supervisor.configure(MODELS[0], True)["enabled"] is True  # unchanged settings: no wait
-    assert supervisor.configure(MODELS[1], False)["enabled"] is False  # Disable AI: never refused
+        supervisor.configure("gemini-3.5-flash-lite", True)  # a model change still waits for the review
+    assert supervisor.configure("gemini-3.8-flash", True)["enabled"] is True  # unchanged: no wait
+    assert supervisor.configure("gemini-3.5-flash-lite", False)["enabled"] is False  # Disable AI: never refused
     release.set()
     results = await asyncio.gather(*features, review, return_exceptions=True)
     assert results[2] is None and len(calls) == 2  # the queued review never went out

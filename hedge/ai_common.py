@@ -1,6 +1,6 @@
 """Shared plumbing for the AI operator features (docs/AI_OPERATOR_FEATURES.md): prompt-safe text,
 alert summaries, rolling rate limits and per-feature status with one de-duplicated failure alert.
-Nothing here calls Google; Supervisor.structured() does."""
+Nothing here calls the AI provider; Supervisor.structured() does."""
 
 from __future__ import annotations
 
@@ -64,8 +64,15 @@ APP_ALERT_PREFIXES = (  # app-authored alert families that may be summarized for
 OTHER_ALERT = "Broker or other message (see Settings & alerts)"
 DETAILS = " [details on the dashboard]"
 CONTROL = re.compile(r"[\x00-\x1f\x7f-\x9f]")
-UNAVAILABLE = "Google AI unavailable; deterministic monitoring continues"
-FIXED_ERRORS = ("AI disabled", "Invalid Google AI response rejected", "Google AI ")
+UNAVAILABLE = "AI unavailable; deterministic monitoring continues"
+FIXED_ERRORS = (
+    "AI disabled",
+    "Invalid AI response rejected",
+    "Invalid Google AI response rejected",
+    "Invalid Claude AI response rejected",
+    "Google AI ",
+    "Claude AI ",
+)
 
 
 def ai_error(exc):
@@ -73,7 +80,7 @@ def ai_error(exc):
     anything else (including app-side errors) is replaced, never echoed."""
     if type(exc) is ValueError and str(exc).startswith(FIXED_ERRORS):
         return str(exc)
-    return "Google AI timed out" if isinstance(exc, TimeoutError) else UNAVAILABLE
+    return "AI timed out" if isinstance(exc, TimeoutError) else UNAVAILABLE
 
 
 def operator_text(text, account=None, limit=240):

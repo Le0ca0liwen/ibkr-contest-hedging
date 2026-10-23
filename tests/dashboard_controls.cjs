@@ -134,12 +134,12 @@ vm.runInContext('refresh=async()=>{}',context);
   const er=nodes.get('events-rows').innerHTML;
   assert.doesNotMatch(er,/<img|<script>|<i>|<b>|href="javascript|href="http:|href="https:\/\/u:p@/);
   assert.match(er,/&lt;img src=x onerror=alert\(1\)&gt;/);
-  assert.match(er,/javascript:alert\(1\) <small>\(not confirmed by a Google citation\)/);
+  assert.match(er,/javascript:alert\(1\) <small>\(not confirmed by a search citation\)/);
   assert.match(er,/http:\/\/plain\.example\.com\/x <small>\(not confirmed/);
   assert.match(er,/<a href="https:\/\/www\.bls\.gov\/cpi\/" target="_blank" rel="noopener noreferrer">bls&lt;b&gt;<\/a>/);
   assert.match(er,/<br>https:\/\/u:p@evil\.example\.com\/<\/td>/);  // userinfo: shown as text, never a link
   assert.equal(nodes.get('events-badge').textContent,'APPROVAL PENDING');
-  assert.match(nodes.get('events-status').textContent,/Note: <b>n<\/b> · Last refresh failed .*HTTP 500.*last good one · 1\/6 Google calls today/);
+  assert.match(nodes.get('events-status').textContent,/Note: <b>n<\/b> · Last refresh failed .*HTTP 500.*last good one · 1\/6 AI calls today/);
   assert.match(nodes.get('events-sources-note').textContent,/Proposed from this calendar: RKLB ×1\.50, SPCX ×1\.25, SPY ×1\.50; burner off/);
   assert.equal(nodes.get('events-suggestions').src,'/ai/search-suggestions/CAL1');
   assert.equal(nodes.get('events-suggestions').hidden,false);

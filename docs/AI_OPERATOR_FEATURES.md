@@ -1,8 +1,30 @@
 # AI operator features
 
-Optional helpers for the operator, built on the Google Gemini supervisor
+Optional helpers for the operator, built on the AI supervisor
 ([GOOGLE_SUPERVISOR.md](GOOGLE_SUPERVISOR.md)). The implementation spec is
 [AI_OPERATOR_FEATURES_SPEC.md](AI_OPERATOR_FEATURES_SPEC.md).
+
+**Provider (Oct 23).** The default model is Claude Sonnet 5.5 (`claude-sonnet-5-5`) at medium
+effort, through Anthropic's SDK (`client.beta.messages`). The Gemini models stay selectable under
+Decisions > AI.
+- **Request.** Every call sends `output_config.effort: "medium"` and the server-side refusal
+  fallback (`fallbacks: "default"`, beta `server-side-fallback-2026-07-01`).
+- **Replies.** Ordinary features get structured outputs (`messages.parse` with the reply's
+  pydantic model).
+- **Event calendar.** It uses Claude's web search (`web_search_20260209`, at most 5 searches)
+  instead of Google Search. Web search always cites and structured outputs reject citations,
+  so that reply is JSON by instruction (the schema is in the system prompt), validated by the
+  same pydantic model. A paused search turn is resent to continue. Citations come from the
+  search results and `web_search_result_location`s; there are no Google Search suggestions.
+- **Key.** `Setup Claude AI.command` (`ops/setup_claude_ai.py`) stores it in
+  `.runtime/anthropic-api-key`, plus the workspace ID in `.runtime/anthropic-workspace-id` for a
+  key not scoped to a workspace (sent as `anthropic-workspace-id`). Both files are owner-only.
+  It also selects Claude in `config/local.ai.json`. `ANTHROPIC_API_KEY` /
+  `ANTHROPIC_WORKSPACE_ID` override the files.
+- **Failures.** Claude's failures read "Claude AI request failed (HTTP n)", "Claude AI did not
+  return a completed answer" (also a refusal), "Invalid Claude AI response rejected" or "Claude
+  AI unavailable; ...". Generic ones read "AI timed out" and "AI unavailable; deterministic
+  monitoring continues".
 
 | Feature | Status |
 |---|---|

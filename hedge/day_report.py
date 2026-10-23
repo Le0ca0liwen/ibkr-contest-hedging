@@ -1001,7 +1001,7 @@ class DayReporter(AIFeature):
                     raise ValueError("AI disabled")
                 output = reply.output
                 if output.date.isoformat() != report["date"]:
-                    raise ValueError("Invalid Google AI response rejected")  # wrong day echoed
+                    raise ValueError(f"Invalid {s.supervisor.label} response rejected")  # wrong day echoed
                 annex.update(
                     status="ok",
                     model=reply.model,
