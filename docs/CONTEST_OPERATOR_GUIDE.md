@@ -17,6 +17,12 @@ seven mandated legs and any leftover non-contest positions, both done in TWS).
   positions stay in the account.
 - Keep TWS (Paper) logged in with the API enabled on port 7497 and
   **Read-Only API unticked**, and keep Moomoo OpenD logged in.
+- **Automatic confirmation and start (Oct 23):** a changed configuration (settings, added hedge
+  stocks) is confirmed by itself when you already confirmed one for the same account and the same
+  seven legs; only the first confirmation, or a change to the legs, needs **Confirm contest
+  configuration**. With Auto paper ON, paper trading starts by itself at each session's trading start
+  (04:00 ET pre-market), also after a pause or a safety stop the day before, through every
+  activation check. To stay paused through the next session, turn Auto paper OFF.
 - **Lost internet or on battery:** keep the app running. When the connection drops,
   trading waits (mode WAITING_DATA) and restarts by itself once IBKR and fresh quotes are back
   and every paper check passes; an order cut off by the drop is closed after a clean

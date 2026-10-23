@@ -503,3 +503,72 @@ def test_the_api_close_is_the_official_close_in_the_contest(manifest, store):
     assert not any("statement" in a["message"] for a in store.records("alert", contest.account))
     row = {i["label"]: i for i in service.checklist()}["Previous official close"]
     assert row["status"] == "ok" and "IBKR API close" in row["detail"]
+
+
+async def test_a_changed_configuration_with_the_same_account_and_legs_is_confirmed_automatically(store):
+    """Operator instruction (Oct 23): no Confirm press for a settings change; the first confirmation
+    and any change to the mandated legs still need the button."""
+    from hedge.demo import demo_manifest
+
+    contest = demo_manifest().model_copy(update={"confirmed": False})
+    first = TradingService(contest, store, demo=True)
+    assert not first.auto_confirm()  # nothing confirmed yet: the first confirmation is the operator's
+    first.confirm_configuration(contest.config_hash)
+    changed = TradingService(
+        contest.model_copy(update={"initial_nav": contest.initial_nav + 1}), store, demo=True
+    )
+    assert not changed.contest_confirmed()
+    assert changed.auto_confirm() and changed.contest_confirmed()
+    record = next(
+        r
+        for r in store.records("configuration_confirmation", contest.account)
+        if r["config_hash"] == changed.manifest.config_hash
+    )
+    assert record["automatic"] and record["basis"] == contest.config_hash
+    assert any("confirmed automatically" in a["message"] for a in store.records("alert", contest.account))
+    assert not changed.auto_confirm()  # already confirmed: once
+    # Different mandated legs: never confirmed automatically.
+    legs = dict(contest.mandatory)
+    first_leg = next(iter(legs))
+    legs[first_leg] += 1
+    other = TradingService(
+        contest.model_copy(update={"mandatory": legs, "initial_nav": contest.initial_nav + 2}),
+        store,
+        demo=True,
+    )
+    assert not other.auto_confirm() and not other.contest_confirmed()
+
+
+async def test_paper_is_armed_again_when_each_sessions_trading_starts(launched):
+    """Operator instruction (Oct 23): with Auto paper ON a pause or safety stop lasts until the next
+    session's trading start at most; with Auto paper OFF it stays paused."""
+    from datetime import datetime, timedelta
+
+    from hedge.config import NY
+
+    service = launched
+    day = service.manifest.scoring_sessions[0]
+    clock = [datetime.combine(day, datetime.min.time(), NY).replace(hour=3)]
+    service.now = lambda: clock[0]
+    service._hard_stop("Operator requested pause")
+    service.autostart_pending = False
+    service._arm_at_trading_start()
+    assert not service.autostart_pending  # no trading window yet
+    clock[0] = clock[0].replace(hour=11)  # trading has started
+    service._arm_at_trading_start()
+    assert service.autostart_pending and service.autostart_session == day
+    statuses = [r["status"] for r in service.store.records("continuity", service.manifest.account)]
+    assert statuses[0] == "AUTOSTART_ARMED"
+    service.autostart_pending = False  # e.g. the operator paused again later that day
+    clock[0] = clock[0].replace(hour=14)
+    service._arm_at_trading_start()
+    assert not service.autostart_pending  # once per session
+    following = service.manifest.scoring_sessions[1]
+    clock[0] = datetime.combine(following, datetime.min.time(), NY).replace(hour=11)
+    service._arm_at_trading_start()
+    assert service.autostart_pending  # the next session's trading start arms it again
+    service.set_autostart("off")
+    service.autostart_session = None
+    clock[0] += timedelta(days=1)
+    service._arm_at_trading_start()
+    assert not service.autostart_pending  # Auto paper OFF: stays paused

@@ -126,6 +126,7 @@ class TradingService:
         self.autostart_override = None  # dashboard choice; None = configuration
         self.autostart_pending = False
         self.autostart_next_at = 0.0
+        self.autostart_session = None  # the session whose trading start last re-armed the start
         self.autostart_recorded_at = float("-inf")
         self.history_lock = asyncio.Lock()
         self.history_task = None  # dashboard-started download (cancelled on stop)
@@ -547,6 +548,46 @@ class TradingService:
             for r in self.store.records("configuration_confirmation", self.manifest.account, 20)
         )
 
+    def _confirmed_legs(self):
+        return {self.manifest.contract_map[i].label: q for i, q in self.manifest.mandatory.items()}
+
+    def auto_confirm(self):
+        """Operator instruction (Oct 23): a changed configuration is confirmed automatically when the
+        operator already confirmed one for the same account and the same mandated legs, the part
+        checked against the instructor's table and TWS. A first confirmation, or any change to the
+        legs or the account, still needs the button. Returns True when it confirmed now."""
+        if self.contest_confirmed() or (not self.demo and not self.broker.qualified):
+            return False
+        legs = self._confirmed_legs()
+        earlier = next(
+            (
+                r
+                for r in self.store.records("configuration_confirmation", self.manifest.account, 200)
+                if r.get("account") == self.manifest.account and r.get("mandatory") == legs
+            ),
+            None,
+        )
+        if earlier is None:
+            return False
+        self.store.record(
+            "configuration_confirmation",
+            self.manifest.account,
+            {
+                "config_hash": self.manifest.config_hash,
+                "account": self.manifest.account,
+                "mandatory": legs,
+                "at": self.now().isoformat(),
+                "automatic": True,
+                "basis": earlier.get("config_hash"),
+            },
+        )
+        self.alert(
+            "info",
+            f"Contest configuration {self.manifest.config_hash[:8]} confirmed automatically: same account "
+            f"and the same seven mandated legs as the confirmed {str(earlier.get('config_hash'))[:8]}",
+        )
+        return True
+
     def confirm_configuration(self, config_hash):
         if config_hash != self.manifest.config_hash:
             raise ValueError("The configuration changed since this page loaded; reload and review it again")
@@ -558,9 +599,7 @@ class TradingService:
             {
                 "config_hash": self.manifest.config_hash,
                 "account": self.manifest.account,
-                "mandatory": {
-                    self.manifest.contract_map[i].label: q for i, q in self.manifest.mandatory.items()
-                },
+                "mandatory": self._confirmed_legs(),
                 "at": self.now().isoformat(),
             },
         )
@@ -936,6 +975,25 @@ class TradingService:
                 self._hard_stop("Automatic paper start cancelled by operator")
         return self.state()
 
+    def _arm_at_trading_start(self):
+        """Operator instruction (Oct 23): with Auto paper ON, paper starts by itself when each
+        session's trading starts (04:00 ET pre-market in the contest), also after a pause or a
+        safety stop the day before. It goes through every activation check like the launch-time
+        start; turn Auto paper OFF to stay paused."""
+        now = self.now()
+        day = self.manifest.active_session(now)
+        if day is None or day == self.autostart_session or not self.manifest.can_trade(now, "STK"):
+            return
+        self.autostart_session = day
+        if self.autostart_mode() == "paper" and self.mode in ("PAUSED", "SHADOW"):
+            self.autostart_pending = True
+            self.autostart_next_at = 0.0
+            self.store.record(
+                "continuity",
+                self.manifest.account,
+                {"status": "AUTOSTART_ARMED", "session": str(day), "at": now.isoformat(), "mode": self.mode},
+            )
+
     def _autostart_step(self, mandate_errors):
         """Launch-time automatic paper start. It only hands over to the automatic-resume path
         (WAITING_DATA -> control('paper', _automatic=True)), so every paper activation check,
@@ -1207,6 +1265,8 @@ class TradingService:
                         await self.execution.pause()
                     if self.mode != "SETUP":
                         self.alert("error", self.health)
+                self.auto_confirm()
+                self._arm_at_trading_start()
                 self._autostart_step(mandate_errors)
                 if self.last_quotes:
                     ids = screen_snapshot(self.manifest, self.last_quotes, self.last_snapshot)
