@@ -758,7 +758,7 @@ async def test_contest_missed_end_of_day_window_asks_for_the_value_and_keeps_the
     contest, ledger, clock, broker, recorder, alerts = contest_prepared(store, manifest)
     day, close = contest.scoring_sessions[0], clock[0]
     await recorder.tick()
-    clock[0] = close + timedelta(hours=4, minutes=20, seconds=1)  # asleep through 20:05-20:20
+    clock[0] = close + timedelta(hours=6, minutes=5, seconds=1)  # asleep through 20:05-22:05
     await recorder.tick()
     assert ledger.closes()[day] == Decimal("1000100.12")  # the 16:00 reading stays meanwhile
     rows = [r for r in store.records("closing_capture", contest.account) if r["status"] == "MISSED"]
@@ -780,8 +780,108 @@ async def test_no_end_of_day_reading_for_a_hand_entered_close_or_outside_the_con
     if case == "manual":
         ledger.import_close(day, Decimal("1000400"), "Operator entry", contest.account)
     calls = broker.calls
-    for minutes in (245, 262):
+    for minutes in (245, 365):
         clock[0] = close + timedelta(minutes=minutes)
         await recorder.tick()
     assert broker.calls == calls and not alerts
     assert not any(r.get("phase") == "end_of_day" for r in store.records("closing_capture", contest.account))
+
+
+def side_ib(manifest, connections, value="983514.38"):
+    """A fake ib_async IB for the read-only side connection."""
+    from eventkit import Event
+
+    class SideIB:
+        def __init__(self):
+            self.accountSummaryEvent = Event()
+            self.connected = False
+            self.futures = {}
+            outer = self
+
+            def start(request_id):
+                outer.futures[request_id] = asyncio.get_running_loop().create_future()
+                return outer.futures[request_id]
+
+            def request(request_id, group, tags):
+                outer.accountSummaryEvent.emit(
+                    SimpleNamespace(account=manifest.account, tag=tags, value=value, currency="USD")
+                )
+                outer.futures[request_id].set_result(None)
+
+            self.wrapper = SimpleNamespace(startReq=start, _endReq=lambda i: None)
+            self.client = SimpleNamespace(
+                getReqId=lambda: 9, reqAccountSummary=request, cancelAccountSummary=lambda i: None
+            )
+
+        async def connectAsync(self, host, port, **kwargs):
+            connections.append(kwargs)
+            self.connected = True
+
+        def managedAccounts(self):
+            return [manifest.account]
+
+        def isConnected(self):
+            return self.connected
+
+        def disconnect(self):
+            self.connected = False
+
+    return SideIB
+
+
+@pytest.mark.parametrize("main", ["disconnected", "timing_out"])
+async def test_a_read_only_side_connection_takes_the_close_when_the_main_one_cannot(
+    manifest, monkeypatch, main
+):
+    from ib_async.ib import StartupFetchNONE
+
+    import hedge.broker as broker_module
+
+    connections = []
+    broker = IBKRBroker(manifest, asyncio.Queue())
+    monkeypatch.setattr(broker_module, "IB", side_ib(manifest, connections))
+
+    async def never(*args):
+        await asyncio.sleep(3600)
+
+    if main == "disconnected":
+        broker.ib = SimpleNamespace(isConnected=lambda: False)
+    else:
+        broker.ib = SimpleNamespace(isConnected=lambda: True, managedAccounts=lambda: [manifest.account])
+        monkeypatch.setattr(broker, "_summary_nav", _first_times_out(broker._summary_nav, broker.ib))
+    result = await asyncio.wait_for(broker.closing_nav_observation(), 5)
+    assert result["nav"] == Decimal("983514.38") and result["source"] == "ibkr"
+    (side,) = connections
+    assert side["readonly"] and side["fetchFields"] == StartupFetchNONE
+    assert side["clientId"] == manifest.client_id + 100
+
+
+def _first_times_out(original, main_ib):
+    async def summary(ib):
+        if ib is main_ib:
+            raise TimeoutError
+        return await original(ib)
+
+    return summary
+
+
+async def test_the_end_of_day_falls_back_to_ibkrs_pushed_nav(store, manifest):
+    contest, ledger, clock, broker, recorder, alerts = contest_prepared(store, manifest)
+    day, close = contest.scoring_sessions[0], clock[0]
+    await recorder.tick()  # 16:00
+    broker.fail = True  # the summary request fails all evening
+    pushed = {"at": close + timedelta(hours=4, minutes=1)}  # 20:01: before 20:02 does not count
+    broker.snapshot = lambda: SimpleNamespace(
+        account=contest.account, nav=Decimal("999700.25"), account_at=pushed["at"]
+    )
+    clock[0] = close + timedelta(hours=4, minutes=5)
+    await recorder.tick()
+    assert "end-of-day" not in ledger.latest_report()["source"]
+    pushed["at"] = close + timedelta(hours=4, minutes=3)
+    clock[0] += timedelta(seconds=16)
+    await recorder.tick()
+    assert ledger.closes()[day] == Decimal("999700.25")
+    assert (
+        "end-of-day observation (account update after the 20:00 ET post-market close"
+        in ledger.latest_report()["source"]
+    )

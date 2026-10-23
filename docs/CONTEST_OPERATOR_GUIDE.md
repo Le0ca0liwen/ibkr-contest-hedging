@@ -76,7 +76,7 @@ reason in plain words. The badge counts the ✗ rows.
 - **Any time:** if paper trading is not on and the Today panel is unclear, type the
   question in **Why isn't it trading? Ask the app** (Overview). The answer is advice;
   the Today rows and the app's checks decide.
-- **16:00, about 16:20 and 20:05-20:20 ET:** the NAV is recorded automatically (Settings &
+- **16:00, about 16:20 and from 20:05 ET (retried until 22:05):** the NAV is recorded automatically (Settings &
   alerts > Automatic closing NAV recorder). Post-market trading and NAV changes count, so the
   **official close is the end-of-day reading after the 20:00 ET post-market close**; the 16:00
   and 16:20 readings are interim and are replaced by it. Only if the end-of-day reading is

@@ -8,6 +8,7 @@ from typing import Protocol
 
 from ib_async import IB, ComboLeg, ExecutionFilter, LimitOrder, MarketOrder, OrderStatus, TagValue
 from ib_async import Contract as IBContract
+from ib_async.ib import StartupFetchNONE
 
 from .continuity import DataUnavailable
 from .models import Execution, PortfolioSnapshot, Position, Quote, WorkingOrder, utcnow
@@ -23,6 +24,10 @@ class BrokerAdapter(Protocol):
     async def submit(self, request, order_id: int): ...
     async def cancel(self, order_id: int): ...
     async def disconnect(self): ...
+
+
+# The closing-NAV side connection's client id: the app's own plus this (read-only, no orders).
+SIDE_CLIENT_OFFSET = 100
 
 
 def finite(value):
@@ -320,12 +325,46 @@ class IBKRBroker:
         return marks
 
     async def closing_nav_observation(self):
-        """Fresh, explicitly requested account NAV; never reuse summary cache."""
-        # Not behind reconcile_lock: the summary has its own request id, so it cannot collide
-        # with the keyed reconcile downloads, and the bell window must not wait out a reconnect
-        # that re-qualifies every contract.
-        if not self.ib.isConnected() or self.manifest.account not in self.ib.managedAccounts():
-            raise ConnectionError("Configured paper account unavailable for closing NAV capture")
+        """Fresh, explicitly requested account NAV; never reuse summary cache.
+
+        Not behind reconcile_lock: the summary has its own request id, so it cannot collide with the
+        keyed reconcile downloads, and a closing window must not wait out a reconnect that
+        re-qualifies every contract. When the app's own connection is down or does not answer, a
+        separate read-only connection that downloads nothing at startup is used instead: after a
+        connectivity loss IBKR can refuse positions for many minutes (2151, Oct 22 19:55-20:24)
+        while account values still answer.
+        """
+        if self.ib.isConnected() and self.manifest.account in self.ib.managedAccounts():
+            try:
+                return await self._summary_nav(self.ib)
+            except (TimeoutError, ConnectionError):
+                pass
+        return await self._side_summary_nav()
+
+    async def _side_summary_nav(self):
+        side = IB()
+        try:
+            await side.connectAsync(
+                self.manifest.gateway_host,
+                self.manifest.gateway_port,
+                clientId=self.manifest.client_id + SIDE_CLIENT_OFFSET,
+                timeout=10,
+                readonly=True,
+                account=self.manifest.account,
+                fetchFields=StartupFetchNONE,
+            )
+            if self.manifest.account not in side.managedAccounts():
+                raise ConnectionError("Configured paper account unavailable for closing NAV capture")
+            return await self._summary_nav(side)
+        except OSError as exc:  # refused/unreachable TWS, timeouts
+            raise ConnectionError(
+                f"Side connection for the closing NAV failed: {exc or type(exc).__name__}"
+            ) from exc
+        finally:
+            side.disconnect()
+
+    async def _summary_nav(self, ib):
+        """One fresh NetLiquidation for the configured account from `ib`, via account summary."""
         observed = []
 
         def receive(value):
@@ -337,11 +376,11 @@ class IBKRBroker:
                 observed.append((Decimal(value.value), utcnow()))
 
         request_at = utcnow()
-        request_id = self.ib.client.getReqId()
-        future = self.ib.wrapper.startReq(request_id)
-        self.ib.accountSummaryEvent += receive
+        request_id = ib.client.getReqId()
+        future = ib.wrapper.startReq(request_id)
+        ib.accountSummaryEvent += receive
         try:
-            self.ib.client.reqAccountSummary(request_id, "All", "NetLiquidation")
+            ib.client.reqAccountSummary(request_id, "All", "NetLiquidation")
             await asyncio.wait_for(future, 15)
             if not observed or any(not value.is_finite() for value, _ in observed):
                 raise ValueError("Fresh IBKR closing NAV unavailable")
@@ -356,10 +395,10 @@ class IBKRBroker:
                 "source": "ibkr",
             }
         finally:
-            self.ib.accountSummaryEvent -= receive
-            self.ib.wrapper._endReq(request_id)
-            if self.ib.isConnected():
-                self.ib.client.cancelAccountSummary(request_id)
+            ib.accountSummaryEvent -= receive
+            ib.wrapper._endReq(request_id)
+            if ib.isConnected():
+                ib.client.cancelAccountSummary(request_id)
 
     async def reconcile(self):
         # Several IB requests use one global completion future. Overlapping

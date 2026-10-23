@@ -36,8 +36,13 @@ needed, no import warning is raised, and the dashboard, readiness row and AI pro
 close official. A manual entry (Settings & alerts > Import an official closing NAV) only corrects a
 missed or wrong capture, and then wins over the API rows for that day. Post-market trading and NAV
 changes count too (operator instruction, Oct 22), so the official close is an **end-of-day**
-NetLiquidation reading 5-20 minutes after the post-market session ends (regular close + 4 h, i.e.
-20:05-20:20 ET), stored as `IBKR API end-of-day observation (...; official close)`. Being the latest
+NetLiquidation reading from 5 minutes after the post-market session ends (regular close + 4 h, i.e.
+from 20:05 ET, retried every 15 s until 22:05), stored as `IBKR API end-of-day observation (...;
+official close)`. Nothing trades after 20:00, so NAV stays put. If the summary request keeps failing,
+IBKR's pushed NetLiquidation received after 20:02 is used instead ("account update" in the source).
+Every closing request falls back to a separate read-only connection (client id + 100) that downloads
+nothing at startup: on Oct 22 IBKR refused positions (2151) from 19:55 to 20:24 after a
+connectivity loss, the app's reconnect never completed, and the 20:05-20:20 window was missed. Being the latest
 API row, it replaces the 16:00 and 16:20 readings, which are interim. It is taken even if both of
 those were missed, and skipped for a day whose close was entered by hand. A missed window is
 recorded (MISSED, phase `end_of_day`) and raises one alert asking for a manual entry. The day-end

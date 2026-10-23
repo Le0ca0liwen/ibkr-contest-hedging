@@ -12,13 +12,16 @@ from .models import digest
 POST_CLOSE = "post-close observation"
 POST_CLOSE_WINDOW = timedelta(minutes=5)
 # A hung broker request must not stall the recorder past its window.
-OBSERVE_TIMEOUT_SECONDS = 30
+OBSERVE_TIMEOUT_SECONDS = 60  # the app's request (15 s), then a side connection (10 s + 15 s)
 # Contest (API close official): NAV keeps changing in the post-market session and that trading
 # counts (operator instruction, Oct 22), so the official close is read once the post-market
 # session (regular close + 4 h: 20:00 ET) has ended. It supersedes the 16:00 and 16:20 readings.
 END_OF_DAY = "end-of-day observation"
 END_OF_DAY_DELAY = timedelta(minutes=5)
-END_OF_DAY_WINDOW = timedelta(minutes=15)
+# Nothing trades after 20:00, so NAV stays put (Oct 22: the 20:05 reading equalled 21:29's): retry
+# for two hours, and accept IBKR's pushed NetLiquidation when the summary request keeps failing.
+END_OF_DAY_WINDOW = timedelta(hours=2)
+PUSHED_AFTER = timedelta(minutes=2)  # a pushed NetLiquidation counts from 20:02 ET
 
 
 def post_close_window(manifest, day):
@@ -113,6 +116,25 @@ class ClosingRecorder:
             except (KeyError, TypeError, ValueError, ArithmeticError):
                 continue
         return None
+
+    def _pushed_nav(self, close):
+        """IBKR's latest pushed NetLiquidation (account-update feed) if it arrived after the
+        post-market close, else None. The end of day's fallback when the summary request fails."""
+        try:
+            snapshot = self.broker.snapshot()
+        except Exception:
+            return None
+        value = Decimal(str(snapshot.nav))
+        if (
+            snapshot.account != self.manifest.account
+            or snapshot.account_at.tzinfo is None
+            or snapshot.account_at < close + EXTENDED_HOURS + PUSHED_AFTER
+            or snapshot.account_at > self.clock() + timedelta(seconds=1)
+            or not value.is_finite()
+            or value <= 0
+        ):
+            return None
+        return value, snapshot.account_at
 
     async def _observe(self, start, deadline):
         observation = await asyncio.wait_for(self.broker.closing_nav_observation(), OBSERVE_TIMEOUT_SECONDS)
@@ -252,7 +274,16 @@ class ClosingRecorder:
             label = {"post_close": "Post-close NAV", "end_of_day": "End-of-day NAV"}.get(phase, "Closing NAV")
             self.status = f"{label} requested for {day}"
             try:
-                value, at = await self._observe(start, deadline)
+                pushed = False
+                try:
+                    value, at = await self._observe(start, deadline)
+                except (ConnectionError, TimeoutError, ValueError, KeyError, TypeError):
+                    # End of day only: the pushed NetLiquidation is the same figure (nothing trades
+                    # after 20:00), so a failing summary request cannot cost the day.
+                    reading = self._pushed_nav(close) if phase == "end_of_day" else None
+                    if reading is None:
+                        raise
+                    (value, at), pushed = reading, True
                 # Report imports can arrive while the broker request is pending.
                 # No await separates this recheck and the synchronous ledger write.
                 if (phase == "close" or fallback) and day in self.ledger.closes():
@@ -332,8 +363,9 @@ class ClosingRecorder:
                     source = (
                         f"SYNTHETIC simulator {END_OF_DAY}"
                         if self.demo
-                        else f"IBKR API {END_OF_DAY} (after the {extended:%H:%M} ET post-market close; "
-                        "NetLiquidation; official close)"
+                        else f"IBKR API {END_OF_DAY} ("
+                        + ("account update " if pushed else "")
+                        + f"after the {extended:%H:%M} ET post-market close; NetLiquidation; official close)"
                     )
                 elif phase == "post_close":
                     options_close = (close + timedelta(minutes=15)).astimezone(NY)
@@ -373,7 +405,7 @@ class ClosingRecorder:
                 )
                 self.status = f"{label} recorded for {day}"
             except (ConnectionError, TimeoutError, ValueError, KeyError, TypeError) as exc:
-                self.status = f"{label} capture waiting for retry: {exc}"
+                self.status = f"{label} capture waiting for retry: {exc or type(exc).__name__}"
                 self.alert("warning", self.status)
             return
 
