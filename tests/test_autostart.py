@@ -507,6 +507,39 @@ def test_the_statement_nav_is_the_official_close_in_the_contest(manifest, store)
     assert row["status"] == "warn" and "statement" in row["detail"]  # a warning: paper still starts
 
 
+def test_a_provisional_day_0_baseline_asks_for_its_statement_too(manifest, store):
+    """Review (Oct 23): Day 0 was recorded while the API close was official; the first score is
+    measured from it, so its statement is requested on later days and in the final warning."""
+    from datetime import datetime
+
+    from hedge.config import NY
+
+    contest = manifest.model_copy(update={"contest_rules": "spcx_rklb_spy"})
+    service = TradingService(contest, store, demo=True)
+    first, second = contest.scoring_sessions[:2]
+    service.now = lambda: datetime.combine(second, datetime.min.time(), NY).replace(hour=10)
+    service.ledger.import_close(
+        contest.day_zero, contest.initial_nav, "IBKR API closing observation", contest.account
+    )
+    service.ledger.import_close(first, contest.initial_nav + 500, "IBKR statement", contest.account)
+    row = {i["label"]: i for i in service.checklist()}["Previous official close"]
+    assert row["status"] == "warn" and f"Day 0 ({contest.day_zero}) statement NAV" in row["detail"]
+    service._warn_api_previous_close(second, service.ledger.previous_close_record(second))
+    messages = [a["message"] for a in store.records("alert", contest.account)]
+    assert any(f"Day 0 baseline {contest.day_zero}" in m for m in messages)
+    service.now = lambda: datetime.combine(contest.scoring_sessions[-1], datetime.min.time(), NY).replace(
+        hour=17
+    )
+    service._scores_with_provisional_warning()
+    final = next(
+        a["message"] for a in store.records("alert", contest.account) if "provisional" in a["message"]
+    )
+    assert str(contest.day_zero) in final
+    service.now = lambda: datetime.combine(second, datetime.min.time(), NY).replace(hour=10)
+    service.ledger.import_close(contest.day_zero, contest.initial_nav, "IBKR statement", contest.account)
+    assert {i["label"]: i for i in service.checklist()}["Previous official close"]["status"] == "ok"
+
+
 async def test_a_changed_configuration_with_the_same_account_and_legs_is_confirmed_automatically(store):
     """Operator instruction (Oct 23): no Confirm press for a settings change."""
     from hedge.demo import demo_manifest

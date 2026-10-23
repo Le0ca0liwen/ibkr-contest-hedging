@@ -23,6 +23,10 @@ END_OF_DAY_DELAY = timedelta(minutes=5)
 # for two hours, and accept IBKR's pushed NetLiquidation when the summary request keeps failing.
 END_OF_DAY_WINDOW = timedelta(hours=2)
 PUSHED_AFTER = timedelta(minutes=2)  # a pushed NetLiquidation counts from 20:02 ET
+# While the predicted statement NAV is still waiting (a restart before the first account snapshot,
+# share closes still being fetched), IBKR's after-hours NetLiquidation is recorded only in the
+# window's last half hour.
+END_OF_DAY_FALLBACK = timedelta(minutes=30)
 
 
 def post_close_window(manifest, day):
@@ -282,11 +286,22 @@ class ClosingRecorder:
             self.status = f"{label} requested for {day}"
             try:
                 pushed = predicted = False
-                estimate = self.statement(now) if phase == "end_of_day" and self.statement else None
+                estimate = None
+                if phase == "end_of_day" and self.statement:
+                    try:
+                        estimate = self.statement(now)
+                    except Exception as exc:  # never blocks the NetLiquidation fallback below
+                        estimate = {"status": "waiting", "reason": f"{type(exc).__name__}: {exc}"}
                 if estimate and estimate.get("status") == "ok":
                     # The statement's own figure: cash after the post-market session, positions at the
                     # closing marks. IBKR's after-hours NetLiquidation is not what is scored.
                     value, at, predicted = Decimal(str(round(estimate["value"], 2))), now, True
+                elif estimate and now < deadline - END_OF_DAY_FALLBACK:
+                    self.status = (
+                        f"End-of-day NAV for {day} waits for the predicted statement NAV: "
+                        f"{estimate.get('reason') or estimate.get('status')}"
+                    )
+                    return
                 else:
                     try:
                         value, at = await self._observe(start, deadline)

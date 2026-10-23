@@ -132,7 +132,8 @@ class StatementTracker:
         self.last_check = None
 
     def estimate(self, day, snapshot, marks, executions, fees):
-        """The predicted statement NAV now, or None until a settled push arrived for `day`."""
+        """The predicted statement NAV now, or None until a settled push arrived for `day`.
+        KeyError(con_id) while a fill since the base has no mark."""
         contracts = self.manifest.contract_map
         if self.day != day:
             self.day, self.base, self.base_at, self.last_check = day, None, None, None
@@ -142,11 +143,11 @@ class StatementTracker:
                 snapshot.cash, snapshot.accrued_cash, snapshot.quantities(), marks, contracts
             )
             if self.base is not None:
-                self.last_check = {
-                    "at": snapshot.account_at.isoformat(),
-                    "settled": value,
-                    "rolled": self._rolled(marks, executions, fees),
-                }
+                try:
+                    rolled = self._rolled(marks, executions, fees)
+                except KeyError:  # a fill without a mark: this settled push re-bases past it
+                    rolled = None
+                self.last_check = {"at": snapshot.account_at.isoformat(), "settled": value, "rolled": rolled}
             self.base, self.base_at = value, snapshot.account_at
         if self.base is None:
             return None

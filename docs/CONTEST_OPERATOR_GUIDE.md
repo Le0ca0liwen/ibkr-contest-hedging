@@ -74,7 +74,8 @@ reason in plain words. The badge counts the ✗ rows.
 - **Before 09:30 ET:** the app can stay running overnight. The instructor scores the IBKR
   statement NAV: enter yesterday's statement "Ending Value" (Settings & alerts > Import an official
   closing NAV; "$1,234,567.89" is accepted as printed). Until you do, the app uses its own
-  prediction and the Previous official close row warns.
+  prediction and the Previous official close row warns. Once, also enter the Oct 21 (Day 0)
+  statement Ending Value: the first score is measured from it.
 - **About 08:45 ET:** with AI on, **Event risk today** (Overview) lists the day's known events
   (earnings, Fed, CPI/jobs data, launches) with their sources and may propose a forecast caution.
   Review it, then press **Approve caution** or leave it; nothing applies until you approve, and an
@@ -83,7 +84,8 @@ reason in plain words. The badge counts the ✗ rows.
   Settings & alerts > Alerts & required actions.
 - **16:16-19:56 ET:** the closing surplus burner may buy and sell SPCX/RKLB shares to spend a
   surplus of the predicted statement NAV (Overview > Closing surplus burner; docs/CLOSING_BURNER.md).
-  **Do not pause or restart between 15:40 and 16:25.** To stop new burn trades only, press
+  **Do not pause or restart between 15:40 and 19:58 ET**: a pause strands an open round trip's
+  shares overnight. To stop new burn trades only, press
   **Burner off**; any open round trip still sells back what it bought.
 - **Any time:** if paper trading is not on and the Today panel is unclear, type the
   question in **Why isn't it trading? Ask the app** (Overview). The answer is advice;

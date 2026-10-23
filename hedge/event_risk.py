@@ -350,10 +350,14 @@ class EventRisk(AIFeature):
             return {}
 
     def burner_off(self, day):
-        """True while the approved caution for session `day` turned the closing burner off (until its close)."""
+        """True while the approved caution for session `day` turned the closing burner off: until the
+        last trade that books to the day (20:00 ET in the contest, where the burner works after the
+        close), although its forecast factors end at the close."""
         try:
             approval = self._approved.get(day)
-            return bool(approval and approval.get("burner_off") and self.service.now() < approval["_expires"])
+            if not approval or not approval.get("burner_off"):
+                return False
+            return self.service.now() < max(approval["_expires"], self.manifest.trading_end(day))
         except Exception:
             return False
 

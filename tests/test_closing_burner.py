@@ -86,11 +86,13 @@ def close_on(day, hour=15, minute=50, second=0):
 async def burning(manifest, store):
     tasks = []
 
-    async def start(at=None, surplus=60, app="paper", **burner):
+    async def start(at=None, surplus=60, app="paper", rules=None, **burner):
         m = with_burner(manifest, **burner)
+        if rules:
+            m = m.model_copy(update={"contest_rules": rules})
         service = TradingService(m, store, demo=True)
         service.burner.quiet_seconds = 0
-        clock = Clock(at or close_on(m.scoring_sessions[0]))
+        clock = Clock(at(m) if callable(at) else at or close_on(m.scoring_sessions[0]))
         service.now = clock
         store.clock = clock
         await service.broker.connect()
@@ -1246,3 +1248,35 @@ async def test_after_the_close_the_burner_waits_for_every_closing_mark(burning, 
     await steps(service)
     assert burner.state_name == "WAITING" and "No closing mark yet for BA" in burner.reason
     assert not service.execution.burn_open()
+
+
+async def test_a_resting_post_market_burn_leg_never_trips_the_working_order_check(burning, monkeypatch):
+    """Review (Oct 23): after 16:00 only the burner may trade, so the monitor's working-order check
+    must accept its resting DAY leg instead of pausing paper and stranding the entry shares."""
+    service, clock = await burning(
+        at=lambda m: close_on(m.scoring_sessions[0], 17, 0), surplus=300, rules="spcx_rklb_spy"
+    )
+    assert service.burner.post_close() and service.mode == "PAPER"
+    target = float(service.closing_target(service.broker.snapshot(), clock.at))
+    samples = target + 300 + np.linspace(-5, 5, 64)
+    monkeypatch.setattr(
+        service,
+        "statement_estimate",
+        lambda now=None: {"status": "ok", "value": float(samples.mean()), "samples": samples},
+    )
+    await steps(service)
+    entry = next(r for r in service.store.intents(service.manifest.account) if r.get("leg") == "entry")
+    assert entry["time_in_force"] == "DAY"
+    part = max(1, abs(entry["signed_quantity"]) * 3 // 5)
+    await service.broker.fill(entry["broker_order_id"], part)  # the rest keeps resting
+    await settle(service)
+    clock.at += timedelta(seconds=1)
+    refresh(service)
+    assert service.last_snapshot.orders
+    await service._check_working_orders()
+    assert service.mode == "PAPER" and not service.execution.paused, service.health
+    clock.at += timedelta(seconds=4)
+    refresh(service)
+    await steps(service, 2)  # cancels the rest and sends the exit for the filled part
+    exit_leg = next(r for r in service.store.intents(service.manifest.account) if r.get("leg") == "exit")
+    assert exit_leg["signed_quantity"] == -part

@@ -218,3 +218,80 @@ def test_the_close_marks_include_spy_options_16_15_close(manifest, store):
     recorder.tick()
     rows = [r for r in store.records("close_marks", m.account) if r.get("phase") == "options_close"]
     assert [r["at"] for r in rows] == [(at(day, 16, 14) + timedelta(seconds=50)).isoformat()]
+
+
+def test_a_fill_without_a_closing_mark_leaves_the_estimate_waiting_until_a_settled_push(manifest, store):
+    """Review (Oct 23): closes not fetched and no shares held, then a burner round trip in shares
+    after the base: the estimate waits (no KeyError through state()) and a settled push heals it."""
+    from hedge.models import digest
+    from hedge.service import TradingService
+
+    service = TradingService(manifest, store, demo=True)
+    day = manifest.scoring_sessions[0]
+    clock = [marks_fixed_at(manifest, day)]
+    service.now = lambda: clock[0]
+    service.broker.positions = {101: 25, 102: 25}  # options only
+    service.broker.now = clock[0]
+    service.last_snapshot = service.broker.snapshot()
+    quotes = {str(i): {"bid": 5.0, "ask": 5.2, "data_type": "live"} for i in (101, 102)}
+    for phase in ("pre_close", "options_close"):
+        store.record(
+            "close_marks",
+            manifest.account,
+            {"quotes": quotes},
+            digest((manifest.contest_id, str(day), phase))[:32],
+        )
+    assert service.statement_estimate()["status"] == "ok"
+    base_at = service.statement.base_at
+    for exec_id, signed, price, seconds in (("b", 100, "194.6", 60), ("s", -100, "194.5", 65)):
+        service.nav_tracker.execution(
+            Execution(
+                exec_id=exec_id,
+                order_id=1,
+                account=manifest.account,
+                con_id=10,
+                signed_quantity=signed,
+                price=Decimal(price),
+                at=base_at + timedelta(seconds=seconds),
+            )
+        )
+    clock[0] += timedelta(minutes=2)
+    waiting = service.statement_estimate()
+    assert waiting["status"] == "waiting" and "No closing mark yet for" in waiting["reason"]
+    assert service.state()["statement_estimate"]["status"] == "waiting"
+    service.broker.now = clock[0]  # a push 55 s after the last fill: settled, and the book is flat
+    service.last_snapshot = service.broker.snapshot()
+    healed = service.statement_estimate()
+    assert healed["status"] == "ok" and service.statement.last_check["rolled"] is None
+
+
+async def test_one_refused_share_keeps_the_other_regular_session_closes(manifest):
+    from datetime import date
+
+    from ib_async import RequestError
+
+    from hedge.broker import IBKRBroker
+
+    day = date(2026, 10, 23)
+
+    class History:
+        def __init__(self, refused):
+            self.refused = refused
+
+        async def reqHistoricalDataAsync(self, native, **kw):
+            if native.symbol in self.refused:
+                raise RequestError(5, 162, "No market data permissions for ARCA STK")
+            return [
+                SimpleNamespace(date=date(2026, 10, 22), close=50.0),
+                SimpleNamespace(date=day, close=51.22),
+            ]
+
+    broker = IBKRBroker.__new__(IBKRBroker)
+    broker.native = {
+        i: SimpleNamespace(secType="STK", symbol=s) for i, s in ((1, "RKLB"), (2, "VOO"), (3, "SPCX"))
+    }
+    broker.ib = History({"VOO"})
+    assert await broker.official_closes(day, [1, 2, 3]) == {1: Decimal("51.22"), 3: Decimal("51.22")}
+    broker.ib = History({"RKLB", "VOO", "SPCX"})
+    with pytest.raises(RequestError):  # nothing at all: the service alerts and retries
+        await broker.official_closes(day, [1, 2, 3])

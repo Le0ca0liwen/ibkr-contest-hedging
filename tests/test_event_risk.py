@@ -784,6 +784,30 @@ async def test_burner_event_off_is_session_scoped_and_downgrade_only(tmp_path, m
     assert restarted.burner.configured_mode() == "off" and not restarted.burner.state()["event_off"]
 
 
+def test_an_approved_burner_off_covers_the_contests_post_close_burner(tmp_path, monkeypatch, manifest, store):
+    """Review (Oct 23): the forecast factors end at the 16:00 close, but the contest burner works
+    16:16-19:56, so an approved 'burner off' lasts until 20:00, the day's last booking moment."""
+    monkeypatch.chdir(tmp_path)
+    data = manifest.model_dump()
+    m = Manifest.model_validate(
+        {
+            **data,
+            "policy": {**data["policy"], "burn_surplus": False},
+            "burner": {"mode": "paper", "admissibility_source": "test", "symbols": ["BA"]},
+        }
+    ).model_copy(update={"contest_rules": "spcx_rklb_spy"})
+    day = m.scoring_sessions[0]
+    clock = {"now": et(day, 9)}
+    service = TradingService(m, store, demo=True)
+    service.now = lambda: clock["now"]
+    service.event_risk.approve(day, {k: 1.0 for k in service.event_risk.keys}, True)
+    for hour, minute in ((15, 50), (16, 16), (19, 30)):
+        clock["now"] = et(day, hour, minute)
+        assert service.event_risk.burner_off(day) and service.burner.configured_mode() == "off"
+    clock["now"] = et(day, 20)
+    assert not service.event_risk.burner_off(day) and service.burner.configured_mode() == "paper"
+
+
 # ------------------------------------------------------------------ search suggestions and schedule
 def test_search_suggestions_route_is_sandboxed(tmp_path, monkeypatch, manifest):
     service = make_service(tmp_path, monkeypatch, manifest, now=et(D1, 10))

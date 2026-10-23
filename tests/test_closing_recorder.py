@@ -715,6 +715,50 @@ async def test_contest_end_of_day_records_the_predicted_statement_nav(store, man
     assert ledger.close_records()[day]["provenance"] == "api"
 
 
+async def test_contest_end_of_day_waits_for_the_predicted_statement_nav(store, manifest):
+    """A predicted value still waiting (a restart before the first account snapshot, closes still
+    being fetched) or failing is retried; IBKR's after-hours NetLiquidation is only the last resort
+    in the window's final half hour."""
+    contest = manifest.model_copy(update={"contest_rules": "spcx_rklb_spy"})
+    ledger, clock, broker, _, alerts = prepared(store, contest)
+    answers = [{"status": "waiting", "reason": "No account snapshot yet"}, KeyError(10)]
+
+    def statement(now):
+        answer = answers.pop(0) if answers else {"status": "ok", "value": 983374.21}
+        if isinstance(answer, Exception):
+            raise answer
+        return answer
+
+    recorder = ClosingRecorder(
+        contest, ledger, broker, lambda: clock[0], lambda *x: alerts.append(x), statement=statement
+    )
+    day, close = contest.scoring_sessions[0], clock[0]
+    await recorder.tick()  # 16:00 bell
+    calls = broker.calls
+    clock[0] = close + timedelta(hours=4, minutes=7)
+    await recorder.tick()
+    assert "waits for the predicted statement NAV: No account snapshot yet" in recorder.status
+    clock[0] += timedelta(seconds=16)
+    await recorder.tick()  # a failing estimate is a wait too, not a crash
+    assert "KeyError" in recorder.status and broker.calls == calls
+    assert "end-of-day" not in ledger.latest_report()["source"]
+    clock[0] += timedelta(seconds=16)
+    await recorder.tick()
+    assert ledger.closes()[day] == Decimal("983374.21")
+    assert "predicted statement NAV" in ledger.latest_report()["source"]
+    # Still waiting in the last half hour: the NetLiquidation is recorded instead.
+    answers[:] = [{"status": "waiting", "reason": "No closing mark yet for RKLB"}] * 3
+    later = contest.scoring_sessions[1]
+    late_close = contest.session_close(later)
+    clock[0] = late_close
+    await recorder.tick()  # its bell
+    clock[0] = late_close + timedelta(hours=5, minutes=36)  # 21:36, window ends 22:05
+    broker.changes = {"nav": Decimal("999812.34")}
+    await recorder.tick()
+    assert ledger.closes()[later] == Decimal("999812.34")
+    assert "closing marks unavailable" in ledger.latest_report()["source"]
+
+
 async def test_contest_end_of_day_is_taken_even_when_the_bell_was_missed(store, manifest):
     contest, ledger, clock, broker, recorder, alerts = contest_prepared(store, manifest)
     day, close = contest.scoring_sessions[0], clock[0]

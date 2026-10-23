@@ -347,28 +347,34 @@ class IBKRBroker:
         """Regular-session closing prices of shares on `day`: IBKR's RTH daily TRADES bar, the price
         the Activity Statement marks stocks at (Oct 22: exact to the cent). {con_id: Decimal};
         shares without a finished bar for `day` are left out (retry later)."""
-        result = {}
+        result, failure = {}, None
         for con_id in con_ids:
             native = self.native.get(con_id)
             if native is None or native.secType != "STK":
                 continue
-            bars = await asyncio.wait_for(
-                self.ib.reqHistoricalDataAsync(
-                    native,
-                    endDateTime="",
-                    durationStr="2 D",
-                    barSizeSetting="1 day",
-                    whatToShow="TRADES",
-                    useRTH=True,
-                    formatDate=1,
-                ),
-                30,
-            )
+            try:
+                bars = await asyncio.wait_for(
+                    self.ib.reqHistoricalDataAsync(
+                        native,
+                        endDateTime="",
+                        durationStr="2 D",
+                        barSizeSetting="1 day",
+                        whatToShow="TRADES",
+                        useRTH=True,
+                        formatDate=1,
+                    ),
+                    30,
+                )
+            except Exception as exc:  # one refused share (e.g. no permission for its exchange) keeps the rest
+                failure = exc
+                continue
             for bar in bars or []:
                 stamp = bar.date
                 bar_day = stamp.date() if isinstance(stamp, datetime) else stamp
                 if bar_day == day and finite(bar.close) and bar.close > 0:
                     result[con_id] = Decimal(str(bar.close))
+        if failure is not None and not result:
+            raise failure
         return result
 
     def portfolio_marks(self):

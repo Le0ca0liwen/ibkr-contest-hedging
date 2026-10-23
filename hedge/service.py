@@ -548,9 +548,19 @@ class TradingService:
                 "reason": "No closing mark yet for " + ", ".join(sorted(lacking)),
                 "value": None,
             }
-        value = self.statement.estimate(
-            day, snapshot, marks, list(self.nav_tracker.executions.values()), self.nav_tracker.fees
-        )
+        try:
+            value = self.statement.estimate(
+                day, snapshot, marks, list(self.nav_tracker.executions.values()), self.nav_tracker.fees
+            )
+        except KeyError as exc:  # traded after the base without a closing mark (e.g. closes not fetched)
+            con_id = exc.args[0] if exc.args else None
+            label = contracts[con_id].label if con_id in contracts else str(con_id)
+            return {
+                **result,
+                "status": "waiting",
+                "reason": f"No closing mark yet for {label} (traded after the close)",
+                "value": None,
+            }
         if value is None:
             return {
                 **result,
@@ -624,6 +634,15 @@ class TradingService:
 
     def _warn_api_previous_close(self, day, record):
         """Once per session: today's target rests on a provisional API close, not the statement."""
+        baseline = self._api_baseline()
+        if baseline and baseline not in self.api_close_warned and (record or {}).get("day") != baseline:
+            self.api_close_warned.add(baseline)
+            self.alert(
+                "warning",
+                f"Import the IBKR statement NAV for the Day 0 baseline {baseline} too: the first scored "
+                "day's score is measured from it, and its close is still an API capture",
+                key=("api_baseline", str(baseline)),
+            )
         if (
             record is None
             or record["provenance"] != "api"
@@ -641,11 +660,21 @@ class TradingService:
         )
         self.api_close_warned.add(day)
 
+    def _api_baseline(self):
+        """Day 0 when its close is still a provisional API capture (statement scoring), else None.
+        The first scored day's score is measured from it, so its statement is needed too."""
+        if self.api_close_official:
+            return None
+        row = self.ledger.close_records().get(self.manifest.day_zero)
+        return self.manifest.day_zero if row is not None and row["provenance"] == "api" else None
+
     def _scores_with_provisional_warning(self):
         """After the final close, warn once if any scored day still rests on an API capture."""
         summary = self.ledger.summary()
         last = self.manifest.scoring_sessions[-1]
         provisional = [d["date"] for d in summary["days"] if d.get("provenance") == "api"]
+        if summary.get("baseline_provenance") == "api":
+            provisional.insert(0, str(self.manifest.day_zero))  # the first score is measured from it
         if provisional and not self.api_close_official and self.now() >= self.manifest.session_close(last):
             self.alert(
                 "warning",
@@ -1022,19 +1051,32 @@ class TradingService:
             previous = self.ledger.previous_close(day)
             provenance = (record or {}).get("provenance")
             official_api = self.api_close_official
+            baseline = self._api_baseline()
             item(
                 "Previous official close",
-                "fail" if previous is None else "warn" if provenance == "api" and not official_api else "ok",
-                (
-                    "Missing: enter IBKR's closing NAV (Settings & alerts)"
-                    if official_api
-                    else "Missing: enter the IBKR statement NAV (Settings & alerts)"
-                )
+                "fail"
                 if previous is None
-                else "API capture only: enter the IBKR statement NAV when it is published"
-                if provenance == "api" and not official_api
-                else f"Recorded: ${float(previous):,.2f}"
-                + (" (IBKR API close)" if provenance == "api" else ""),
+                else "warn"
+                if (provenance == "api" and not official_api) or baseline
+                else "ok",
+                (
+                    (
+                        "Missing: enter IBKR's closing NAV (Settings & alerts)"
+                        if official_api
+                        else "Missing: enter the IBKR statement NAV (Settings & alerts)"
+                    )
+                    if previous is None
+                    else "API capture only: enter the IBKR statement NAV when it is published"
+                    if provenance == "api" and not official_api
+                    else f"Recorded: ${float(previous):,.2f}"
+                    + (" (IBKR API close)" if provenance == "api" else "")
+                )
+                + (
+                    f"; also enter the Day 0 ({baseline}) statement NAV: the ledger's first score still "
+                    "uses its API capture"
+                    if baseline and record is not None and record.get("day") != baseline
+                    else ""
+                ),
             )
         auto = self.autostart_mode()
         blocked = any(i["status"] == "fail" for i in items)
@@ -1587,6 +1629,9 @@ class TradingService:
             # Hard-stop only when working orders worsen or add a breach; one the
             # market caused is the optimizer's to correct, not a reason to stop.
             require_improvement=False,
+            # While a burn cycle is open its DAY leg is the only working order, and the burner alone
+            # trades in the post-market session.
+            post_market=self.execution.burn_open(),
         )
         if not projected_check.passed:
             message = "Working-order check: " + "; ".join(projected_check.reasons)
