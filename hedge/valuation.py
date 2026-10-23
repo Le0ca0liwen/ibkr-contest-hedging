@@ -176,6 +176,11 @@ class NAVTracker:
     within PNL_SETTLE is briefly wrong (by up to ~$1,000 on Oct 22) and is never adopted, and
     IBKR's own marks, fills and fees all come through the P&L. After hours the P&L keeps options
     static, so their model revaluation is added. A base never crosses a session phase.
+
+    When IBKR rolls its P&L day the daily P&L steps while NetLiquidation does not (Oct 22, during
+    19:50-21:29 ET: realized -6,131.77 -> 0 lifted it +6,127). A drop to about zero or a zeroed
+    realized P&L is rebased away; any other one-step move of PNL_JUMP without a fill is not trusted
+    until a NetLiquidation push from after it arrives.
     """
 
     PNL_MAX_AGE = timedelta(seconds=5)  # older P&L: fall back to fill attribution
@@ -183,6 +188,7 @@ class NAVTracker:
     PNL_PROMPT = timedelta(seconds=30)  # the push must be paired with a P&L reading this soon
     PNL_RESET_FLOOR = 25.0  # a new P&L day starts within this of zero ...
     PNL_RESET_STEP = 200.0  # ... after a one-step drop at least this large
+    PNL_JUMP = 1_000.0  # an unexplained one-step move this large waits for a later push
 
     def __init__(self, manifest=None):
         self.key = None
@@ -196,6 +202,7 @@ class NAVTracker:
         self.pnl_phase = None
         self.pnl_base_at = None  # account_at of the push the base came from
         self.pnl_last = None
+        self.realized_last = None
         self.option_refs = {}  # after hours: held options' model mid at the base
         self.source = "fill attribution"
         self.last_check = None  # latest settled push vs the stream's prediction
@@ -219,6 +226,15 @@ class NAVTracker:
             abs(self.pnl_last - pnl) >= self.PNL_RESET_STEP
         )
 
+    def _rolled(self, realized):
+        """IBKR started a new P&L day: its realized P&L was zeroed (no fill moved it there)."""
+        return (
+            realized is not None
+            and self.realized_last is not None
+            and abs(realized) < 0.005
+            and abs(self.realized_last) >= 1.0
+        )
+
     def _after_hours_options(self, snapshot, quotes, contracts, refs):
         """After hours IBKR's P&L keeps held options static while NetLiquidation re-marks them from
         the underlying (observed Oct 22): add their model revaluation since the base."""
@@ -240,13 +256,29 @@ class NAVTracker:
             or (self.pnl_anchor is not None and phase != self.pnl_phase)
         ):
             # Stale or resubscribed stream, or a new session phase: wait for the next settled push.
-            self.pnl_anchor = self.pnl_key = self.pnl_last = self.pnl_base_at = None
+            self.pnl_anchor = self.pnl_key = self.pnl_last = self.realized_last = self.pnl_base_at = None
             self.option_refs = {}
             return None
         pnl, nav = float(snapshot.pnl_daily), float(snapshot.nav)
-        if self.pnl_anchor is not None and self.pnl_last is not None and self._reset(pnl):
-            base, pnl0 = self.pnl_anchor
-            self.pnl_anchor = (base + (self.pnl_last - pnl0), pnl)
+        realized = None if snapshot.pnl_realized is None else float(snapshot.pnl_realized)
+        quiet = not any(e.at >= snapshot.at - self.PNL_SETTLE for e in self.executions.values())
+        if self.pnl_anchor is not None and self.pnl_last is not None:
+            # A P&L-day roll moves the daily P&L, not NAV: shift the base's P&L reading by it. A push
+            # from before the roll is paired with the old day's P&L, so only later pushes are adopted.
+            shift = 0.0
+            if self._reset(pnl):
+                shift = pnl - self.pnl_last
+            elif quiet and self._rolled(realized):
+                shift = realized - self.realized_last
+            if shift:
+                base, pnl0 = self.pnl_anchor
+                self.pnl_anchor, self.pnl_base_at = (base, pnl0 + shift), snapshot.at
+            if quiet and abs(pnl - self.pnl_last - shift) >= self.PNL_JUMP:
+                # Unexplained (a roll that also re-referenced positions, a glitch): no base until a
+                # NetLiquidation push from after this moment.
+                self.pnl_anchor = self.pnl_key = None
+                self.pnl_base_at = snapshot.at
+                self.option_refs = {}
         key = (snapshot.nav, snapshot.account_at)
         # The P&L read when the push arrived; else the current one if the push is recent.
         if snapshot.account_pnl_daily is not None:
@@ -277,7 +309,7 @@ class NAVTracker:
             self.pnl_anchor, self.pnl_key, self.pnl_phase = (nav, at_push), key, phase
             self.pnl_base_at = snapshot.account_at
             self.option_refs = {}
-        self.pnl_last = pnl
+        self.pnl_last, self.realized_last = pnl, realized
         if self.pnl_anchor is None:
             return None
         base, pnl0 = self.pnl_anchor

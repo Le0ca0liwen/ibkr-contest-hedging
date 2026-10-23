@@ -125,6 +125,7 @@ class PortfolioSnapshot(Frozen):
     # IBKR's real-time account daily P&L (reqPnL, about once a second) and when it arrived; None
     # without the stream. NAVTracker rolls the last settled NetLiquidation forward with it.
     pnl_daily: Decimal | None = None
+    pnl_realized: Decimal | None = None  # the realized part of pnl_daily
     pnl_at: datetime | None = None
     account_pnl_daily: Decimal | None = None  # the daily P&L when NetLiquidation last arrived
 

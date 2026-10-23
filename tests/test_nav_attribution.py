@@ -51,10 +51,12 @@ def test_inventory_change_without_fill_cannot_authorize_score_control(manifest, 
         tracker.estimate(changed, quotes, manifest.contract_map)
 
 
-def stream(snapshot, now, seconds, pnl, nav=None, pushed=None):
+def stream(snapshot, now, seconds, pnl, nav=None, pushed=None, realized=None):
     """A snapshot `seconds` after `now` carrying daily P&L `pnl` (read just now)."""
     at = now + timedelta(seconds=seconds)
     update = {"at": at, "pnl_daily": Decimal(str(pnl)), "pnl_at": at}
+    if realized is not None:
+        update["pnl_realized"] = Decimal(str(realized))
     if nav is not None:
         update.update(nav=Decimal(str(nav)), account_at=now + timedelta(seconds=pushed))
     return snapshot.model_copy(update=update)
@@ -127,15 +129,60 @@ def test_the_broker_records_the_account_pnl_stream(manifest):
     broker._pnl(SimpleNamespace(account=manifest.account, dailyPnL=float("nan")))
     broker._pnl(SimpleNamespace(account=manifest.account, dailyPnL=1.7976931348623157e308))  # IBKR "unset"
     assert broker.pnl_daily is None
-    broker._pnl(SimpleNamespace(account=manifest.account, dailyPnL=-123.45))
+    broker._pnl(SimpleNamespace(account=manifest.account, dailyPnL=-123.45, realizedPnL=-6_131.77))
     assert broker.pnl_daily == Decimal("-123.45") and broker.pnl_at is not None
+    assert broker.pnl_realized == Decimal("-6131.77")
+    broker._pnl(SimpleNamespace(account=manifest.account, dailyPnL=5.0, realizedPnL=1.7976931348623157e308))
+    assert broker.pnl_daily == Decimal("5.0") and broker.pnl_realized is None
 
 
-def test_a_large_real_move_is_not_mistaken_for_a_pnl_reset(manifest, snapshot, quotes, now):
+def test_a_large_jump_is_not_rebased_away_but_waits_for_a_later_push(manifest, snapshot, quotes, now):
     tracker = NAVTracker(manifest)
     tracker.estimate(stream(snapshot, now, 1, 100.0), quotes, manifest.contract_map)
-    jump = stream(snapshot, now, 2, 5_100.0)
-    assert tracker.estimate(jump, quotes, manifest.contract_map) == pytest.approx(1_005_000)
+    jump = stream(snapshot, now, 2, 5_100.0)  # not a drop to zero, no fill, realized unchanged
+    assert tracker.estimate(jump, quotes, manifest.contract_map) == pytest.approx(1_000_000)
+    assert tracker.source == "fill attribution"
+    # The push the old base came from (paired with the old P&L) is not re-adopted ...
+    old_push = stream(snapshot, now, 30, 5_110.0)
+    assert tracker.estimate(old_push, quotes, manifest.contract_map) == pytest.approx(1_000_000)
+    assert tracker.source == "fill attribution"
+    # ... a push from after the jump decides: here NAV really moved.
+    pushed = stream(snapshot, now, 182, 5_120.0, nav=1_005_020, pushed=180)
+    assert tracker.estimate(pushed, quotes, manifest.contract_map) == pytest.approx(1_005_020)
+    assert tracker.source == "IBKR P&L stream (1 s)"
+
+
+def test_ibkrs_pnl_day_roll_keeps_the_estimate_continuous(manifest, snapshot, quotes, now):
+    """Oct 22: realized -6,131.77 -> 0 lifted the daily P&L -496.04 -> +5,631.17; NAV held."""
+    tracker = NAVTracker(manifest)
+    tracker.estimate(stream(snapshot, now, 1, -496.04, realized=-6_131.77), quotes, manifest.contract_map)
+    rolled = stream(snapshot, now, 2, 5_631.17, realized=0.0)
+    assert tracker.estimate(rolled, quotes, manifest.contract_map) == pytest.approx(1_000_000 - 4.56)
+    assert tracker.source == "IBKR P&L stream (1 s)"
+    later = stream(snapshot, now, 3, 5_641.17, realized=0.0)
+    assert tracker.estimate(later, quotes, manifest.contract_map) == pytest.approx(1_000_000 + 5.44)
+    # The next push is paired with the new day's P&L and agrees.
+    pushed = stream(snapshot, now, 181, 5_641.17, nav=1_000_005.44, pushed=180, realized=0.0)
+    assert tracker.estimate(pushed, quotes, manifest.contract_map) == pytest.approx(1_000_005.44)
+    assert tracker.last_check["difference"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_a_fill_that_zeroes_realized_pnl_is_not_a_roll(manifest, snapshot, quotes, now):
+    tracker = NAVTracker(manifest)
+    tracker.estimate(stream(snapshot, now, 1, -40.0, realized=-300.0), quotes, manifest.contract_map)
+    tracker.execution(
+        Execution(
+            exec_id="close.01",
+            order_id=1,
+            account=manifest.account,
+            con_id=10,
+            signed_quantity=-10,
+            price=Decimal("195"),
+            at=now + timedelta(seconds=2),
+        )
+    )
+    filled = stream(snapshot, now, 3, -42.0, realized=0.0)  # the fill realized +300; P&L moved -2
+    assert tracker.estimate(filled, quotes, manifest.contract_map) == pytest.approx(1_000_000 - 2)
 
 
 def test_a_stream_gap_waits_for_a_fresh_settled_push(manifest, snapshot, quotes, now):

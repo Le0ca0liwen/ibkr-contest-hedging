@@ -49,6 +49,7 @@ class IBKRBroker:
         self.reconcile_lock = asyncio.Lock()
         self.account_at = datetime.min.replace(tzinfo=timezone.utc)
         self.pnl_daily = self.pnl_at = None  # real-time account daily P&L (reqPnL)
+        self.pnl_realized = None  # its realized part (IBKR zeroes it when its P&L day rolls)
         self.account_pnl = None  # the daily P&L when NetLiquidation last arrived (pairs the two)
         self.quote_times, self.greek_times = {}, {}
         self.ticks_by_contract = {}
@@ -95,12 +96,15 @@ class IBKRBroker:
         # IBKR marks an unset value with DBL_MAX (1.797e308), which isfinite() accepts.
         if pnl.account == self.manifest.account and math.isfinite(pnl.dailyPnL) and abs(pnl.dailyPnL) < 1e12:
             self.pnl_daily, self.pnl_at = Decimal(str(pnl.dailyPnL)), utcnow()
+            realized = getattr(pnl, "realizedPnL", None)
+            valid = isinstance(realized, int | float) and math.isfinite(realized) and abs(realized) < 1e12
+            self.pnl_realized = Decimal(str(realized)) if valid else None
 
     def _subscribe_pnl(self):
         """Real-time account P&L, about once a second (account values arrive only every ~3 min).
         A subscription from before a reconnect is dead: replace it."""
         account = self.manifest.account
-        self.pnl_daily = self.pnl_at = self.account_pnl = None
+        self.pnl_daily = self.pnl_at = self.pnl_realized = self.account_pnl = None
         try:
             if (account, "") in self.ib.wrapper.pnlKey2ReqId:
                 self.ib.cancelPnL(account)
@@ -515,6 +519,7 @@ class IBKRBroker:
             connected=self.ib.isConnected(),
             reconciled=self.reconciled,
             pnl_daily=self.pnl_daily,
+            pnl_realized=self.pnl_realized,
             pnl_at=self.pnl_at,
             account_pnl_daily=self.account_pnl,
         )
