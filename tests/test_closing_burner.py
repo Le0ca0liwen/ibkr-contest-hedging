@@ -1107,6 +1107,32 @@ async def test_an_unfilled_day_leg_is_cancelled_and_the_cycle_closes(burning, mo
     assert not service.execution.burn_open() and not service.broker.snapshot().orders
 
 
+async def test_a_failed_or_unanswered_day_leg_cancel_is_sent_again(burning, monkeypatch):
+    service, clock = await burning()
+    monkeypatch.setattr(service.execution, "burn_time_in_force", lambda con_id, now: "DAY")
+    await steps(service)
+    real_cancel, calls = service.execution.cancel_order, []
+
+    async def flaky(order_id):
+        calls.append(order_id)
+        if len(calls) == 1:
+            raise ConnectionError("IBKR disconnected")
+        if len(calls) == 2:
+            return  # accepted but lost: the order keeps resting
+        await real_cancel(order_id)
+
+    monkeypatch.setattr(service.execution, "cancel_order", flaky)
+    clock.at += timedelta(seconds=4)
+    await steps(service)  # fails
+    await steps(service)  # sent again at once, but lost
+    assert len(calls) == 2 and service.execution.burn_open()
+    clock.at += timedelta(seconds=11)  # unanswered past the leg timeout: sent once more
+    await steps(service, 3)
+    assert len(calls) == 3
+    assert results(service)[0]["status"] == "CLOSED" and not service.broker.snapshot().orders
+    assert events(service).count("CANCEL_FAILED") == 1
+
+
 async def test_the_burner_spends_only_on_the_settled_nav_stream(burning):
     service, clock = await burning(require_pnl_stream=True)
     await steps(service)

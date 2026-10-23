@@ -97,7 +97,8 @@ class ClosingBurner:
         # an execution not seen before is a late fill.
         self.known_exec_ids = set()
         self.exit_wait_since = None  # first wide-book refusal of the current exit
-        self.cancel_requested = set()  # extended-hours DAY legs already sent a cancel
+        self.cancel_requested = {}  # extended-hours DAY leg id -> when its cancel was last sent
+        self.cancel_failed = set()  # legs whose failed cancel was already recorded
         # Session -> spend budget (burned so far + what is still needed), lowered at every planned
         # cycle and never raised: a forecast that drifts up on noise cannot ratchet spending up.
         self.budgets = {}
@@ -321,20 +322,26 @@ class ClosingBurner:
             self._set("ENTRY" if leg["leg"] == "entry" else "EXIT", f"Waiting for the {leg['leg']} IOC")
             age = (now - timestamp(leg["created_at"])).total_seconds()
             sent = s.execution.sent_at.get(leg["id"])
+            resting = (now - sent if sent is not None else timedelta(seconds=age)).total_seconds()
+            requested = self.cancel_requested.get(leg["id"])
             if (
                 leg.get("time_in_force") == "DAY"
                 and leg["broker_order_id"] is not None
-                and leg["id"] not in self.cancel_requested
-                and (now - sent if sent is not None else timedelta(seconds=age)).total_seconds()
-                >= DAY_LEG_SECONDS
+                and resting >= DAY_LEG_SECONDS
+                and (requested is None or (now - requested).total_seconds() >= LEG_TIMEOUT_SECONDS)
             ):
-                # Extended hours: cancel what did not fill at once, exactly as an IOC would.
-                self.cancel_requested.add(leg["id"])
-                self._event(c, "CANCEL", intent_id=leg["id"], reason="Extended-hours DAY leg rest")
+                # Extended hours: cancel what did not fill at once, exactly as an IOC would. A cancel
+                # that failed is retried on the next step, one that went unanswered after the timeout.
+                self.cancel_requested[leg["id"]] = now
+                if leg["id"] not in self.cancel_failed:  # retries while disconnected stay quiet
+                    self._event(c, "CANCEL", intent_id=leg["id"], reason="Extended-hours DAY leg rest")
                 try:
                     await s.execution.cancel_order(leg["broker_order_id"])
-                except Exception as exc:  # e.g. already final: the timeout reconcile settles it
-                    self._event(c, "CANCEL_FAILED", intent_id=leg["id"], reason=str(exc))
+                except Exception as exc:  # e.g. disconnected, or already final
+                    self.cancel_requested.pop(leg["id"], None)
+                    if leg["id"] not in self.cancel_failed:
+                        self.cancel_failed.add(leg["id"])
+                        self._event(c, "CANCEL_FAILED", intent_id=leg["id"], reason=str(exc))
             if (closed or age > LEG_TIMEOUT_SECONDS) and leg["id"] not in self.reconcile_requested:
                 self.reconcile_requested.add(leg["id"])
                 self._event(c, "RECONCILE", intent_id=leg["id"], reason="IOC leg not terminal")
@@ -593,6 +600,7 @@ class ClosingBurner:
         self.reported.clear()
         self.reconcile_requested.clear()
         self.cancel_requested.clear()
+        self.cancel_failed.clear()
         self.verified.clear()
         self.confirmations.clear()
         self._stats = None
