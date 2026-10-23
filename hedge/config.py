@@ -21,6 +21,10 @@ EXTENDED_HOURS = timedelta(hours=4)
 # Pre-market session before the regular open (04:00-09:30 ET): shares hedge through it as well
 # (operator instruction, Oct 22). The day's NAV runs from the previous scored close (20:00 ET).
 PRE_MARKET = timedelta(hours=5, minutes=30)
+# Options on these ETFs trade until 16:15 ET, and IBKR's statement marks them then (SPY on the
+# Oct 22 statement: between the 16:00 and 16:20 midpoints); every other option closes at 16:00.
+LATE_OPTION_SYMBOLS = frozenset({"SPY", "QQQ", "IWM", "DIA"})
+LATE_OPTION_CLOSE = timedelta(minutes=15)
 # Implied vol rises when spot falls (leverage effect); broad index ETFs show it most strongly.
 BROAD_INDEX_ETFS = frozenset({"SPY", "IVV", "VOO", "SPLG", "QQQ", "IWM", "DIA"})
 INDEX_SPOT_VOL_CORRELATION = -0.7
@@ -449,12 +453,26 @@ class Manifest(Frozen):
 
     @property
     def extended_hours(self) -> bool:
-        """The contest scores the NAV after the post-market session and hedges through it."""
+        """Contest: shares also trade in the pre-market session, and a post-market trade still books
+        to the day's statement (only the closing burner trades then; see can_trade)."""
         return self.contest_rules == "spcx_rklb_spy"
 
     def scoring_close(self, day: date) -> datetime:
-        """When the day's scored NAV is set: the regular close, or the end of the post-market
-        session (20:00 ET) in the contest. The official reading follows it (closing.py)."""
+        """When the day's scored NAV stops moving with the market: the regular close. The contest
+        scores IBKR's Activity Statement NAV, which marks the day's end positions at the 16:00
+        regular-session closing prices (stocks) and closing midpoints (options; SPY's at 16:15):
+        verified to the cent on the Oct 22 statement. Later trades change it only through their
+        price versus those marks (trading_end)."""
+        return self.session_close(day)
+
+    def option_close(self, day: date, symbol: str) -> datetime:
+        """When an option on `symbol` stops trading and is marked: 16:15 ET for SPY-style ETFs."""
+        close = self.session_close(day)
+        return close + LATE_OPTION_CLOSE if symbol in LATE_OPTION_SYMBOLS else close
+
+    def trading_end(self, day: date) -> datetime:
+        """The last moment a trade still books to the day's statement: the end of the post-market
+        session (20:00 ET) in the contest, the regular close otherwise."""
         close = self.session_close(day)
         return close + EXTENDED_HOURS if self.extended_hours else close
 
@@ -481,11 +499,15 @@ class Manifest(Frozen):
         return "post" if self.post_market(now) is not None else None
 
     def next_close(self, now: datetime) -> datetime | None:
-        return next(
+        close = next(
             (self.scoring_close(d) for d in self.scoring_sessions if self.scoring_close(d) > now), None
         )
+        if close is None and self.scoring_sessions and now < self.trading_end(self.scoring_sessions[-1]):
+            # After the final close the post-market session still books to the last statement.
+            return self.trading_end(self.scoring_sessions[-1])
+        return close
 
-    def can_trade(self, now: datetime, kind: str, setup: bool = False) -> bool:
+    def can_trade(self, now: datetime, kind: str, setup: bool = False, post_market: bool = False) -> bool:
         day = self.active_session(now)
         if day is None:
             return False
@@ -498,15 +520,19 @@ class Manifest(Frozen):
         )
         if self.session_open(day) <= now < self.session_close(day) - timedelta(minutes=cutoff):
             return True
-        # Contest pre-market session (until the open) and post-market session (until the same
-        # cutoff before 20:00 ET): shares only.
+        # Contest pre-market session (until the open): shares only. The post-market session (until
+        # the same cutoff before 20:00 ET) only for post_market callers, the closing burner: the
+        # statement already marks every position at the close, so a later trade only books its
+        # price versus that mark plus fees, never a hedge.
         if kind != "STK" or setup:
             return False
         if self.pre_market(now) is not None:
             return True
-        return self.post_market(now) is not None and now < self.session_close(
-            day
-        ) + EXTENDED_HOURS - timedelta(minutes=cutoff)
+        return (
+            post_market
+            and self.post_market(now) is not None
+            and now < self.trading_end(day) - timedelta(minutes=cutoff)
+        )
 
     def accrual_days(self, day: date) -> int:
         days = (self.day_zero, *self.scoring_sessions)

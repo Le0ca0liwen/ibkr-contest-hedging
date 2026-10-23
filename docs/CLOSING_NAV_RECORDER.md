@@ -29,29 +29,28 @@ organizer's corrected IBKR statement revises the value and adjacent scores.
 
 ## Statement first
 
-For the SPCX/RKLB/SPY contest (`contest_rules: spcx_rklb_spy`) the operator's instruction of
-Oct 21 applies instead: the IBKR API closing NAV is the official close. Its API rows (bell capture
-and, when taken, the post-close observation) are final, not provisional: no statement import is
-needed, no import warning is raised, and the dashboard, readiness row and AI prompts call the API
-close official. A manual entry (Settings & alerts > Import an official closing NAV) only corrects a
-missed or wrong capture, and then wins over the API rows for that day. Post-market trading and NAV
-changes count too (operator instruction, Oct 22), so the official close is an **end-of-day**
-NetLiquidation reading from 5 minutes after the post-market session ends (regular close + 4 h, i.e.
-from 20:05 ET, retried every 15 s until 22:05), stored as `IBKR API end-of-day observation (...;
-official close)`. Nothing trades after 20:00, so NAV stays put. If the summary request keeps failing,
-IBKR's pushed NetLiquidation received after 20:02 is used instead ("account update" in the source).
-Every closing request falls back to a separate read-only connection (client id + 100) that downloads
-nothing at startup: on Oct 22 IBKR refused positions (2151) from 19:55 to 20:24 after a
-connectivity loss, the app's reconnect never completed, and the 20:05-20:20 window was missed. Being the latest
-API row, it replaces the 16:00 and 16:20 readings, which are interim. It is taken even if both of
-those were missed, and skipped for a day whose close was entered by hand. A missed window is
-recorded (MISSED, phase `end_of_day`) and raises one alert asking for a manual entry. The day-end
-report waits for it (20:21 ET). In this contest a missed bell
-capture gets one more try: the post-close observation (16:20-16:25 ET) is recorded as the close,
-with "; bell capture missed" in its source, unless it differs from the NAV of the last broker
-snapshot taken before the close by more than `late_capture_max_delta` x initial NAV. The day is
-marked MISSED (manual entry required) only when that also fails. The rest of this section describes
-the statement-first behaviour that other contest configurations (e.g. practice) keep.
+For the SPCX/RKLB/SPY contest (`contest_rules: spcx_rklb_spy`) the instructor confirmed on Oct 23
+that the score uses the IBKR Activity Statement NAV (Ending Value), which supersedes the Oct 21
+instruction that the API closing NetLiquidation was official and the Oct 22 one that the NAV after
+the 20:00 ET post-market close was. API rows are therefore provisional again (`api_close_official`
+is False): the dashboard, the readiness row and the AI prompts ask for the statement import.
+
+The statement NAV is cash after every trade booked that day (trade date: through 20:00 ET) plus
+accrued interest plus every position at its closing mark: shares at the 16:00 regular-session
+close, options at their closing midpoint (16:15 for SPY options). See docs/STATEMENT_NAV.md. So the
+end-of-day reading (from 20:05 ET, retried every 15 s until 22:05) now records the **predicted
+statement NAV** (`TradingService.statement_estimate`), stored as `IBKR API end-of-day observation
+(predicted statement NAV after the 20:00 ET post-market close: ...; provisional until the IBKR
+statement is imported)`. If the closing marks are unavailable it records the API NetLiquidation and
+says "closing marks unavailable". Every closing request falls back to a separate read-only
+connection (client id + 100) that downloads nothing at startup: on Oct 22 IBKR refused positions
+(2151) from 19:55 to 20:24 after a connectivity loss, the app's reconnect never completed, and the
+20:05-20:20 window was missed. Being the latest API row, it replaces the 16:00 and 16:20 readings,
+which are interim. It is skipped for a day whose close was entered by hand. A missed window is
+recorded (MISSED, phase `end_of_day`) and raises one alert asking for the statement. The day-end
+report waits for it (20:21 ET). Each morning, enter the previous day's statement Ending Value
+(Settings & alerts > Import an official closing NAV); it supersedes the API rows. The rest of this
+section applies to every configuration.
 
 The instructor scores the official IBKR Custom Statement NAV. The bell capture can
 differ from it by roughly $300-1,200: API account values refresh only about every

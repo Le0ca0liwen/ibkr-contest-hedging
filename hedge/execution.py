@@ -623,7 +623,7 @@ class ExecutionManager:
             current = self.gate.engine.evaluate(snapshot, quotes, scenarios, actual)
             corrective = leg == "exit" and not current.passed
             result = self.gate.validate(
-                snapshot, quotes, scenarios, after, now, 2 * reserve, corrective=corrective
+                snapshot, quotes, scenarios, after, now, 2 * reserve, corrective=corrective, post_market=True
             )
             if not result.passed:
                 return {"submitted": False, "reason": "Burn leg risk: " + "; ".join(result.reasons)}
@@ -715,6 +715,7 @@ class ExecutionManager:
                     clock,
                     2 * reserve,
                     corrective=leg == "exit" and not current.passed,
+                    post_market=True,  # burn legs alone trade in the post-market session
                 )
                 if not gate.passed:
                     raise ValueError("; ".join(gate.reasons))

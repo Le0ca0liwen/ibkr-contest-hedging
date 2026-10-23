@@ -52,7 +52,7 @@ reason in plain words. The badge counts the ✗ rows.
 | Contest configuration | Press **Confirm contest configuration** (enabled once IBKR has verified every contract), check the seven legs in the dialog, confirm. Needed once per configuration. |
 | Quotes | Moomoo quotes are live 09:30-16:00 ET. Outside those hours this row is a !, not a problem. |
 | Price history | Press **Refresh price history now** if it failed or is old. The app also refreshes it by itself between 08:30 and 09:29 ET. |
-| Previous official close | Recorded automatically: the IBKR API end-of-day NAV (read after the 20:00 ET post-market close) is the official close for this contest. Only if it is missing (capture missed), enter IBKR's end-of-day NAV in Settings & alerts > Import an official closing NAV. Missing blocks paper trading. |
+| Previous official close | The scored close is the IBKR statement NAV. The app records its predicted value after 20:05 ET (! until you import the statement); enter the statement "Ending Value" in Settings & alerts > Import an official closing NAV each morning. Missing blocks paper trading. |
 | Automatic paper start | Shows whether it is on and what it waits for. |
 | Trading | The current mode and why it waits, if it does. |
 
@@ -69,47 +69,39 @@ reason in plain words. The badge counts the ✗ rows.
 
 ## Every scored day (Oct 22-23, Oct 26-30, Nov 2-4)
 
-- **Before 09:30 ET:** the app can stay running overnight. Check the Today panel.
-  Nothing to import: yesterday's IBKR API closing NAV is the official close. Only if
-  the Previous official close row says Missing, enter IBKR's closing NAV (Settings &
-  alerts > Import an official closing NAV; "$1,234,567.89" is accepted as printed).
+- **Before 09:30 ET:** the app can stay running overnight. The instructor scores the IBKR
+  statement NAV: enter yesterday's statement "Ending Value" (Settings & alerts > Import an official
+  closing NAV; "$1,234,567.89" is accepted as printed). Until you do, the app uses its own
+  prediction and the Previous official close row warns.
 - **About 08:45 ET:** with AI on, **Event risk today** (Overview) lists the day's known events
   (earnings, Fed, CPI/jobs data, launches) with their sources and may propose a forecast caution.
   Review it, then press **Approve caution** or leave it; nothing applies until you approve, and an
   approval expires at that day's close.
 - **09:30 onward:** hedging resumes by itself. Watch the Today panel and
   Settings & alerts > Alerts & required actions.
-- **19:40-19:56 ET:** the closing surplus burner may buy and sell SPCX/RKLB shares
-  to spend a forecast surplus before the 20:00 scored close (Overview > Closing surplus
-  burner; details in docs/CLOSING_BURNER.md).
-  **Do not pause or restart between 15:40 and 16:25, nor between 19:35 and 20:25.** To stop
-  new burn trades only, press **Burner off**; any open round trip still sells back what it
-  bought.
+- **16:16-19:56 ET:** the closing surplus burner may buy and sell SPCX/RKLB shares to spend a
+  surplus of the predicted statement NAV (Overview > Closing surplus burner; docs/CLOSING_BURNER.md).
+  **Do not pause or restart between 15:40 and 16:25.** To stop new burn trades only, press
+  **Burner off**; any open round trip still sells back what it bought.
 - **Any time:** if paper trading is not on and the Today panel is unclear, type the
   question in **Why isn't it trading? Ask the app** (Overview). The answer is advice;
   the Today rows and the app's checks decide.
-- **16:00, about 16:20 and from 20:05 ET (retried until 22:05):** the NAV is recorded automatically (Settings &
-  alerts > Automatic closing NAV recorder). Post-market trading and NAV changes count, so the
-  **official close is the end-of-day reading after the 20:00 ET post-market close**; the 16:00
-  and 16:20 readings are interim and are replaced by it. Only if the end-of-day reading is
-  missed does the app ask you to enter IBKR's end-of-day NAV (Settings & alerts > Import an
-  official closing NAV). Keep the Mac on power with the lid open through 20:20 ET: a sleeping
-  Mac records nothing. If it did sleep, the app refreshes its orders and positions from IBKR on
-  waking and says so in the alerts.
-- **04:00-09:30 ET (pre-market) and 16:00-19:58 ET (post-market):** paper trading continues with
-  shares only (SPCX, RKLB and any added hedge stocks such as VOO/IVV), with limit orders flagged for
-  outside regular hours; options trade only 09:30-15:45. Outside regular hours the app values held
-  options from their live underlying, as IBKR's own marks do, so the Quotes row may read "... options
-  valued from their live underlying outside regular hours". The forecast runs to the 20:00 scored
-  close. With Auto paper ON the app starts trading at 04:00 once every check passes, so keep the Mac
-  awake and on power overnight (or press Pause before you leave it, and Enable in the morning).
+- **The scored close (statement NAV):** cash after the post-market session plus positions at the
+  closing marks (shares at the 16:00 close, options at their closing midpoint, SPY options at
+  16:15). After 16:00 the market no longer moves it, so the app stops hedging then; only the burner
+  trades after the close. From 16:16 the dashboard's NAV is this predicted statement NAV, and from
+  20:05 ET it is recorded as the day's provisional close; the imported statement replaces it.
+- **04:00-09:30 ET (pre-market):** paper trading continues with shares only (SPCX, RKLB and any
+  added hedge stocks such as VOO/IVV), with limit orders flagged for outside regular hours; options
+  trade only 09:30-15:45. The forecast runs to the 16:00 close. With Auto paper ON the app starts
+  trading at 04:00 once every check passes.
 - **After about 20:21:** read **Day-end miss explanation** (Overview, under the scoring
   ledger): how far the official close was from the target and why. Nothing to press.
 
 ## After the contest (Nov 4)
 
-Keep the app running until about 16:25 ET on Nov 4. The recorded API closes are the
-official scores; no statement import is needed. Download the records with the
+Keep the app running until about 20:25 ET on Nov 4 (post-market trades book to that day's
+statement). On Nov 5, import the Nov 4 statement Ending Value as on every other morning. Download the records with the
 "Export … ↗" links: scores, burn cycles and day reports on Overview, orders, fills and
 execution quality on Trades, decisions on Decisions.
 

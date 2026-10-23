@@ -343,6 +343,34 @@ class IBKRBroker:
                 self.market_rules[c.con_id] = await self.ib.reqMarketRuleAsync(rule_id)
         self.native[c.con_id] = native
 
+    async def official_closes(self, day, con_ids):
+        """Regular-session closing prices of shares on `day`: IBKR's RTH daily TRADES bar, the price
+        the Activity Statement marks stocks at (Oct 22: exact to the cent). {con_id: Decimal};
+        shares without a finished bar for `day` are left out (retry later)."""
+        result = {}
+        for con_id in con_ids:
+            native = self.native.get(con_id)
+            if native is None or native.secType != "STK":
+                continue
+            bars = await asyncio.wait_for(
+                self.ib.reqHistoricalDataAsync(
+                    native,
+                    endDateTime="",
+                    durationStr="2 D",
+                    barSizeSetting="1 day",
+                    whatToShow="TRADES",
+                    useRTH=True,
+                    formatDate=1,
+                ),
+                30,
+            )
+            for bar in bars or []:
+                stamp = bar.date
+                bar_day = stamp.date() if isinstance(stamp, datetime) else stamp
+                if bar_day == day and finite(bar.close) and bar.close > 0:
+                    result[con_id] = Decimal(str(bar.close))
+        return result
+
     def portfolio_marks(self):
         """IBKR's own position marks from account updates (no market-data subscription needed)."""
         marks = {}
@@ -855,6 +883,13 @@ class SimBroker:
 
     def portfolio_marks(self):
         return {}
+
+    async def official_closes(self, day, con_ids):
+        return {
+            i: Decimal(str(self._quotes[i].mid))
+            for i in con_ids
+            if i in self._quotes and self.manifest.contract_map[i].kind == "STK"
+        }
 
     async def closing_nav_observation(self):
         if not self.connected:

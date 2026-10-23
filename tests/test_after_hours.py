@@ -24,22 +24,34 @@ def at(day, hour, minute=0, second=0):
     return datetime.combine(day, datetime.min.time(), NY).replace(hour=hour, minute=minute, second=second)
 
 
-def test_shares_trade_through_the_post_market_session_and_options_do_not(manifest):
+def test_only_the_closing_burner_trades_shares_in_the_post_market_session(manifest):
+    """The statement marks every position at the close (Oct 23): a post-market hedge would only
+    book its price versus that mark plus fees, so the hedger stops at the close."""
     m, day = contest(manifest), manifest.scoring_sessions[0]
-    assert m.can_trade(at(day, 17), "STK") and not m.can_trade(at(day, 17), "OPT")
-    assert m.can_trade(at(day, 19, 57, 59), "STK") and not m.can_trade(at(day, 19, 58), "STK")
-    assert not m.can_trade(at(day, 15, 59), "STK")  # the regular close's own cutoff still applies
-    assert not m.can_trade(at(day, 20, 30), "STK")
-    assert not m.can_trade(at(day, 17), "STK", setup=True)
+    assert not m.can_trade(at(day, 17), "STK") and not m.can_trade(at(day, 17), "OPT")
+    burner = {"post_market": True}
+    assert m.can_trade(at(day, 17), "STK", **burner) and not m.can_trade(at(day, 17), "OPT", **burner)
+    assert m.can_trade(at(day, 19, 57, 59), "STK", **burner) and not m.can_trade(
+        at(day, 19, 58), "STK", **burner
+    )
+    assert not m.can_trade(at(day, 15, 59), "STK", **burner)  # the regular close's own cutoff still applies
+    assert not m.can_trade(at(day, 20, 30), "STK", **burner)
+    assert not m.can_trade(at(day, 17), "STK", setup=True, post_market=True)
+    assert m.can_trade(at(day, 5), "STK")  # pre-market hedging continues
     assert m.post_market(at(day, 16)) == day and m.post_market(at(day, 20)) is None
     assert not manifest.can_trade(at(day, 17), "STK") and manifest.post_market(at(day, 17)) is None
 
 
-def test_the_forecast_runs_to_the_20_00_scored_close(manifest):
+def test_the_forecast_runs_to_the_16_00_statement_close(manifest):
+    """The statement marks at the regular close (Oct 23); post-market trades book until 20:00."""
     m, day = contest(manifest), manifest.scoring_sessions[0]
-    assert m.scoring_close(day) == at(day, 20)
-    assert m.next_close(at(day, 10)) == at(day, 20) and m.next_close(at(day, 17)) == at(day, 20)
-    assert m.next_close(at(day, 20, 1)) == at(manifest.scoring_sessions[1], 20)
+    assert m.scoring_close(day) == at(day, 16) and m.trading_end(day) == at(day, 20)
+    assert m.next_close(at(day, 10)) == at(day, 16)
+    assert m.next_close(at(day, 17)) == at(manifest.scoring_sessions[1], 16)
+    last = m.scoring_sessions[-1]
+    assert m.next_close(at(last, 17)) == at(last, 20)  # the final statement still books until 20:00
+    assert m.next_close(at(last, 20, 1)) is None
+    assert m.option_close(day, "SPY") == at(day, 16, 15) and m.option_close(day, "RKLB") == at(day, 16)
     assert manifest.next_close(at(day, 10)) == at(day, 16)  # practice: the regular close
 
 
@@ -281,12 +293,12 @@ def test_a_close_cannot_be_entered_before_the_post_market_session_ends(manifest,
 
     service.now = lambda: at(day, 17)
     refused = post()
-    assert refused.status_code in (400, 409, 422) and "after 20:00 ET" in refused.text
+    assert refused.status_code in (400, 409, 422) and "until 20:00 ET" in refused.text
     service.now = lambda: at(day, 20, 30)
     assert post().status_code == 200
 
 
-def test_the_day_report_window_runs_between_scored_closes(manifest, store):
+def test_the_day_report_counts_the_trades_booked_to_each_statement(manifest, store):
     from hedge.service import TradingService
 
     m = contest(manifest)

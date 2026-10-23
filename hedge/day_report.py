@@ -803,7 +803,9 @@ class DayReporter(AIFeature):
         return existing, [(i, timestamp(at)) for i, at in fills], [(i, s) for i, s in burns]
 
     def _window(self, day):
-        return self.manifest.scoring_close(self._previous(day)), self.manifest.scoring_close(day)
+        """Trades booked to the day's statement: after the previous day's last booking moment
+        (20:00 ET in the contest) up to this day's."""
+        return self.manifest.trading_end(self._previous(day)), self.manifest.trading_end(day)
 
     def _digest(self, day, closes, existing, fills, burns):
         """Both official closes (value and source), the close-mark records used, the raw fill ids in

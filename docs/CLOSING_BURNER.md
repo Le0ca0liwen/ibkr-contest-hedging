@@ -7,9 +7,15 @@ against the market. The closing burner does that, but **only near the close**: i
 burned earlier, a later market drop could leave NAV below the target with nothing left
 to undo.
 
-In the contest the scored close is the NAV after the 20:00 ET post-market close, so the
-window ends there: 19:40-19:56 ET by default, shares only (options trade in regular hours
-only). Elsewhere it ends at the regular close.
+In the contest the scored close is the IBKR Activity Statement NAV (docs/STATEMENT_NAV.md):
+every position at its closing mark (shares at the 16:00 close, options at their closing
+midpoint, SPY options at 16:15) plus cash after every trade booked that day, post-market
+trades up to 20:00 ET included. Once the last mark is fixed the market no longer moves it, so
+in the contest the burner works **after** the close: from 16:16 ET (`marks_fixed_at`) until the
+post-market entry cutoff (19:56 ET), shares only (options trade in regular hours only). There
+its gap is the predicted statement NAV minus the target, uncertain only by the option marks'
+closing spreads; each round trip costs exactly the spread paid plus commissions, and there is
+no just-in-time wait. Elsewhere the window is the last `window_minutes` before the regular close.
 
 The burner is off by default (`burner.mode: off`). It shares the single execution owner
 (TradingService, IBKR paper only, Moomoo quotes only) and never trades the seven
@@ -31,6 +37,10 @@ z = nav_estimate - target + bias + scenarios.changes @ holdings + cash carry to 
   subtracted twice.
 - `bias` is a signed, calibrated model-versus-official correction. It needs
   `bias_source` when nonzero.
+- **After the close (contest)** the scenario term is gone: `z = predicted statement NAV - target
+  + bias`, with 64 equally likely values that draw each option mark uniformly within its
+  closing bid/ask (`TradingService.statement_estimate`). `require_pnl_stream` applies only
+  before the close.
 
 `needed = max(0, quantile(z, spend_quantile))` (lower weighted quantile of the 64 scenarios;
 0.5 is the median). Spending `L` changes the expected score by `E|z| - E|z - L|`, which keeps
@@ -110,10 +120,11 @@ The remaining rules:
 
 - `burner.mode != off`, on a scored session (never Day 0), with
   `close - window_minutes <= now < close - stock_entry_cutoff_minutes`, where `close` is
-  the scored close (`Manifest.scoring_close`: 20:00 ET in the contest, the regular close
-  otherwise). Option entries also need `now < close - option_entry_cutoff_minutes` and a
-  close in regular hours, so a post-market window never opens them. Early closes come
-  from the exchange calendar (the post-market session ends 4 hours after the close).
+  the regular close. Option entries also need `now < close - option_entry_cutoff_minutes`.
+- In the contest instead: `marks_fixed_at <= now < trading_end - stock_entry_cutoff_minutes`
+  (16:16-19:56 ET), shares only, legs passing `post_market=True` to the order window (the
+  hedger itself no longer trades after the close). Early closes come from the exchange
+  calendar (the post-market session ends 4 hours after the close).
 - Entry cutoffs are validated to leave at least 2 minutes before the ordinary order
   cutoffs (`stock_entry_cutoff_minutes >= policy.stock_cutoff_minutes + 2`, and the
   same for options), so every exit fits inside the normal `can_trade` window.

@@ -29,6 +29,7 @@ from .risk import RiskGate
 from .scenarios import ScenarioEngine
 from .scoring import ScoreLedger
 from .setup import SetupPlanner
+from .statement import StatementTracker, marks_fixed_at, statement_marks, statement_samples, statement_value
 from .storage import payload
 from .supervisor import PROFILES, Supervisor
 from .universe import screen_snapshot
@@ -142,8 +143,12 @@ class TradingService:
         self.withdrawn_orders = set()  # working orders cancelled after a market-made breach (once each)
         self.market_data_errors = {}
         self.api_close_warned = set()
+        # The predicted IBKR statement NAV after each close (hedge/statement.py): the dashboard's NAV
+        # then, the closing burner's gap and the recorder's end-of-day reading.
+        self.statement = StatementTracker(manifest)
+        self.official_closes = {}  # session -> {share conId: regular-session close}
         self.closing_recorder = ClosingRecorder(
-            manifest, self.ledger, self.broker, self.now, self.alert, demo
+            manifest, self.ledger, self.broker, self.now, self.alert, demo, statement=self.statement_estimate
         )
         self.close_marks = CloseMarkRecorder(manifest, store, self.now, self._close_marks, self.alert)
         # The closing burner shares this single execution owner; it can wake the monitor early
@@ -217,6 +222,7 @@ class TradingService:
             asyncio.create_task(self._supervisor_loop()),
             asyncio.create_task(self.closing_recorder.run()),
             asyncio.create_task(self.close_marks.run()),
+            asyncio.create_task(self._statement_loop()),
             asyncio.create_task(self._burner_loop()),
             asyncio.create_task(self._daily_history_loop()),
             asyncio.create_task(self._collector_loop()),
@@ -492,9 +498,129 @@ class TradingService:
 
     @property
     def api_close_official(self):
-        """SPCX/RKLB/SPY contest: the IBKR API closing NAV is the official scoring close (operator
-        instruction, Oct 21), so API rows are final rather than provisional."""
-        return self.manifest.contest_rules == "spcx_rklb_spy"
+        """No: the instructor scores the IBKR Activity Statement NAV (confirmed Oct 23; it replaced
+        the Oct 21 instruction that the API closing NAV was official). API rows, including the
+        predicted statement NAV recorded after the post-market close, are provisional until the
+        statement is imported."""
+        return False
+
+    def _official_closes(self, day):
+        """Shares' regular-session closes for `day`: fetched this run, else the latest recorded."""
+        if day not in self.official_closes:
+            for row in self.store.records("official_closes", self.manifest.account, 50):
+                if row.get("date") == str(day) and row.get("contest") == self.manifest.contest_id:
+                    self.official_closes[day] = {int(k): Decimal(v) for k, v in row["closes"].items()}
+                    break
+        return self.official_closes.get(day, {})
+
+    def statement_estimate(self, now=None):
+        """Today's predicted IBKR statement NAV once its closing marks are fixed (16:16 ET), or None
+        before then. status "ok" with value (and low/high: every option mark at its least/most
+        favorable closing bid/ask) or "waiting" with the reason."""
+        now = now or self.now()
+        day = self.manifest.active_session(now)
+        if day is None or now < marks_fixed_at(self.manifest, day):
+            return None
+        captures = {
+            phase: self.store.get_record(
+                digest((self.manifest.contest_id, str(day), phase))[:32], self.manifest.account, "close_marks"
+            )
+            for phase in ("pre_close", "options_close", "post_close")
+        }
+        marks, _ = statement_marks(self.manifest, day, captures, self._official_closes(day))
+        snapshot = self.live_snapshot()
+        contracts = self.manifest.contract_map
+        result = {
+            "date": str(day),
+            "marks": {
+                contracts[i].label: {k: m[k] for k in ("mark", "low", "high", "source")}
+                for i, m in marks.items()
+            },
+        }
+        if snapshot is None:
+            return {**result, "status": "waiting", "reason": "No account snapshot yet", "value": None}
+        held = snapshot.quantities()
+        lacking = [contracts[i].label if i in contracts else str(i) for i in held if i not in marks]
+        if lacking:
+            return {
+                **result,
+                "status": "waiting",
+                "reason": "No closing mark yet for " + ", ".join(sorted(lacking)),
+                "value": None,
+            }
+        value = self.statement.estimate(
+            day, snapshot, marks, list(self.nav_tracker.executions.values()), self.nav_tracker.fees
+        )
+        if value is None:
+            return {
+                **result,
+                "status": "waiting",
+                "reason": "Waiting for a settled IBKR cash update",
+                "value": None,
+            }
+        mid = statement_value(0, 0, held, marks, contracts)
+        return {
+            **result,
+            "status": "ok",
+            "value": value,
+            "low": value + statement_value(0, 0, held, marks, contracts, "low") - mid,
+            "high": value + statement_value(0, 0, held, marks, contracts, "high") - mid,
+            "samples": statement_samples(value, held, marks, contracts),
+            "base_at": self.statement.base_at.isoformat() if self.statement.base_at else None,
+            "check": self.statement.last_check,
+        }
+
+    async def _statement_loop(self):
+        """After each session close, IBKR's regular-session closing prices of the shares (the
+        statement's stock marks): first at close + 5 min, refreshed at close + 30 min once the
+        closing prints are final. Never raises into the service."""
+        done, warned = set(), set()
+        while True:
+            await asyncio.sleep(30)
+            try:
+                now = self.now()
+                day = self.manifest.active_session(now)
+                if day is None or now > self.manifest.trading_end(day) + timedelta(hours=2):
+                    continue
+                close = self.manifest.session_close(day)
+                due = [t for t in (close + timedelta(minutes=5), close + timedelta(minutes=30)) if now >= t]
+                if not due or (day, due[-1]) in done or not self.broker.snapshot().connected:
+                    continue
+                stocks = [c.con_id for c in self.manifest.contracts if c.kind == "STK"]
+                closes = await asyncio.wait_for(self.broker.official_closes(day, stocks), 120)
+                if closes:
+                    self.official_closes[day] = {**self._official_closes(day), **closes}
+                    self.store.record(
+                        "official_closes",
+                        self.manifest.account,
+                        {
+                            "contest": self.manifest.contest_id,
+                            "date": str(day),
+                            "closes": {str(i): str(v) for i, v in self.official_closes[day].items()},
+                            "at": now.isoformat(),
+                        },
+                    )
+                held = [
+                    i
+                    for i in self.broker.snapshot().quantities()
+                    if self.manifest.contract_map[i].kind == "STK"
+                ]
+                if all(i in self.official_closes.get(day, {}) for i in held):
+                    done.add((day, due[-1]))
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                key = (self.manifest.active_session(self.now()), type(exc).__name__)
+                if key not in warned:
+                    warned.add(key)
+                    try:
+                        self.alert(
+                            "warning",
+                            f"Regular-session closing prices unavailable from IBKR ({type(exc).__name__}); "
+                            "retrying every 30 s",
+                        )
+                    except Exception:
+                        pass
 
     def _warn_api_previous_close(self, day, record):
         """Once per session: today's target rests on a provisional API close, not the statement."""
@@ -856,7 +982,7 @@ class TradingService:
                 ""
                 if live
                 else " (Moomoo quotes are live 09:30-16:00 ET"
-                + ("; shares also 04:00-09:30 and 16:00-20:00 ET)" if m.extended_hours else ")")
+                + ("; shares also 04:00-09:30 ET)" if m.extended_hours else ")")
             )
             + (
                 f"; no quote at all for {total - len(self.last_quotes)}"
@@ -1100,6 +1226,8 @@ class TradingService:
             self.now(),
             "OPT" if wait["resume_mode"] == "SETUP" else "STK",
             setup=wait["resume_mode"] == "SETUP",
+            # Paper resumes in the post-market session too: only the closing burner trades then.
+            post_market=wait["resume_mode"] == "PAPER",
         ):
             self.health = "Automatic resume waiting for a configured trading window"
             return
@@ -1158,8 +1286,8 @@ class TradingService:
         return snapshot
 
     def contest_over(self):
-        """After the last scored close (20:00 ET in the contest, whose post-market session counts)."""
-        return self.now() >= self.manifest.scoring_close(self.manifest.scoring_sessions[-1])
+        """After the last trade that books to the final statement (20:00 ET in the contest)."""
+        return self.now() >= self.manifest.trading_end(self.manifest.scoring_sessions[-1])
 
     def _detect_sleep(self):
         """Seconds the computer slept since the previous monitor pass, or None."""
@@ -1975,8 +2103,8 @@ class TradingService:
     def _close_marks(self, now, day, phase):
         """Everything needed later to split a day's score miss into Greeks, marks and costs."""
         snap, quotes = self.last_snapshot, dict(self.last_quotes)
-        if phase == "post_close":
-            # The monitor stops refreshing quotes after the final close; read the feed directly.
+        if phase in ("post_close", "options_close"):
+            # After the close the monitor's quotes may lag; read the feed directly.
             quotes = dict(self.broker.quotes()) or quotes
         if snap is None or not quotes:
             return None  # Not connected/quoted yet (e.g. just restarted): retry on the next tick.
@@ -2504,6 +2632,11 @@ class TradingService:
             )
         except ValueError:
             estimate = None
+        nav_feed = self.nav_tracker.source
+        # After the close the scored NAV is the statement's: positions at the closing marks.
+        statement = self.statement_estimate()
+        if statement and statement["status"] == "ok":
+            estimate, nav_feed = statement["value"], "predicted statement NAV (closing marks)"
         positions = []
         if snap:
             for p in snap.positions:
@@ -2587,8 +2720,11 @@ class TradingService:
                 and day not in self.ledger.daily_rates(),
                 "account_nav_at": live.account_at.isoformat() if live else None,
                 # How the live NAV estimate is formed, and the latest settled push vs the stream.
-                "nav_feed": self.nav_tracker.source,
+                "nav_feed": nav_feed,
                 "nav_feed_check": self.nav_tracker.last_check,
+                "statement_estimate": {k: v for k, v in statement.items() if k != "samples"}
+                if statement
+                else None,
                 "nav_report_source": self.manifest.report_source,
                 "official_account_nav": self.ledger.latest_report(),
                 "closing_recorder": self.closing_recorder.state(),

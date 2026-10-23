@@ -457,7 +457,7 @@ async def test_ai_explanation_payload_and_menu(tmp_path, monkeypatch, manifest):
     body = sent[0]
     assert body["tools"] == [] and body["store"] is False and body["system_instruction"].endswith(ADVISORY)
     assert (
-        "IBKR API closing NAV" in body["system_instruction"]
+        "imported statement" in body["system_instruction"]  # the statement NAV is official (Oct 23)
         and "(1 + 0.0344/360)^n_i" in body["system_instruction"]
     )
     raw = body["input"]

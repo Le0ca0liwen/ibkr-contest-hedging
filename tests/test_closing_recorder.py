@@ -598,70 +598,22 @@ def contest_prepared(store, manifest):
     return contest, *prepared(store, contest)
 
 
-async def test_contest_missed_bell_is_retried_once_after_the_options_close(store, manifest):
-    contest, ledger, clock, broker, recorder, alerts = contest_prepared(store, manifest)
-    day, close = contest.scoring_sessions[0], clock[0]
-    store.record(
-        "snapshot",
-        contest.account,
-        {"at": (close - timedelta(seconds=40)).isoformat(), "nav": "1000050.00"},
-    )
-    broker.fail = True
-    await recorder.tick()
-    clock[0] = close + timedelta(minutes=3, seconds=1)
-    await recorder.tick()
-    assert "retrying after the options close (16:20 ET)" in recorder.status
-    assert not store.records("closing_capture", contest.account)
-    assert all("waiting for retry" in a[1] for a in alerts)
-    broker.fail = False
-    clock[0] = close + timedelta(minutes=20, seconds=5)
-    await recorder.tick()
-    assert ledger.closes()[day] == Decimal("1000100.12")
-    source = ledger.latest_report()["source"]
-    assert (
-        "post-close observation" in source and "official close" in source and "bell capture missed" in source
-    )
-    assert recorder.state()["last"]["phase"] == "post_close"
-    calls = broker.calls
-    clock[0] += timedelta(minutes=1)
-    await recorder.tick()
-    await ClosingRecorder(contest, ledger, broker, lambda: clock[0], lambda *x: None).tick()
-    assert broker.calls == calls and all("waiting for retry" in a[1] for a in alerts)
-
-
-async def test_contest_missed_bell_and_post_close_require_a_manual_close(store, manifest):
+async def test_contest_missed_bell_is_left_to_the_end_of_day_estimate_and_the_statement(store, manifest):
+    """The statement NAV is official (Oct 23): a missed 16:00 reading is not retried; the predicted
+    statement NAV after the post-market close and then the imported statement cover the day."""
     contest, ledger, clock, broker, recorder, alerts = contest_prepared(store, manifest)
     day, close = contest.scoring_sessions[0], clock[0]
     broker.fail = True
-    clock[0] = close + timedelta(minutes=20)
     await recorder.tick()
-    assert day not in ledger.closes() and not store.records("closing_capture", contest.account)
-    clock[0] = close + timedelta(minutes=25, seconds=1)
+    clock[0] = close + timedelta(seconds=contest.closing_capture.window_seconds + 1)
     await recorder.tick()
     assert day not in ledger.closes()
     assert store.records("closing_capture", contest.account)[0]["status"] == "MISSED"
-    assert any("official end-of-day NAV is still recorded" in a[1] for a in alerts)
-
-
-async def test_contest_post_close_reading_far_from_the_pre_close_nav_is_not_used(store, manifest):
-    contest, ledger, clock, broker, recorder, alerts = contest_prepared(store, manifest)
-    day, close = contest.scoring_sessions[0], clock[0]
-    store.record(
-        "snapshot", contest.account, {"at": (close - timedelta(seconds=30)).isoformat(), "nav": "998000"}
-    )
-    store.record(  # after the close: never the reference
-        "snapshot", contest.account, {"at": (close + timedelta(minutes=5)).isoformat(), "nav": "1000100"}
-    )
+    assert any("predicted statement NAV is still recorded" in a[1] for a in alerts)
+    calls = broker.calls
     clock[0] = close + timedelta(minutes=20)
     await recorder.tick()
-    assert day not in ledger.closes()
-    row = store.records("closing_capture", contest.account)[0]
-    assert row["status"] == "MISSED" and row["pre_close_nav"] == "998000"
-    assert "differed from the last pre-close NAV" in alerts[0][1]
-    clock[0] += timedelta(seconds=30)
-    await recorder.tick()
-    await ClosingRecorder(contest, ledger, broker, lambda: clock[0], lambda *x: None).tick()
-    assert broker.calls == 1 and day not in ledger.closes()
+    assert broker.calls == calls and day not in ledger.closes()  # no post-close retry
 
 
 async def test_a_hung_observation_cannot_stall_the_recorder(store, manifest, monkeypatch):
@@ -728,13 +680,39 @@ async def test_contest_end_of_day_reading_after_the_post_market_close_is_the_off
     source = ledger.latest_report()["source"]
     assert (
         "end-of-day observation (after the 20:00 ET post-market close" in source
-        and "official close" in source
+        and "provisional until the IBKR statement is imported" in source
+        and "closing marks unavailable" in source
     )
+    assert ledger.close_records()[day]["provenance"] == "api"  # the statement supersedes it
     assert recorder.state()["last"]["phase"] == "end_of_day"
     clock[0] += timedelta(minutes=1)
     await recorder.tick()
     await ClosingRecorder(contest, ledger, broker, lambda: clock[0], lambda *x: None).tick()
     assert broker.calls == calls + 1 and not alerts
+
+
+async def test_contest_end_of_day_records_the_predicted_statement_nav(store, manifest):
+    contest = manifest.model_copy(update={"contest_rules": "spcx_rklb_spy"})
+    ledger, clock, broker, _, alerts = prepared(store, contest)
+    estimates = []
+
+    def statement(now):
+        estimates.append(now)
+        return {"status": "ok", "value": 983374.2149}
+
+    recorder = ClosingRecorder(
+        contest, ledger, broker, lambda: clock[0], lambda *x: alerts.append(x), statement=statement
+    )
+    day, close = contest.scoring_sessions[0], clock[0]
+    await recorder.tick()  # 16:00 bell: still IBKR's NetLiquidation
+    calls = broker.calls
+    clock[0] = close + timedelta(hours=4, minutes=5)
+    await recorder.tick()
+    assert broker.calls == calls and estimates  # the statement's own figure, no NetLiquidation request
+    assert ledger.closes()[day] == Decimal("983374.21")
+    source = ledger.latest_report()["source"]
+    assert source.startswith("IBKR API end-of-day observation (predicted statement NAV after the 20:00 ET")
+    assert ledger.close_records()[day]["provenance"] == "api"
 
 
 async def test_contest_end_of_day_is_taken_even_when_the_bell_was_missed(store, manifest):

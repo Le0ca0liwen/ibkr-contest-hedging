@@ -6,9 +6,12 @@ One cycle at a time, durable at every step:
     agree) -> EXIT (IOC sell the CONFIRMED fill at the bid less a widening collar, retried)
     -> CLOSED, or RESIDUAL (alerted once; the inventory becomes an ordinary holding).
 
-In the contest the window ends at the scored 20:00 ET post-market close (shares only). IBKR does
-not accept IOC outside regular hours, so there each leg is a DAY limit that the burner cancels
-DAY_LEG_SECONDS after sending: the same fill-what-is-there-now leg.
+In the contest the scored close is the IBKR statement NAV: positions at the closing marks plus
+cash after the post-market session. So the burner works after the close (16:16 ET, every mark
+fixed) until the post-market cutoffs before 20:00 ET, shares only, against the predicted statement
+NAV (hedge/statement.py), which only our own trades still move. IBKR does not accept IOC outside
+regular hours, so there each leg is a DAY limit that the burner cancels DAY_LEG_SECONDS after
+sending: the same fill-what-is-there-now leg.
 
 Records: 'burn_cycle' (insert-once plan, id=cycle_id), append-only 'burn_cycle_event',
 'burn_cycle_result' (final; releases the hedge block) and throttled 'burn_decision'.
@@ -24,6 +27,8 @@ from collections import Counter
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
+
+import numpy as np
 
 from .burner import (
     candidates,
@@ -43,6 +48,7 @@ from .burner import (
 from .config import NY
 from .continuity import DataUnavailable
 from .execution_quality import timestamp
+from .statement import marks_fixed_at
 from .storage import TERMINAL, burn_result_id
 
 EXIT_MARGIN_SECONDS = 15  # stop sending exits this long before the ordinary order cutoff
@@ -226,19 +232,29 @@ class ClosingBurner:
             and s.data_wait is None
         )
 
+    def post_close(self):
+        """Contest: the statement marks every position at the close and books post-market trades
+        to the day, so the burner works after the close against a fixed predicted statement NAV."""
+        return self.manifest.extended_hours
+
     def window(self, day):
-        """Times around the scored close: the regular close, or 20:00 ET in the contest, where the
-        window falls in the post-market session and options (regular hours only) never open."""
+        """Before the regular close (window_minutes, under market risk), or in the contest from when
+        every closing mark is fixed (16:16 ET) until the post-market cutoffs before 20:00 ET, shares
+        only (options trade in regular hours)."""
         m, p = self.manifest, self.policy
-        close, regular = m.scoring_close(day), m.session_close(day)
-        start = close - timedelta(minutes=p.window_minutes)
+        regular = m.session_close(day)
+        if self.post_close():
+            close, start = m.trading_end(day), marks_fixed_at(m, day)
+            option_entry = start
+        else:
+            close = regular
+            start = close - timedelta(minutes=p.window_minutes)
+            option_entry = close - timedelta(minutes=p.option_entry_cutoff_minutes)
         return {
             "close": close,
             "start": start,
             "stock_entry_cutoff": close - timedelta(minutes=p.stock_entry_cutoff_minutes),
-            "option_entry_cutoff": (
-                close - timedelta(minutes=p.option_entry_cutoff_minutes) if close == regular else start
-            ),
+            "option_entry_cutoff": option_entry,
             "stock_exit_deadline": close
             - timedelta(minutes=m.policy.stock_cutoff_minutes, seconds=EXIT_MARGIN_SECONDS),
             "option_exit_deadline": regular
@@ -669,6 +685,7 @@ class ClosingBurner:
                 {**quantities, candidate.con_id: holding},
                 now,
                 costs=2 * candidate.expected_loss,
+                post_market=True,  # the burner alone trades in the post-market session
             )
             if not result.passed:
                 return "; ".join(result.reasons)
@@ -708,18 +725,28 @@ class ClosingBurner:
             target = s.closing_target(snapshot, now)
         except ValueError as exc:
             return self._wait(f"Closing target unavailable: {exc}", info, code="target")
-        try:
-            estimate = s._estimate_nav(snapshot, quotes)
-        except ValueError as exc:
-            return self._wait(f"NAV estimate unavailable: {exc}", info, code="nav")
-        source = getattr(getattr(s, "nav_tracker", None), "source", None)
-        info["nav_source"] = source
-        if p.require_pnl_stream and source != NAV_STREAM:
-            # Fill attribution re-anchors on every NetLiquidation push, including one sent mid-fill
-            # (up to ~$1,000 off on Oct 22): never spend on it.
-            return self._wait(
-                f"Waiting for the settled 1-second NAV (IBKR P&L stream); now {source}", info, code="nav"
-            )
+        post_close = self.post_close()
+        statement = None
+        if post_close:
+            # The statement's figure for the day, fixed by the closing marks: only trades move it.
+            statement = s.statement_estimate(now)
+            if not statement or statement["status"] != "ok":
+                reason = (statement or {}).get("reason") or "closing marks not fixed yet"
+                return self._wait(f"Predicted statement NAV unavailable: {reason}", info, code="statement")
+            estimate, info["nav_source"] = statement["value"], "predicted statement NAV"
+        else:
+            try:
+                estimate = s._estimate_nav(snapshot, quotes)
+            except ValueError as exc:
+                return self._wait(f"NAV estimate unavailable: {exc}", info, code="nav")
+            source = getattr(getattr(s, "nav_tracker", None), "source", None)
+            info["nav_source"] = source
+            if p.require_pnl_stream and source != NAV_STREAM:
+                # Fill attribution re-anchors on every NetLiquidation push, including one sent mid-fill
+                # (up to ~$1,000 off on Oct 22): never spend on it.
+                return self._wait(
+                    f"Waiting for the settled 1-second NAV (IBKR P&L stream); now {source}", info, code="nav"
+                )
         scenarios = s.last_scenarios
         if (
             scenarios is None
@@ -734,11 +761,18 @@ class ClosingBurner:
         if not set(scenarios.ids).issubset(quotes):
             return self._wait("Quote coverage incomplete for the scenario universe", info)
         quantities = snapshot.quantities()
-        z = closing_gaps(
-            m, scenarios, quotes, quantities, snapshot.cash, snapshot.nav, estimate, target, p.bias
-        )
-        stats = gap_stats(z, scenarios.weights)
-        level = weighted_quantile(z, scenarios.weights, p.spend_quantile)
+        if post_close:
+            # No market risk is left: the gap is uncertain only by each option's statement mark
+            # within its closing bid/ask (hedge/statement.py).
+            z = np.asarray(statement["samples"], dtype=float) - float(target) + p.bias
+            weights = np.full(len(z), 1 / len(z))
+        else:
+            z = closing_gaps(
+                m, scenarios, quotes, quantities, snapshot.cash, snapshot.nav, estimate, target, p.bias
+            )
+            weights = scenarios.weights
+        stats = gap_stats(z, weights)
+        level = weighted_quantile(z, weights, p.spend_quantile)
         needed = max(0.0, level)
         self.active = hysteresis(needed, self.active, p.start_threshold, p.stop_threshold)
         today = self.today(day)
@@ -800,7 +834,7 @@ class ClosingBurner:
         chosen, improvement, more = select(
             options,
             z,
-            scenarios.weights,
+            weights,
             room,
             p,
             expense_remaining=expense_remaining,
@@ -824,7 +858,10 @@ class ClosingBurner:
         seconds = cycle_seconds(p.assumed_cycle_seconds, today["cycle_seconds"])
         efficiency = fill_efficiency(today["results"])
         capacity = capacity_per_minute(pace.expected_loss, seconds) * efficiency
-        waiting = jit_waiting(room, capacity, remaining, p.jit_headroom, p.jit_reserve_minutes)
+        # After the close waiting buys nothing (the gap no longer moves) and post-market books thin out.
+        waiting = not post_close and jit_waiting(
+            room, capacity, remaining, p.jit_headroom, p.jit_reserve_minutes
+        )
         info.update(
             candidate=chosen.as_dict(),
             improvement=improvement,

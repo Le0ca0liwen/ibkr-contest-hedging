@@ -78,11 +78,15 @@ class MoomooData:
         return min(at, max(times)) if times else at
 
     def _in_session(self, contract, now):
-        """Regular session for everything; the contest pre/post-market sessions for shares too."""
+        """Regular session for everything (SPY-style options until 16:15 ET, when they close and are
+        marked); the contest pre/post-market sessions for shares too."""
         day = now.astimezone(NY).date()
-        if self.manifest.is_session(day) and self.manifest.session_open(
-            day
-        ) <= now < self.manifest.session_close(day):
+        end = (
+            self.manifest.option_close(day, contract.symbol)
+            if contract.kind == "OPT"
+            else self.manifest.session_close(day)
+        )
+        if self.manifest.is_session(day) and self.manifest.session_open(day) <= now < end:
             return True
         return contract.kind == "STK" and self.manifest.extended_session(now) is not None
 

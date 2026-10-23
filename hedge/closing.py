@@ -4,7 +4,7 @@ import asyncio
 from datetime import timedelta
 from decimal import Decimal
 
-from .config import EXTENDED_HOURS, NY
+from .config import EXTENDED_HOURS, LATE_OPTION_CLOSE, LATE_OPTION_SYMBOLS, NY
 from .execution_quality import timestamp
 from .models import digest
 
@@ -13,9 +13,10 @@ POST_CLOSE = "post-close observation"
 POST_CLOSE_WINDOW = timedelta(minutes=5)
 # A hung broker request must not stall the recorder past its window.
 OBSERVE_TIMEOUT_SECONDS = 60  # the app's request (15 s), then a side connection (10 s + 15 s)
-# Contest (API close official): NAV keeps changing in the post-market session and that trading
-# counts (operator instruction, Oct 22), so the official close is read once the post-market
-# session (regular close + 4 h: 20:00 ET) has ended. It supersedes the 16:00 and 16:20 readings.
+# Contest: the instructor scores the IBKR Activity Statement NAV (Oct 23), which books the post-market
+# session's trades (until 20:00 ET) but marks positions at the closing prices. Once that session has
+# ended the recorder records the predicted statement NAV (hedge/statement.py) as the day's
+# provisional close, superseding the 16:00 and 16:20 readings; the imported statement supersedes it.
 END_OF_DAY = "end-of-day observation"
 END_OF_DAY_DELAY = timedelta(minutes=5)
 # Nothing trades after 20:00, so NAV stays put (Oct 22: the 20:05 reading equalled 21:29's): retry
@@ -45,8 +46,9 @@ class ClosingRecorder:
     bell is retried once in the post-close window, checked against the last pre-close snapshot NAV.
     """
 
-    def __init__(self, manifest, ledger, broker, clock, alert, demo=False):
+    def __init__(self, manifest, ledger, broker, clock, alert, demo=False, statement=None):
         self.manifest, self.ledger, self.broker = manifest, ledger, broker
+        self.statement = statement  # now -> the service's predicted statement NAV (or None)
         self.clock, self.alert, self.demo = clock, alert, demo
         self.retry_at = None
         self.status = "Waiting for scheduled market close"
@@ -55,8 +57,10 @@ class ClosingRecorder:
         self.post_close_done = set()  # diverged or skipped post-close observations (bell value kept)
         self.eod_missed = set()  # days whose end-of-day window passed without a reading
         self.loaded = False
-        # SPCX/RKLB/SPY contest: the IBKR API closing NAV is the official scoring close.
-        self.api_official = manifest.contest_rules == "spcx_rklb_spy"
+        # The statement NAV is official (instructor, Oct 23); API readings are provisional.
+        self.api_official = False
+        # Contest: a provisional close after the post-market session, when its trades have booked.
+        self.end_of_day = manifest.contest_rules == "spcx_rklb_spy"
 
     def state(self):
         now = self.clock()
@@ -74,14 +78,15 @@ class ClosingRecorder:
             "window_seconds": self.manifest.closing_capture.window_seconds,
             "late_capture_minutes": self.manifest.closing_capture.late_capture_minutes,
             "end_of_day": self.end_of_day_window(min(pending))[0].isoformat()
-            if self.api_official and (pending := self._pending_end_of_day(now))
+            if self.end_of_day and (pending := self._pending_end_of_day(now))
             else None,
         }
 
     def end_of_day_window(self, day):
-        """Contest only: when the official end-of-day NAV is read, 5-20 minutes after the
-        post-market session ends (20:05-20:20 ET on a normal day). None outside the contest."""
-        if not self.api_official:
+        """Contest only: when the provisional end-of-day close (the predicted statement NAV) is
+        recorded, from 5 minutes after the post-market session ends (20:05 ET), retried for two
+        hours. None outside the contest."""
+        if not self.end_of_day:
             return None
         start = self.manifest.session_close(day) + EXTENDED_HOURS + END_OF_DAY_DELAY
         return start, start + END_OF_DAY_WINDOW
@@ -204,9 +209,8 @@ class ClosingRecorder:
                     )
                     self.alert(
                         "warning",
-                        f"End-of-day NAV capture missed for {day}; enter IBKR's end-of-day NAV (after "
-                        "the 20:00 ET post-market close) in Settings & alerts > Import an official "
-                        "closing NAV",
+                        f"End-of-day NAV capture missed for {day}; enter the IBKR statement NAV for {day} "
+                        "in Settings & alerts > Import an official closing NAV when it is published",
                     )
                 self.status = f"End-of-day NAV capture missed for {day}; enter the end-of-day NAV manually"
                 continue
@@ -258,13 +262,16 @@ class ClosingRecorder:
                         self.missed.add(str(day))
                         self.alert(
                             "warning",
-                            f"16:00 closing NAV capture missed for {day}; the official end-of-day NAV is "
-                            "still recorded after the 20:00 ET post-market close"
-                            if self.api_official
+                            f"16:00 closing NAV capture missed for {day}; the predicted statement NAV is "
+                            "still recorded after the 20:00 ET post-market close, and the IBKR statement "
+                            "decides"
+                            if self.end_of_day
                             else f"Closing NAV capture missed for {day}; import the IBKR statement",
                         )
                     self.status = f"Closing capture missed for {day}; " + (
-                        "enter the closing NAV manually" if self.api_official else "statement required"
+                        "end-of-day estimate pending, statement decides"
+                        if self.end_of_day
+                        else "statement required"
                     )
                     continue
             fallback = phase == "post_close" and day not in closes
@@ -274,16 +281,22 @@ class ClosingRecorder:
             label = {"post_close": "Post-close NAV", "end_of_day": "End-of-day NAV"}.get(phase, "Closing NAV")
             self.status = f"{label} requested for {day}"
             try:
-                pushed = False
-                try:
-                    value, at = await self._observe(start, deadline)
-                except (ConnectionError, TimeoutError, ValueError, KeyError, TypeError):
-                    # End of day only: the pushed NetLiquidation is the same figure (nothing trades
-                    # after 20:00), so a failing summary request cannot cost the day.
-                    reading = self._pushed_nav(close) if phase == "end_of_day" else None
-                    if reading is None:
-                        raise
-                    (value, at), pushed = reading, True
+                pushed = predicted = False
+                estimate = self.statement(now) if phase == "end_of_day" and self.statement else None
+                if estimate and estimate.get("status") == "ok":
+                    # The statement's own figure: cash after the post-market session, positions at the
+                    # closing marks. IBKR's after-hours NetLiquidation is not what is scored.
+                    value, at, predicted = Decimal(str(round(estimate["value"], 2))), now, True
+                else:
+                    try:
+                        value, at = await self._observe(start, deadline)
+                    except (ConnectionError, TimeoutError, ValueError, KeyError, TypeError):
+                        # End of day only: the pushed NetLiquidation is the same figure (nothing trades
+                        # after 20:00), so a failing summary request cannot cost the day.
+                        reading = self._pushed_nav(close) if phase == "end_of_day" else None
+                        if reading is None:
+                            raise
+                        (value, at), pushed = reading, True
                 # Report imports can arrive while the broker request is pending.
                 # No await separates this recheck and the synchronous ledger write.
                 if (phase == "close" or fallback) and day in self.ledger.closes():
@@ -362,10 +375,17 @@ class ClosingRecorder:
                     extended = (close + EXTENDED_HOURS).astimezone(NY)
                     source = (
                         f"SYNTHETIC simulator {END_OF_DAY}"
+                        + (" (predicted statement NAV)" if predicted else "")
                         if self.demo
+                        else f"IBKR API {END_OF_DAY} (predicted statement NAV after the {extended:%H:%M} ET "
+                        "post-market close: cash and accrued interest plus positions at the statement's "
+                        "closing marks (shares 16:00 close, options closing midpoint); provisional until "
+                        "the IBKR statement is imported)"
+                        if predicted
                         else f"IBKR API {END_OF_DAY} ("
                         + ("account update " if pushed else "")
-                        + f"after the {extended:%H:%M} ET post-market close; NetLiquidation; official close)"
+                        + f"after the {extended:%H:%M} ET post-market close; NetLiquidation, closing marks "
+                        "unavailable; provisional until the IBKR statement is imported)"
                     )
                 elif phase == "post_close":
                     options_close = (close + timedelta(minutes=15)).astimezone(NY)
@@ -438,6 +458,7 @@ class CloseMarkRecorder:
         self.manifest, self.store, self.clock = manifest, store, clock
         self.collect, self.alert = collect, alert
         self.pending = None
+        self.pending_late = None  # the latest capture before SPY options' 16:15 close
         self.written = set()
         self.status = "Waiting for the final two minutes of a contest session"
 
@@ -454,6 +475,17 @@ class CloseMarkRecorder:
         if day is None:
             return
         seconds = (self.manifest.session_close(day) - now).total_seconds()
+        # SPY-style options close (and are marked on the statement) at 16:15: the last capture
+        # before then, when the contract holds such options.
+        late = self.manifest.session_close(day) + LATE_OPTION_CLOSE
+        late_seconds = (late - now).total_seconds()
+        if any(c.kind == "OPT" and c.symbol in LATE_OPTION_SYMBOLS for c in self.manifest.contracts):
+            if 0 < late_seconds <= 120:
+                if (payload := self.collect(now, day, "options_close")) is not None:
+                    self.pending_late = (day, payload)
+            elif late_seconds <= 0 and self.pending_late and self.pending_late[0] == day:
+                self._write(day, "options_close", self.pending_late[1])
+                self.pending_late = None
         if 0 < seconds <= 120:
             # Keep the last good capture; an empty one (no snapshot/quotes yet) never replaces it.
             if (payload := self.collect(now, day, "pre_close")) is not None:

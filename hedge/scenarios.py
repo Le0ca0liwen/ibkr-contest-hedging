@@ -320,9 +320,6 @@ class ScenarioEngine:
             next_changes = self._reprice(ids, quotes, end, following, shocks, iv_shocks, scale)
             # Close -> reopen: calendar-time decay, trading-time spot/IV variance on the same shocks.
             variance = overnight_variance(close_day, next_session)
-            if self.manifest.extended_hours:
-                # The scored close is after the post-market session: only the rest of the gap.
-                variance -= POST_MARKET_VARIANCE
             overnight_shocks, overnight_iv = shocks, iv_shocks
             if source.startswith("historical matched-clock"):
                 # Realized rest-of-session paths carry a sample mean: no directional overnight drift.

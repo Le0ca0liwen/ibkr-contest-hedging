@@ -1037,14 +1037,16 @@ async def test_an_uncertain_leg_from_an_earlier_session_is_closed_after_a_clean_
 # ------------------------------------------------------- contest post-market close (Oct 23 redesign)
 
 
-def test_the_contest_window_closes_at_the_scored_post_market_close(manifest):
+def test_the_contest_burner_works_after_the_close_until_the_post_market_cutoffs(manifest):
+    """Statement NAV (Oct 23): once every closing mark is fixed (16:16 ET) the day's NAV moves only
+    with our trades, which still book to it until 20:00 ET."""
     from hedge.burner_service import ClosingBurner
 
     m = with_burner(manifest).model_copy(update={"contest_rules": "spcx_rklb_spy"})
     day = m.scoring_sessions[0]
     w = ClosingBurner(SimpleNamespace(manifest=m)).window(day)
     assert w["close"] == close_on(day, 20, 0)
-    assert (w["start"], w["stock_entry_cutoff"]) == (close_on(day, 19, 40), close_on(day, 19, 56))
+    assert (w["start"], w["stock_entry_cutoff"]) == (close_on(day, 16, 16), close_on(day, 19, 56))
     cutoff = m.policy.stock_cutoff_minutes
     assert w["stock_exit_deadline"] == close_on(day, 20, 0) - timedelta(minutes=cutoff, seconds=15)
     # Options trade in regular hours only: their entries never open in a post-market window.
@@ -1193,3 +1195,54 @@ def test_spend_quantile_is_validated(manifest):
     with pytest.raises(ValidationError):
         with_burner(manifest, spend_quantile=0.6)
     assert with_burner(manifest, spend_quantile=0.4).burner.spend_quantile == 0.4
+
+
+def post_close_window(burner, clock, monkeypatch):
+    start = clock.at - timedelta(minutes=1)
+    monkeypatch.setattr(burner, "post_close", lambda: True)
+    monkeypatch.setattr(
+        burner,
+        "window",
+        lambda day: {
+            "close": clock.at + timedelta(hours=3),
+            "start": start,
+            "stock_entry_cutoff": clock.at + timedelta(hours=2),
+            "option_entry_cutoff": start,
+            "stock_exit_deadline": clock.at + timedelta(hours=2, minutes=30),
+            "option_exit_deadline": start,
+        },
+    )
+
+
+async def test_after_the_close_the_burner_spends_against_the_predicted_statement_nav(burning, monkeypatch):
+    """Statement NAV (Oct 23): after the close the day's NAV moves only with our trades, so the
+    burner spends at once (no just-in-time wait) toward the statement gap's quantile."""
+    service, clock = await burning(require_pnl_stream=True, spend_quantile=0.4)
+    burner = service.burner
+    post_close_window(burner, clock, monkeypatch)
+    target = float(service.closing_target(service.broker.snapshot(), clock.at))
+    samples = target + np.linspace(100, 200, 64)  # option marks within their closing bid/ask
+    monkeypatch.setattr(
+        service,
+        "statement_estimate",
+        lambda now=None: {"status": "ok", "value": float(samples.mean()), "samples": samples},
+    )
+    await steps(service)
+    info = burner.last
+    assert info["nav_source"] == "predicted statement NAV"  # never the 1-second stream gate
+    assert info["needed"] == pytest.approx(np.quantile(samples - target, 0.4), abs=2)
+    assert info["jit"]["waiting"] is False and burner.state_name == "ENTRY"
+
+
+async def test_after_the_close_the_burner_waits_for_every_closing_mark(burning, monkeypatch):
+    service, clock = await burning(surplus=300)
+    burner = service.burner
+    post_close_window(burner, clock, monkeypatch)
+    monkeypatch.setattr(
+        service,
+        "statement_estimate",
+        lambda now=None: {"status": "waiting", "reason": "No closing mark yet for BA", "value": None},
+    )
+    await steps(service)
+    assert burner.state_name == "WAITING" and "No closing mark yet for BA" in burner.reason
+    assert not service.execution.burn_open()
