@@ -47,7 +47,38 @@ On a known data/connection interruption during enabled PAPER or SETUP:
 Only explicitly recognized data/network failures receive this behavior. Invalid
 configuration, unsupported execution, durable event processing failure, unknown
 order state and mandate/working-order risk failures continue to block execution.
-Unknown submissions remain unresolved until broker evidence resolves them. A
+Unknown submissions remain unresolved until broker evidence resolves them.
+
+### Internet or IBKR outages (Oct 23)
+
+The Mac may run on battery or lose its internet connection during the day. TWS then keeps the
+API socket open but reaches nothing. On the Oct 22 19:50-21:29 outage, TWS answered 2151
+"Positions info is not available yet" for every download. Recognized as the outage, such
+errors now wait instead of stopping trading:
+
+- **TWS's own link messages.** 1100/2110 ("connectivity lost") enters the data wait at once.
+  1101/1102 ("restored") forces a full reconcile before any decision, and after 1101 (data
+  lost) also renews the 1-second P&L stream (and IBKR market data when that is the provider).
+  The broker tracks the link (`link_up()`); a complete download also proves it is up.
+- **Errors during an outage.** A network error (`OSError`), an IBKR "unreachable" code (502,
+  504, 1100, 1300, 2110, 2151, 10182), or any error while the link is down enters or keeps
+  the data wait. Paper resumes by itself through the full activation preflight above once
+  IBKR answers again.
+- **Errors while already waiting.** Trading is stopped in a wait, so an unexpected error there
+  (for example contract qualification failing on reconnect) keeps the wait and its automatic
+  resume instead of ending it in a pause. While IBKR is reachable, an unexpected error during
+  PAPER still stops trading.
+- **An order cut off by the outage.** A submission that failed because the socket was down
+  (Mac asleep) or went unacknowledged is UNKNOWN. When a complete download (open orders,
+  today's completed orders and executions) still does not list it 2 minutes
+  (`UNKNOWN_SETTLE`) after it was created, it never reached IBKR or has ended. It is closed
+  as ABANDONED with an alert (positions remain the record), so it no longer blocks the restart
+  for the rest of the day.
+- **Moomoo.** The quote collector reconnects to OpenD and resubscribes every 10 s on its own.
+  Until fresh quotes arrive the resume waits on stale quotes.
+- **Power.** Start Contest keeps the Mac awake while the app runs (`caffeinate`), on battery
+  too, but closing the lid still sleeps it. On waking, the app refreshes orders and positions
+  from IBKR (SLEPT) and resumes as above. A
 manual pause, shadow/profile change or configuration change invalidates automatic
 reactivation. An operator pause during a slow preflight also wins: the action
 generation is checked before enabling execution, and submission checks its paused

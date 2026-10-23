@@ -10,7 +10,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from .ai_qa import OperatorQA
-from .broker import IBKRBroker, SimBroker
+from .broker import LINK_BACK_CODES, LINK_ERROR_CODES, LINK_LOST_CODES, IBKRBroker, SimBroker
 from .burner_service import ClosingBurner
 from .closing import CloseMarkRecorder, ClosingRecorder
 from .config import NY
@@ -441,6 +441,29 @@ class TradingService:
                     )
                     if not (value["code"] == 202 and owner and owner.get("purpose") == "burn"):
                         self.alert("warning", value["message"])
+                elif event == "broker_error" and value.get("code") in LINK_LOST_CODES:
+                    # Internet (or IBKR) down: TWS keeps the API socket but reaches nothing. Stop and
+                    # wait like a disconnect; the automatic resume reruns every paper check once
+                    # IBKR is back. Cancel/reconcile in the monitor, never block event delivery.
+                    self.ready = False
+                    self._enter_data_wait(f"IBKR unreachable ({value['code']}): {value.get('message', '')}")
+                    self.alert(
+                        "warning",
+                        "TWS lost its connection to IBKR (internet down?). Trading waits and restarts by "
+                        "itself when the connection returns.",
+                    )
+                elif event == "broker_error" and value.get("code") in LINK_BACK_CODES:
+                    # Back: orders, fills and positions may have changed unseen, and after 1101 the
+                    # P&L stream must be renewed. Reconcile before any decision.
+                    if value["code"] == 1101:
+                        getattr(self.broker, "resubscribe", lambda: None)()
+                    self.last_reconcile = float("-inf")
+                    self.force_optimize = True
+                    self.alert(
+                        "info",
+                        "TWS reconnected to IBKR; orders and positions are being refreshed. Trading "
+                        "restarts by itself once every paper check passes.",
+                    )
                 elif event == "broker_error" and value.get("code") in (354, 10090, 10167, 10168):
                     self.market_data_errors[value.get("con_id") or value["order_id"]] = value["message"]
                     self.ready = False
@@ -1253,7 +1276,13 @@ class TradingService:
                 # order using the quote dictionary captured before that work.
                 await self.execution.manage(self.broker.quotes(), self.now())
                 if self.execution.paused and self.mode in ("PAPER", "SETUP"):
-                    self._hard_stop("Execution stopped; broker order state requires reconciliation")
+                    if self._link_down():
+                        # An order caught by the outage: reconcile resolves it once IBKR is back.
+                        await self._wait_for_data(
+                            "Order state uncertain while IBKR was unreachable; reconciling once it is back"
+                        )
+                    else:
+                        self._hard_stop("Execution stopped; broker order state requires reconciliation")
                 if self.mode == "PAUSED" and self.execution.pause_requested:
                     self.health = (
                         (self.pause_reason or "Trading paused") + "; all cancellations confirmed"
@@ -1306,6 +1335,21 @@ class TradingService:
                 # Operator-facing text: a ValueError already explains itself.
                 message = str(exc) if isinstance(exc, ValueError) else f"{type(exc).__name__}: {exc}"
                 self.last_monitor_error = message
+                if self.mode in ("PAPER", "SETUP", "WAITING_DATA") and (
+                    self._link_problem(exc) or (self.mode == "WAITING_DATA" and self.data_wait is not None)
+                ):
+                    # IBKR unreachable (internet down, Mac asleep), or trading already stopped in a
+                    # wait: an error now is the outage or the recovery from it, not a fault. Keep
+                    # waiting; the automatic resume reruns every paper check before trading again.
+                    self.ready = False
+                    self.pending_target = self.pending_recovery = None
+                    try:
+                        await self._wait_for_data(message)
+                    except Exception:  # retried next loop: the monitor must outlive the outage
+                        pass
+                    next_connection = time.monotonic() + 15
+                    await asyncio.sleep(self.manifest.policy.risk_seconds)
+                    continue
                 if self.data_wait and self.data_wait.get("autostart"):
                     # Paper never started: keep the launch-time automatic start armed.
                     self.autostart_pending = True
@@ -1373,6 +1417,14 @@ class TradingService:
                 self._hard_stop(message)
                 await self.execution.pause()
                 self.alert("error", message)
+
+    def _link_down(self):
+        link_up = getattr(self.broker, "link_up", None)
+        return link_up is not None and not link_up()
+
+    def _link_problem(self, exc):
+        """A network error, one IBKR reports as unreachable, or any error while the link is down."""
+        return isinstance(exc, OSError) or getattr(exc, "code", None) in LINK_ERROR_CODES or self._link_down()
 
     async def _monitor_pause(self):
         """Sleep risk_seconds, or less when the closing burner needs a fresh scenario forecast."""

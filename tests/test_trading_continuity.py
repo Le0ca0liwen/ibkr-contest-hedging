@@ -765,3 +765,147 @@ async def test_a_sleep_gap_refreshes_from_ibkr_and_alerts_once(manifest, store, 
     alerts = [a["message"] for a in store.records("alert", manifest.account)]
     assert len(alerts) == 1 and "asleep for about 15 min" in alerts[0]
     assert store.records("continuity", manifest.account)[0]["status"] == "SLEPT"
+
+
+# ------------------------------------------- internet / IBKR outages restart paper by themselves
+
+
+async def test_ibkr_link_loss_waits_and_the_link_coming_back_restarts_paper(operational):
+    s = operational
+    assert s.mode == "PAPER"
+    s.broker.events.put_nowait(
+        ("broker_error", {"order_id": -1, "code": 1100, "message": "Connectivity lost", "con_id": None})
+    )
+    await s.events.join()
+    assert s.mode == "WAITING_DATA" and s.execution.paused and s.broker.readonly
+    assert s.data_wait["resume_mode"] == "PAPER"
+    s.broker.events.put_nowait(
+        ("broker_error", {"order_id": -1, "code": 1102, "message": "Restored", "con_id": None})
+    )
+    await s.events.join()
+    assert s.last_reconcile == float("-inf") and s.force_optimize
+    alerts = [a["message"] for a in s.store.records("alert", s.manifest.account)]
+    assert any("lost its connection" in a for a in alerts) and any("reconnected" in a for a in alerts)
+    risk_now(s)
+    await s._resume_after_data_wait()
+    assert s.mode == "PAPER" and not s.execution.paused and not s.broker.readonly
+
+
+def test_the_broker_tracks_tws_link_to_ibkr(manifest):
+    from hedge.broker import IBKRBroker
+
+    broker = IBKRBroker(manifest, asyncio.Queue())
+    broker.ib.isConnected = lambda: True
+    assert broker.link_up()
+    broker._link(-1, 1100, "Connectivity between IBKR and Trader Workstation has been lost.", None)
+    assert not broker.link_up()
+    broker._link(-1, 2104, "Market data farm connection is OK", None)  # unrelated notice
+    assert not broker.link_up()
+    broker._link(-1, 1102, "Connectivity restored - data maintained.", None)
+    assert broker.link_up()
+    broker.ib.isConnected = lambda: False
+    assert not broker.link_up()
+
+
+async def _monitor_until(s, condition, monkeypatch, timeout=5):
+    s.manifest = s.manifest.model_copy(
+        update={"policy": s.manifest.policy.model_copy(update={"risk_seconds": 1})}
+    )
+
+    async def no_optimizer():
+        pass
+
+    monkeypatch.setattr(s, "optimize", no_optimizer)
+    task = asyncio.create_task(s._monitor_loop())
+    try:
+        for _ in range(timeout * 20):
+            if condition():
+                return True
+            await asyncio.sleep(0.05)
+        return False
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+async def test_an_outage_error_while_trading_waits_and_restarts_paper(operational, monkeypatch):
+    """Oct 22 19:50-21:29: TWS answered 2151 'Positions info is not available yet' while IBKR was
+    unreachable. That is the outage, not a fault: wait, then restart paper by itself."""
+    from ib_async import RequestError
+
+    s = operational
+    original, calls, seen = s.reconcile, [0], []
+
+    async def outage_then_back():
+        calls[0] += 1
+        if calls[0] <= 2:
+            raise RequestError(-1, 2151, "Positions info is not available yet")
+        return await original()
+
+    monkeypatch.setattr(s, "reconcile", outage_then_back)
+    s.last_reconcile = float("-inf")
+    original_resume = s._resume_after_data_wait
+
+    async def watch():
+        seen.append(s.mode)
+        s.last_reconcile = float("-inf") if calls[0] < 3 else s.last_reconcile
+        await original_resume()
+
+    monkeypatch.setattr(s, "_resume_after_data_wait", watch)
+    assert await _monitor_until(s, lambda: calls[0] >= 3 and s.mode == "PAPER", monkeypatch)
+    transitions = [t["status"] for t in reversed(s.store.records("continuity", s.manifest.account))]
+    assert transitions[:1] == ["WAITING_DATA"] and "RESUMED" in transitions
+    assert s.pause_reason is None or "Positions info" not in (s.pause_reason or "")
+
+
+async def test_an_unexpected_error_during_a_wait_keeps_waiting_instead_of_stopping(operational, monkeypatch):
+    s = operational
+    await s._wait_for_data("Internet down")
+    epoch = s.control_epoch
+
+    def broken():
+        raise ValueError("Configured paper account not accessible; live trading is disabled")
+
+    monkeypatch.setattr(s.ledger, "closes", broken)
+    await _monitor_until(s, lambda: "not accessible" in (s.data_wait or {}).get("reason", ""), monkeypatch)
+    assert s.mode == "WAITING_DATA" and s.data_wait is not None and s.control_epoch == epoch
+
+
+async def test_an_unexpected_error_while_trading_with_ibkr_reachable_still_stops(operational, monkeypatch):
+    s = operational
+
+    def broken():
+        raise ValueError("Unexpected failure")
+
+    monkeypatch.setattr(s.ledger, "closes", broken)
+    await _monitor_until(s, lambda: s.mode == "PAUSED", monkeypatch)
+    assert s.mode == "PAUSED" and s.data_wait is None
+
+
+async def test_an_order_cut_off_by_the_outage_is_closed_after_a_clean_reconcile(operational):
+    s, m = operational, operational.manifest
+    created = s.now() - timedelta(minutes=3)
+    s.store.clock = lambda: created
+    for identifier, state in (("lost", "SUBMITTING"), ("fresh", "SUBMITTING")):
+        if identifier == "fresh":
+            s.store.clock = lambda: s.now() - timedelta(seconds=30)
+        request = OrderRequest(
+            intent_id=identifier,
+            account=m.account,
+            con_id=10,
+            signed_quantity=100,
+            limit_price=Decimal("195"),
+            decision_id="d",
+            snapshot_id=s.last_snapshot.version,
+        )
+        s.store.create_intent(request)
+        s.store.transition(identifier, "VALIDATED")
+        s.store.transition(identifier, state, 4242 if identifier == "lost" else 4243)
+    s.store.clock = s.now
+    await s._wait_for_data("Mac asleep: order sent while the socket was down")
+    snapshot = s.broker.snapshot().model_copy(update={"at": s.now()})
+    await s.execution.reconcile(snapshot)
+    states = {r["id"]: r["state"] for r in s.store.intents(m.account)}
+    # Not listed by a complete download 3 minutes on: never reached IBKR. 30 s on: still uncertain.
+    assert states == {"lost": "ABANDONED", "fresh": "UNKNOWN"}
+    assert any("no longer at the broker" in a["message"] for a in s.store.records("alert", m.account))

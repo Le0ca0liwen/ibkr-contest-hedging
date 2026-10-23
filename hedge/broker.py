@@ -28,6 +28,14 @@ class BrokerAdapter(Protocol):
 
 # The closing-NAV side connection's client id: the app's own plus this (read-only, no orders).
 SIDE_CLIENT_OFFSET = 100
+# TWS lost / regained its own link to IBKR's servers (internet down or back); the API socket to TWS
+# stays open meanwhile. 1101 means data subscriptions were lost and must be renewed.
+LINK_LOST_CODES = frozenset({1100, 2110})
+LINK_BACK_CODES = frozenset({1101, 1102})
+# Errors that mean "IBKR is unreachable right now", not a fault: not connected (502/504), socket
+# reset (1300), link lost (1100/2110), positions not available yet (2151, seen during the Oct 22
+# outage), live updates refused while disconnected (10182).
+LINK_ERROR_CODES = frozenset({502, 504, 1100, 1300, 2110, 2151, 10182})
 
 
 def finite(value):
@@ -46,6 +54,7 @@ class IBKRBroker:
         self.readonly = True
         self.qualified = False
         self.reconciled = False
+        self.server_link = True  # False between TWS's 1100/2110 and its 1101/1102
         self.reconcile_lock = asyncio.Lock()
         self.account_at = datetime.min.replace(tzinfo=timezone.utc)
         self.pnl_daily = self.pnl_at = None  # real-time account daily P&L (reqPnL)
@@ -74,6 +83,7 @@ class IBKRBroker:
         self.ib.positionEvent += lambda p: self.emit(
             "position", {"con_id": p.contract.conId, "quantity": str(p.position)}
         )
+        self.ib.errorEvent += self._link
         self.ib.errorEvent += lambda req, code, msg, contract: self.emit(
             "broker_error",
             {"order_id": req, "code": code, "message": msg, "con_id": getattr(contract, "conId", None)},
@@ -81,6 +91,27 @@ class IBKRBroker:
 
     def emit(self, event, value):
         self.events.put_nowait((event, value))
+
+    def _link(self, req, code, msg, contract):
+        if code in LINK_LOST_CODES:
+            self.server_link = False
+        elif code in LINK_BACK_CODES:
+            self.server_link = True
+
+    def link_up(self):
+        """The API socket to TWS is open and TWS reaches IBKR's servers."""
+        return self.ib.isConnected() and self.server_link
+
+    def resubscribe(self):
+        """After TWS's 1101 (link back, data lost): renew the P&L stream and IBKR market data."""
+        self._subscribe_pnl()
+        if self.manifest.market_data_provider == "ibkr":
+            for native in self.native.values():
+                try:
+                    self.ib.cancelMktData(native)
+                except Exception:  # not subscribed (any more)
+                    pass
+                self.ib.reqMktData(native, "236" if native.secType == "STK" else "", False, False)
 
     def _disconnected(self):
         self.reconciled = False
@@ -243,7 +274,7 @@ class IBKRBroker:
                 self.emit("qualification_unavailable", {"con_id": c.con_id, "message": message})
         snapshot = await self._download_state()
         self._validate_required_qualification(snapshot)
-        self.qualified = True
+        self.qualified = self.server_link = True
         self._subscribe_pnl()
         if self.manifest.market_data_provider == "ibkr":
             self.ib.reqMarketDataType(1)
@@ -425,7 +456,8 @@ class IBKRBroker:
         # same subscription can wait indefinitely for a new download-end marker.
         if not self.ib.accountValues(self.manifest.account):
             await asyncio.wait_for(self.ib.reqAccountUpdatesAsync(self.manifest.account), 15)
-        self.reconciled = True
+        # A complete download needs IBKR's servers: the link is up whatever message was missed.
+        self.reconciled = self.server_link = True
         snapshot = self.snapshot()
         try:
             self._validate_required_qualification(snapshot)
@@ -810,6 +842,12 @@ class SimBroker:
 
     async def connect(self):
         self.connected = self.reconciled = True
+
+    def link_up(self):
+        return self.connected
+
+    def resubscribe(self):
+        pass
 
     async def reconcile(self):
         self.reconciled = self.connected

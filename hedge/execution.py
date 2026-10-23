@@ -14,6 +14,9 @@ from .order_policy import choose_order, rounded_price, spread_error, urgency_for
 from .scenarios import ScenarioEngine
 from .storage import TERMINAL, burn_leg_id, plan_record_id
 
+# A same-day uncertain order a complete broker download still does not list after this is closed.
+UNKNOWN_SETTLE = timedelta(minutes=2)
+
 
 class ExecutionManager:
     def __init__(self, manifest, store, broker, gate):
@@ -919,16 +922,22 @@ class ExecutionManager:
                 self.store.transition(row["id"], "UNKNOWN")
         # DAY and IOC orders cannot outlive their session: an uncertain intent from an earlier
         # session that the reconciled broker no longer lists is finished (any fill is in positions).
+        # So is one from today that a complete download still does not list as working
+        # UNKNOWN_SETTLE after it was created: its completed status and fills were replayed by that
+        # download, and one cut off before reaching TWS (Mac asleep, network down) never existed.
+        # Left UNKNOWN it would block the automatic restart after the outage for the whole day.
         today = snapshot.at.astimezone(NY).date()
         for row in self.store.intents(snapshot.account, True):
             reference = (
                 ("hedge-package:" + row["package_id"]) if row.get("package_id") else "hedge:" + row["id"]
             )
+            created = timestamp(row["created_at"])
+            earlier = created.astimezone(NY).date() < today
             if (
                 row["state"] == "UNKNOWN"
                 and snapshot.reconciled
                 and reference not in by_ref
-                and timestamp(row["created_at"]).astimezone(NY).date() < today
+                and (earlier or snapshot.at - created >= UNKNOWN_SETTLE)
             ):
                 self.store.transition(row["id"], "ABANDONED")
                 self.store.record(
@@ -936,8 +945,9 @@ class ExecutionManager:
                     snapshot.account,
                     {
                         "severity": "warning",
-                        "message": f"Uncertain order {row['id'][:8]} from an earlier session is no longer at "
-                        "the broker; closed it (any fill is already in the positions)",
+                        "message": f"Uncertain order {row['id'][:8]} "
+                        + ("from an earlier session " if earlier else "")
+                        + "is no longer at the broker; closed it (any fill is already in the positions)",
                         "intent_id": row["id"],
                     },
                 )

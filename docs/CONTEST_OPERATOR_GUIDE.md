@@ -17,6 +17,10 @@ seven mandated legs and any leftover non-contest positions, both done in TWS).
   positions stay in the account.
 - Keep TWS (Paper) logged in with the API enabled on port 7497 and
   **Read-Only API unticked**, and keep Moomoo OpenD logged in.
+- **Lost internet or on battery:** keep the app running. When the connection drops,
+  trading waits (mode WAITING_DATA) and restarts by itself once IBKR and fresh quotes are back
+  and every paper check passes; an order cut off by the drop is closed after a clean
+  reconcile. Nothing to press. Closing the lid sleeps the Mac: trading stops until it wakes.
 
 ## The control bar (top of every page)
 
