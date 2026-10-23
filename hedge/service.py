@@ -677,11 +677,17 @@ class TradingService:
     def _confirmed_legs(self):
         return {self.manifest.contract_map[i].label: q for i, q in self.manifest.mandatory.items()}
 
-    def auto_confirm(self):
-        """Operator instruction (Oct 23): a changed configuration is confirmed automatically when the
-        operator already confirmed one for the same account and the same mandated legs, the part
-        checked against the instructor's table and TWS. A first confirmation, or any change to the
-        legs or the account, still needs the button. Returns True when it confirmed now."""
+    def auto_confirm(self, holdings_match=False):
+        """Operator instructions (Oct 23): the contest configuration confirms itself once IBKR has
+        verified every contract and either
+        - the operator already confirmed a configuration for the same account and the same mandated
+          legs (a settings change), or
+        - `holdings_match`: the reconciled IBKR paper account holds exactly the configured mandated
+          legs (the instructor's table as entered in TWS; the caller passes this only for a
+          snapshot IBKR just reconciled).
+        Otherwise (changed legs not yet entered in TWS) the Mandated legs row blocks paper anyway,
+        and it confirms once they are held. The button stays for an early review. Returns True when
+        it confirmed now."""
         if self.contest_confirmed() or (not self.demo and not self.broker.qualified):
             return False
         legs = self._confirmed_legs()
@@ -693,8 +699,9 @@ class TradingService:
             ),
             None,
         )
-        if earlier is None:
+        if earlier is None and not holdings_match:
             return False
+        basis = earlier.get("config_hash") if earlier else "ibkr_holdings"
         self.store.record(
             "configuration_confirmation",
             self.manifest.account,
@@ -704,13 +711,17 @@ class TradingService:
                 "mandatory": legs,
                 "at": self.now().isoformat(),
                 "automatic": True,
-                "basis": earlier.get("config_hash"),
+                "basis": basis,
             },
         )
+        reason = (
+            f"same account and the same {len(legs)} mandated legs as the confirmed {str(basis)[:8]}"
+            if earlier
+            else f"IBKR paper account {self.manifest.account} holds exactly the {len(legs)} configured "
+            "mandated legs"
+        )
         self.alert(
-            "info",
-            f"Contest configuration {self.manifest.config_hash[:8]} confirmed automatically: same account "
-            f"and the same seven mandated legs as the confirmed {str(earlier.get('config_hash'))[:8]}",
+            "info", f"Contest configuration {self.manifest.config_hash[:8]} confirmed automatically: {reason}"
         )
         return True
 
@@ -958,8 +969,8 @@ class TradingService:
             "ok" if confirmed else "fail",
             "Confirmed"
             if confirmed
-            else "Not confirmed: review the seven legs and press Confirm contest configuration "
-            "(available once IBKR has verified the contracts)",
+            else "Not confirmed yet: it confirms by itself once IBKR has verified the contracts and "
+            "holds the configured legs (or press Confirm contest configuration)",
         )
         valued = ("synthetic",) if self.demo else ("live", "model")
         live = sum(1 for q in self.last_quotes.values() if q.data_type in valued)
@@ -1393,7 +1404,8 @@ class TradingService:
                         await self.execution.pause()
                     if self.mode != "SETUP":
                         self.alert("error", self.health)
-                self.auto_confirm()
+                # This pass's IBKR reconcile: holdings equal to the configured legs confirm it.
+                self.auto_confirm(holdings_match=not mandate_errors)
                 self._arm_at_trading_start()
                 self._autostart_step(mandate_errors)
                 if self.last_quotes:

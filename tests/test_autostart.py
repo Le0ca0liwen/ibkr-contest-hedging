@@ -508,13 +508,12 @@ def test_the_statement_nav_is_the_official_close_in_the_contest(manifest, store)
 
 
 async def test_a_changed_configuration_with_the_same_account_and_legs_is_confirmed_automatically(store):
-    """Operator instruction (Oct 23): no Confirm press for a settings change; the first confirmation
-    and any change to the mandated legs still need the button."""
+    """Operator instruction (Oct 23): no Confirm press for a settings change."""
     from hedge.demo import demo_manifest
 
     contest = demo_manifest().model_copy(update={"confirmed": False})
     first = TradingService(contest, store, demo=True)
-    assert not first.auto_confirm()  # nothing confirmed yet: the first confirmation is the operator's
+    assert not first.auto_confirm()  # no earlier confirmation and no reconciled holdings yet
     first.confirm_configuration(contest.config_hash)
     changed = TradingService(
         contest.model_copy(update={"initial_nav": contest.initial_nav + 1}), store, demo=True
@@ -529,7 +528,7 @@ async def test_a_changed_configuration_with_the_same_account_and_legs_is_confirm
     assert record["automatic"] and record["basis"] == contest.config_hash
     assert any("confirmed automatically" in a["message"] for a in store.records("alert", contest.account))
     assert not changed.auto_confirm()  # already confirmed: once
-    # Different mandated legs: never confirmed automatically.
+    # Different mandated legs: not from the earlier confirmation, only from IBKR's holdings.
     legs = dict(contest.mandatory)
     first_leg = next(iter(legs))
     legs[first_leg] += 1
@@ -539,6 +538,56 @@ async def test_a_changed_configuration_with_the_same_account_and_legs_is_confirm
         demo=True,
     )
     assert not other.auto_confirm() and not other.contest_confirmed()
+    assert other.auto_confirm(holdings_match=True) and other.contest_confirmed()
+
+
+async def test_the_configuration_confirms_itself_once_ibkr_holds_the_configured_legs(
+    manifest, store, quotes, now, monkeypatch
+):
+    """Operator instruction (Oct 23): never a Confirm press. Without an earlier confirmation, the
+    monitor confirms the configuration on the first IBKR reconcile whose holdings equal the
+    configured mandated legs, and only then may paper start."""
+    contest = autostarting(manifest).model_copy(update={"confirmed": False})
+    service = TradingService(contest, store, demo=True)
+    service.now = lambda: now
+    await service.broker.connect()
+    fresh = {i: q.model_copy(update={"data_type": "synthetic"}) for i, q in quotes.items()}
+    service.broker.update_quotes(fresh, now)
+    service.ledger.import_close(manifest.day_zero, manifest.initial_nav, "fixture", manifest.account)
+    service.restore_autostart()
+    row = {i["label"]: i for i in service.checklist()}["Contest configuration"]
+    assert row["status"] == "fail" and "confirms by itself" in row["detail"]
+    legs = dict(service.broker.positions)
+    missing = next(iter(contest.mandatory))
+    service.broker.positions[missing] = 0  # one mandated leg not entered yet
+
+    async def no_optimizer():
+        pass
+
+    monkeypatch.setattr(service, "optimize", no_optimizer)
+    task = asyncio.create_task(service._monitor_loop())
+    try:
+        for _ in range(50):
+            await asyncio.sleep(0.05)
+            if service.last_snapshot is not None:
+                break
+        await asyncio.sleep(0.2)
+        assert not service.contest_confirmed()  # holdings differ from the configured legs
+        service.broker.positions.update(legs)
+        for _ in range(100):
+            await asyncio.sleep(0.05)
+            if service.contest_confirmed():
+                break
+        assert service.contest_confirmed()
+    finally:
+        task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+    record = store.records("configuration_confirmation", contest.account)[0]
+    assert record["automatic"] and record["basis"] == "ibkr_holdings"
+    assert record["mandatory"] == service._confirmed_legs()
+    messages = [a["message"] for a in store.records("alert", contest.account)]
+    assert any("holds exactly the" in m and "confirmed automatically" in m for m in messages)
+    assert {i["label"]: i for i in service.checklist()}["Contest configuration"]["status"] == "ok"
 
 
 async def test_paper_is_armed_again_when_each_sessions_trading_starts(launched):

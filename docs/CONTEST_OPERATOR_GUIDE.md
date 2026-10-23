@@ -17,10 +17,11 @@ seven mandated legs and any leftover non-contest positions, both done in TWS).
   positions stay in the account.
 - Keep TWS (Paper) logged in with the API enabled on port 7497 and
   **Read-Only API unticked**, and keep Moomoo OpenD logged in.
-- **Automatic confirmation and start (Oct 23):** a changed configuration (settings, added hedge
-  stocks) is confirmed by itself when you already confirmed one for the same account and the same
-  seven legs; only the first confirmation, or a change to the legs, needs **Confirm contest
-  configuration**. With Auto paper ON, paper trading starts by itself at each session's trading start
+- **Automatic confirmation and start (Oct 23):** the contest configuration confirms itself once
+  IBKR has verified every contract and either you confirmed one for the same account and seven legs
+  before (a settings change), or the paper account holds exactly the seven configured legs. No
+  button press is needed; **Confirm contest configuration** stays for an early review. With Auto
+  paper ON, paper trading starts by itself at each session's trading start
   (04:00 ET pre-market), also after a pause or a safety stop the day before, through every
   activation check. To stay paused through the next session, turn Auto paper OFF.
 - **Lost internet or on battery:** keep the app running. When the connection drops,
@@ -49,7 +50,7 @@ reason in plain words. The badge counts the ✗ rows.
 | IBKR | Open TWS (Paper) with the API on port 7497. If it says reconciliation stops on non-contest positions, see the next row. |
 | Account holdings | Close the listed non-contest positions in TWS. |
 | Mandated legs | Enter the listed BUY/SELL quantities in TWS (Paper). The app cannot place these seven legs. |
-| Contest configuration | Press **Confirm contest configuration** (enabled once IBKR has verified every contract), check the seven legs in the dialog, confirm. Needed once per configuration. |
+| Contest configuration | Confirms by itself once IBKR has verified every contract and holds the seven configured legs (or a configuration with the same legs was confirmed before). Until then, enter the legs the Mandated legs row lists; **Confirm contest configuration** confirms early. |
 | Quotes | Moomoo quotes are live 09:30-16:00 ET. Outside those hours this row is a !, not a problem. |
 | Price history | Press **Refresh price history now** if it failed or is old. The app also refreshes it by itself between 08:30 and 09:29 ET. |
 | Previous official close | The scored close is the IBKR statement NAV. The app records its predicted value after 20:05 ET (! until you import the statement); enter the statement "Ending Value" in Settings & alerts > Import an official closing NAV each morning. Missing blocks paper trading. |
@@ -60,7 +61,8 @@ reason in plain words. The badge counts the ✗ rows.
 
 1. Before 09:30 ET: in TWS, untick Read-Only API. Start the app.
 2. At the open: close the leftover positions in TWS (Account holdings row).
-3. When the IBKR row is ✓: press **Confirm contest configuration**.
+3. When the IBKR row is ✓: optionally press **Confirm contest configuration**; otherwise it
+   confirms by itself once the seven legs are held.
 4. Enter the seven legs in TWS (Mandated legs row shows what is left).
 5. Once all seven are held, automatic paper start begins hedging when the
    checks pass. Nothing else to press.
