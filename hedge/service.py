@@ -5,7 +5,7 @@ import fcntl
 import json
 import os
 import time
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
@@ -13,7 +13,7 @@ from .ai_qa import OperatorQA
 from .broker import LINK_BACK_CODES, LINK_ERROR_CODES, LINK_LOST_CODES, IBKRBroker, SimBroker
 from .burner_service import ClosingBurner
 from .closing import CloseMarkRecorder, ClosingRecorder
-from .config import NY
+from .config import LATE_OPTION_SYMBOLS, NY
 from .continuity import DataUnavailable, data_only, quote_coverage
 from .data import QuoteRecorder
 from .day_report import DayReporter
@@ -21,20 +21,33 @@ from .demo import demo_quotes
 from .event_risk import EventRisk
 from .execution import ExecutionManager
 from .execution_quality import execution_quality, timestamp
+from .flex_import import StatementImporter
 from .models import digest, utcnow
-from .moomoo_data import MoomooData, collector_codes, missing_codes
+from .moomoo_archive import archive_path, final_books, last_books
+from .moomoo_data import MoomooData, code_for, collector_codes, missing_codes
 from .optimizer import HedgeOptimizer, execution_cost
+from .power import PowerMonitor, sleep_risk
 from .recovery import RecoveryController, recovery_budget_errors
 from .risk import RiskGate
 from .scenarios import ScenarioEngine
 from .scoring import ScoreLedger
 from .setup import SetupPlanner
-from .statement import StatementTracker, marks_fixed_at, statement_marks, statement_samples, statement_value
+from .statement import (
+    CLOSE_MARK_PHASES,
+    FALLBACK_BOOK_AGE,
+    StatementTracker,
+    marks_fixed_at,
+    statement_marks,
+    statement_samples,
+    statement_value,
+)
+from .statement_import import statement_closes
 from .storage import payload
 from .supervisor import PROFILES, Supervisor
 from .universe import screen_snapshot
 from .valuation import NAVTracker
 
+CHAIN_LEAD = timedelta(seconds=60)  # option chain snapshot this long before each option close
 STATE_ROWS = 250  # most recent orders, fills and execution-quality rows in state()
 # Wall-clock time running this far ahead of the monotonic clock (which stops while the computer
 # sleeps, on macOS and Linux) means the app was asleep: refresh everything from IBKR at once.
@@ -147,6 +160,10 @@ class TradingService:
         # then, the closing burner's gap and the recorder's end-of-day reading.
         self.statement = StatementTracker(manifest)
         self.official_closes = {}  # session -> {share conId: regular-session close}
+        self.statement_importer = StatementImporter(self)
+        self.fallback_marks_at = {}  # session -> next fallback close-mark check
+        self.power = PowerMonitor()
+        self.power_risk = ("ok", "Power status unknown")
         self.closing_recorder = ClosingRecorder(
             manifest, self.ledger, self.broker, self.now, self.alert, demo, statement=self.statement_estimate
         )
@@ -223,6 +240,9 @@ class TradingService:
             asyncio.create_task(self.closing_recorder.run()),
             asyncio.create_task(self.close_marks.run()),
             asyncio.create_task(self._statement_loop()),
+            asyncio.create_task(self._statement_import_loop()),
+            asyncio.create_task(self._power_loop()),
+            asyncio.create_task(self._chain_loop()),
             asyncio.create_task(self._burner_loop()),
             asyncio.create_task(self._daily_history_loop()),
             asyncio.create_task(self._collector_loop()),
@@ -521,13 +541,8 @@ class TradingService:
         day = self.manifest.active_session(now)
         if day is None or now < marks_fixed_at(self.manifest, day):
             return None
-        captures = {
-            phase: self.store.get_record(
-                digest((self.manifest.contest_id, str(day), phase))[:32], self.manifest.account, "close_marks"
-            )
-            for phase in ("pre_close", "options_close", "post_close")
-        }
-        marks, _ = statement_marks(self.manifest, day, captures, self._official_closes(day))
+        captures, chains = self._close_inputs(day)
+        marks, _ = statement_marks(self.manifest, day, captures, self._official_closes(day), chains)
         snapshot = self.live_snapshot()
         contracts = self.manifest.contract_map
         result = {
@@ -568,17 +583,236 @@ class TradingService:
                 "reason": "Waiting for a settled IBKR cash update",
                 "value": None,
             }
+        interest = self._interest_adjustment(day)
+        value += interest["amount"]
         mid = statement_value(0, 0, held, marks, contracts)
         return {
             **result,
             "status": "ok",
             "value": value,
+            "interest": interest,
             "low": value + statement_value(0, 0, held, marks, contracts, "low") - mid,
             "high": value + statement_value(0, 0, held, marks, contracts, "high") - mid,
             "samples": statement_samples(value, held, marks, contracts),
             "base_at": self.statement.base_at.isoformat() if self.statement.base_at else None,
             "check": self.statement.last_check,
         }
+
+    def _interest_adjustment(self, day):
+        """Interest the statement accrues for `day` beyond IBKR's AccruedCash at that day's close
+        (the API figure stayed at 1,601.06 from Oct 22's statement through Oct 23 evening). Learned
+        from imported statements (hedge/flex_import.py: accrual_gap); a Friday statement may carry
+        the weekend, so Fridays learn from Fridays. 0 until a statement taught it."""
+        friday = day.weekday() == 4
+        seen = sorted(
+            (
+                r
+                for r in self.store.records("flex_statement", self.manifest.account, 20)
+                if r.get("accrual_gap") is not None and r.get("date", "") < str(day)
+            ),
+            key=lambda r: r["date"],
+            reverse=True,
+        )
+        same = [r for r in seen if (date.fromisoformat(r["date"]).weekday() == 4) == friday]
+        chosen = (same or seen or [None])[0]
+        if chosen is None:
+            return {"amount": 0.0, "source": "not learned yet (no imported statement)"}
+        return {
+            "amount": float(chosen["accrual_gap"]),
+            "source": f"learned from the {chosen['date']} statement",
+        }
+
+    async def _power_loop(self):
+        """Every minute: is the Mac on battery or its lid closed? From 90 minutes before a scored
+        close until the closing marks are fixed, a risk raises an alert: on Oct 23 a laptop on
+        battery slept from 15:45 and the closing capture was lost. Never raises."""
+        while True:
+            try:
+                await self._power_step(self.now())
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+            await asyncio.sleep(60)
+
+    async def _power_step(self, now):
+        status = await asyncio.to_thread(self.power.check, now)
+        day = self.manifest.active_session(now)
+        minutes = None
+        if day is not None and day in (self.manifest.day_zero, *self.manifest.scoring_sessions):
+            minutes = (self.manifest.session_close(day) - now).total_seconds() / 60
+        self.power_risk = sleep_risk(status, minutes)
+        level, message = self.power_risk
+        if level != "ok" and minutes is not None and -16 <= minutes <= 90:
+            self.alert("error" if level == "fail" else "warning", message, key=("power", str(day), level))
+
+    def _close_inputs(self, day):
+        """The day's stored close-mark captures by phase, and the option chains taken just before
+        each option close (option_chain records, keyed by the phase they smooth)."""
+        m = self.manifest
+
+        def get(category, phase):
+            return self.store.get_record(digest((m.contest_id, str(day), phase))[:32], m.account, category)
+
+        captures = {phase: get("close_marks", phase) for phase in CLOSE_MARK_PHASES}
+        chains = {phase: get("option_chain", f"{phase}_chain") for phase in ("pre_close", "options_close")}
+        return captures, {phase: chain for phase, chain in chains.items() if chain}
+
+    async def _chain_loop(self):
+        """A minute before each option close (15:59 ET; 16:14 for SPY-style options) a quote-only
+        Moomoo snapshot of the held options' chains (ops/fetch_moomoo_chain.py), stored as an
+        option_chain record: statement_marks prices each held option on the smoothed IV curve, as
+        the clearing house does for the statement. Never raises."""
+        attempted = set()
+        while True:
+            await asyncio.sleep(5)
+            try:
+                await self._chain_step(self.now(), attempted)
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.alert(
+                    "warning",
+                    f"Option chain snapshot failed: {type(exc).__name__}",
+                    key=("chain", type(exc).__name__),
+                )
+
+    async def _chain_step(self, now, attempted):
+        m = self.manifest
+        day = m.active_session(now)
+        if self.moomoo_data is None or day is None or day not in (m.day_zero, *m.scoring_sessions):
+            return
+        held = [
+            m.contract_map[i]
+            for i, q in (self.last_snapshot.quantities() if self.last_snapshot else {}).items()
+            if q and i in m.contract_map and m.contract_map[i].kind == "OPT"
+        ]
+        for phase, late in (("pre_close", False), ("options_close", True)):
+            group = [c for c in held if (c.symbol in LATE_OPTION_SYMBOLS) == late]
+            if not group or (day, phase) in attempted:
+                continue
+            start = (m.option_close(day, group[0].symbol) if late else m.session_close(day)) - CHAIN_LEAD
+            if not start <= now <= start + timedelta(seconds=30):
+                continue
+            attempted.add((day, phase))
+            path = self.moomoo_data.path.parent / f"chain-{day:%Y%m%d}-{phase}.json"
+            symbols, expiries = sorted({c.symbol for c in group}), sorted({str(c.expiry) for c in group})
+            chain = await self._fetch_chain(symbols, expiries, path)
+            if chain:
+                self.store.record(
+                    "option_chain",
+                    m.account,
+                    {"contest": m.contest_id, "date": str(day), "phase": phase, **chain},
+                    digest((m.contest_id, str(day), f"{phase}_chain"))[:32],
+                )
+
+    async def _fetch_chain(self, symbols, expiries, path):
+        """Run the quote-only chain script with the Moomoo Python; its JSON, or None."""
+        python = Path(".runtime/moomoo-env/bin/python")
+        if not python.exists():
+            return None
+        process = await asyncio.create_subprocess_exec(
+            str(python),
+            "ops/fetch_moomoo_chain.py",
+            "--underlyings",
+            *symbols,
+            "--expiries",
+            *expiries,
+            "--output",
+            str(path),
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.STDOUT,
+        )
+        try:
+            output, _ = await asyncio.wait_for(process.communicate(), 50)
+        except TimeoutError:
+            process.kill()
+            raise
+        if process.returncode != 0:
+            self.alert(
+                "warning",
+                "Option chain snapshot failed: " + output.decode(errors="replace").strip()[-200:],
+                key=("chain_failed", str(path)),
+            )
+            return None
+        return json.loads(path.read_text())
+
+    def statement_marks_comparison(self, day, closes):
+        """The statement's own closes ({str(conId): {"quantity", "close"}}) against the marks the
+        app predicted for `day`: the calibration of hedge/statement.py. effect = quantity x
+        multiplier x (statement - predicted)."""
+        m = self.manifest
+        captures, chains = self._close_inputs(day)
+        marks, _ = statement_marks(m, day, captures, self._official_closes(day), chains)
+        rows, total = [], 0.0
+        for key, row in sorted(closes.items()):
+            con_id = int(key)
+            contract, mark = m.contract_map.get(con_id), marks.get(con_id)
+            close, quantity = float(row["close"]), float(row["quantity"])
+            effect = None
+            if contract is not None and mark is not None:
+                effect = quantity * contract.multiplier * (close - mark["mark"])
+                total += effect
+            rows.append(
+                {
+                    "label": contract.label if contract else row.get("label", key),
+                    "quantity": quantity,
+                    "statement": close,
+                    "predicted": mark["mark"] if mark else None,
+                    "bid": mark["low"] if mark else None,
+                    "ask": mark["high"] if mark else None,
+                    "source": mark["source"] if mark else "no capture",
+                    "effect": effect,
+                }
+            )
+        return {"date": str(day), "rows": rows, "total_effect": total}
+
+    def import_statement_positions(self, day, text):
+        """The operator pasted (or uploaded) a statement's Open Positions for `day`: stored per
+        contract and compared with the app's predicted marks. ValueError for unreadable text."""
+        m = self.manifest
+        if day not in (m.day_zero, *m.scoring_sessions):
+            raise ValueError("That day is not in the contest")
+        parsed = statement_closes(m, text)
+        comparison = self.statement_marks_comparison(day, parsed["rows"])
+        self.store.record(
+            "statement_positions",
+            m.account,
+            {
+                "date": str(day),
+                **parsed,
+                "comparison": comparison,
+                "at": self.now().isoformat(),
+                "source": "pasted",
+            },
+        )
+        return {**parsed, "comparison": comparison}
+
+    def latest_marks_check(self):
+        """The newest statement-vs-predicted comparison (pasted Open Positions or the Flex import)."""
+        rows = [
+            r
+            for category in ("statement_positions", "flex_statement")
+            for r in self.store.records(category, self.manifest.account, 5)
+            if r.get("comparison")
+        ]
+        if not rows:
+            return None
+        return max(rows, key=lambda r: (r.get("date", ""), r.get("at") or r.get("fetched_at") or ""))[
+            "comparison"
+        ]
+
+    async def _statement_import_loop(self):
+        """From 00:10 ET after each session: the day's IBKR Activity Statement via the Flex Web
+        Service, recorded as its official close (hedge/flex_import.py). Never raises."""
+        while True:
+            await asyncio.sleep(60)
+            try:
+                await self.statement_importer.step(self.now())
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                self.statement_importer.status = f"Statement import failed: {type(exc).__name__}"
 
     async def _statement_loop(self):
         """After each session close, IBKR's regular-session closing prices of the shares (the
@@ -592,6 +826,8 @@ class TradingService:
                 day = self.manifest.active_session(now)
                 if day is None or now > self.manifest.trading_end(day) + timedelta(hours=2):
                     continue
+                if now >= marks_fixed_at(self.manifest, day):
+                    await self._fallback_close_marks(day, now)
                 close = self.manifest.session_close(day)
                 due = [t for t in (close + timedelta(minutes=5), close + timedelta(minutes=30)) if now >= t]
                 if not due or (day, due[-1]) in done or not self.broker.snapshot().connected:
@@ -631,6 +867,85 @@ class TradingService:
                         )
                     except Exception:
                         pass
+
+    async def _fallback_close_marks(self, day, now):
+        """When the app missed its own 16:00/16:15 option capture (the Mac slept from 15:45 on Oct
+        23): each held option's closing book from the Moomoo collector's archive (the last book within
+        10 minutes before the option's close), else Moomoo's final book after the close. Stored once
+        per day as close_marks phases archive_close and final_book, which statement_marks uses after
+        the app's own captures. Checked at most every 5 minutes; never raises."""
+        m = self.manifest
+        if self.moomoo_data is None or now < self.fallback_marks_at.get(day, now):
+            return
+        self.fallback_marks_at[day] = now + timedelta(minutes=5)
+        try:
+            captures = {
+                phase: self.store.get_record(
+                    digest((m.contest_id, str(day), phase))[:32], m.account, "close_marks"
+                )
+                for phase in CLOSE_MARK_PHASES
+            }
+            held = (self.last_snapshot.quantities() if self.last_snapshot else {}).items()
+            options = {i for i, q in held if q and i in m.contract_map and m.contract_map[i].kind == "OPT"}
+            _, missing = statement_marks(m, day, captures, {})
+            missing = [i for i in missing if i in options]
+            if not missing:
+                return
+            codes = {code_for(m.contract_map[i]): i for i in missing}
+            directory = self.moomoo_data.path.parent
+            books = {
+                "archive_close": await asyncio.to_thread(
+                    last_books,
+                    archive_path(directory, day),
+                    {code: m.option_close(day, m.contract_map[i].symbol) for code, i in codes.items()},
+                    FALLBACK_BOOK_AGE,
+                ),
+                "final_book": final_books(self.moomoo_data.path, list(codes)),
+            }
+            for phase, found in books.items():
+                if captures.get(phase) or not found:
+                    continue
+                quotes = {
+                    str(codes[code]): {
+                        "bid": b["bid"],
+                        "ask": b["ask"],
+                        "mid": (b["bid"] + b["ask"]) / 2,
+                        "data_type": "live",
+                        "observed_at": b["at"].isoformat(),
+                        "source": b["source"],
+                    }
+                    for code, b in found.items()
+                }
+                self.store.record(
+                    "close_marks",
+                    m.account,
+                    {
+                        "contest": m.contest_id,
+                        "date": str(day),
+                        "phase": phase,
+                        "at": now.isoformat(),
+                        "quotes": quotes,
+                    },
+                    digest((m.contest_id, str(day), phase))[:32],
+                )
+                labels = ", ".join(sorted(m.contract_map[codes[c]].label for c in found))
+                self.alert(
+                    "warning",
+                    f"Closing option marks for {day} were not captured live; using the Moomoo "
+                    + (
+                        "archive's last books before the close"
+                        if phase == "archive_close"
+                        else "final books after the close"
+                    )
+                    + f" for {labels} (less exact)",
+                    key=("fallback_marks", str(day), phase),
+                )
+        except Exception as exc:
+            self.alert(
+                "warning",
+                f"Fallback closing marks unavailable: {type(exc).__name__}",
+                key=("fallback_marks_error", str(day)),
+            )
 
     def _warn_api_previous_close(self, day, record):
         """Once per session: today's target rests on a provisional API close, not the statement."""
@@ -1077,6 +1392,25 @@ class TradingService:
                     if baseline and record is not None and record.get("day") != baseline
                     else ""
                 ),
+            )
+        level, message = self.power_risk
+        if message != "Power status unknown":
+            item("Power", "ok" if level == "ok" else "warn", message)  # advice: never blocks paper
+        if m.extended_hours:
+            imports = self.statement_importer.state()
+            latest = imports["latest"]
+            failing = "not imported" in imports["status"] or "failed" in imports["status"]
+            item(
+                "Statement import",
+                "ok" if imports["configured"] and not failing else "warn",
+                (
+                    "Automatic after midnight ET"
+                    + (f"; last: {latest['date']} NAV ${float(latest['total']):,.2f}" if latest else "")
+                    + (f" · {imports['status']}" if failing else "")
+                )
+                if imports["configured"]
+                else "Not set up: double-click Setup IBKR Flex.command to record each statement NAV by "
+                "itself after midnight (or enter it in Settings & alerts)",
             )
         auto = self.autostart_mode()
         blocked = any(i["status"] == "fail" for i in items)
@@ -2784,6 +3118,8 @@ class TradingService:
                 else None,
                 "nav_report_source": self.manifest.report_source,
                 "official_account_nav": self.ledger.latest_report(),
+                "statement_import": self.statement_importer.state(),
+                "statement_marks_check": self.latest_marks_check(),
                 "closing_recorder": self.closing_recorder.state(),
                 "provisional_score": abs(estimate - float(closing_target))
                 if estimate is not None and closing_target is not None

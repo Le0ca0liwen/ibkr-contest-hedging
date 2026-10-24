@@ -44,6 +44,12 @@ class CloseImport(BaseModel):
         return value.replace("$", "").replace(",", "").strip() if isinstance(value, str) else value
 
 
+class StatementPositions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    date: date
+    text: str = Field(min_length=1, max_length=200_000)
+
+
 class ConfigConfirmation(BaseModel):
     model_config = ConfigDict(extra="forbid")
     config_hash: str
@@ -390,6 +396,13 @@ def create_app(service):
             service.force_optimize = True
             service.pending_target = None
             return result
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.post("/api/statement_positions")
+    async def import_statement_positions(body: StatementPositions):
+        try:
+            return service.import_statement_positions(body.date, body.text)
         except ValueError as exc:
             raise HTTPException(422, str(exc)) from exc
 

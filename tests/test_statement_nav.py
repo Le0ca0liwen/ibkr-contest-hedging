@@ -1,6 +1,7 @@
 """The contest's scored close is the IBKR Activity Statement NAV (instructor, Oct 23): cash and
 accrued interest after the post-market session plus positions at the closing marks."""
 
+import re
 from datetime import datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
@@ -295,3 +296,188 @@ async def test_one_refused_share_keeps_the_other_regular_session_closes(manifest
     broker.ib = History({"RKLB", "VOO", "SPCX"})
     with pytest.raises(RequestError):  # nothing at all: the service alerts and retries
         await broker.official_closes(day, [1, 2, 3])
+
+
+async def test_missed_closing_captures_fall_back_to_moomoos_archive_and_final_books(
+    manifest, store, tmp_path
+):
+    """Oct 23: the Mac slept from 15:56, so no 16:00 capture. The collector's archive still had each
+    option's book at 15:56 and Moomoo kept its final book after the close."""
+    import gzip
+    import json
+
+    from hedge.moomoo_data import code_for
+    from hedge.service import TradingService
+
+    service = TradingService(manifest, store, demo=True)
+    day = manifest.scoring_sessions[0]
+    now = marks_fixed_at(manifest, day) + timedelta(minutes=4)
+    service.now = lambda: now
+    service.broker.positions = {10: 200, 101: -5, 102: 3}
+    service.broker.now = now
+    service.last_snapshot = service.broker.snapshot()
+    service.moomoo_data = SimpleNamespace(path=tmp_path / "latest.json")
+    first, second = (code_for(manifest.contract_map[i]) for i in (101, 102))
+
+    def book(bid, ask, at):
+        stamp = f"{at:%Y-%m-%d %H:%M:%S}.000"
+        return {
+            "order_book": {
+                "Bid": [[bid, 5, 1, []]],
+                "Ask": [[ask, 5, 1, []]],
+                "svr_recv_time_bid": stamp,
+                "svr_recv_time_ask": stamp,
+            },
+            "book_push_count": 3,
+        }
+
+    early = at(day, 15, 56)
+    with gzip.open(tmp_path / f"raw-{day:%Y%m%d}.jsonl.gz", "wt") as archive:
+        archive.write(
+            json.dumps({"received_at": early.isoformat(), "securities": {first: book(6.0, 6.2, early)}})
+            + "\n"
+        )
+    late = at(day, 16, 30)
+    pushed = {"book_push_at": late.isoformat()}
+    (tmp_path / "latest.json").write_text(
+        json.dumps(
+            {
+                "securities": {
+                    first: {**book(5.0, 7.0, late), **pushed},
+                    second: {**book(2.0, 2.2, late), **pushed},
+                }
+            }
+        )
+    )
+    await service._fallback_close_marks(day, now)
+    await service._fallback_close_marks(day, now)  # once per 5 minutes; records are insert-once
+    phases = {r["phase"] for r in store.records("close_marks", manifest.account)}
+    assert phases == {"archive_close", "final_book"}
+    service.official_closes[day] = {10: Decimal("194.50")}
+    estimate = service.statement_estimate()
+    assert estimate["status"] == "ok"
+    sources = {label: m["source"] for label, m in estimate["marks"].items()}
+    assert sources[manifest.contract_map[101].label] == "archive_close midpoint"  # 15:56 beats the final book
+    assert sources[manifest.contract_map[102].label] == "final_book midpoint"
+    alerts = [a["message"] for a in store.records("alert", manifest.account)]
+    assert any("were not captured live" in a for a in alerts)
+
+
+def test_pasted_open_positions_are_compared_with_the_predicted_marks(manifest, store):
+    from fastapi.testclient import TestClient
+
+    from hedge.models import digest
+    from hedge.service import TradingService
+    from hedge.webapp import create_app
+
+    service = TradingService(manifest, store, demo=True)
+    day = manifest.scoring_sessions[0]
+    option = manifest.contract_map[101]
+    store.record(
+        "close_marks",
+        manifest.account,
+        {"quotes": {"101": {"bid": 6.55, "ask": 7.40, "data_type": "live"}}},
+        digest((manifest.contest_id, str(day), "pre_close"))[:32],
+    )
+    service.official_closes[day] = {10: Decimal("194.50")}
+    stock = manifest.contract_map[10]
+    text = "\n".join(
+        [
+            "Symbol\tQuantity\tMult\tCost Price\tCost Basis\tClose Price\tValue\tUnrealized P/L\tCode",
+            f"{stock.symbol}\t100\t1\t190\t19,000.00\t194.5000\t19,450.00\t450.00\t",
+            f"{option.symbol} {option.expiry:%d%b%y}".upper()
+            + f" {option.strike:g} {option.right}\t25\t100\t5\t12,500.00\t6.5500\t16,375.00\t3,875.00\t",
+        ]
+    )
+    client = TestClient(create_app(service))
+    token = re.search(r'name="control-token" content="([^"]+)"', client.get("/").text).group(1)
+    response = client.post(
+        "/api/statement_positions", json={"date": str(day), "text": text}, headers={"X-Control-Token": token}
+    )
+    assert response.status_code == 200, response.text
+    rows = {r["label"]: r for r in response.json()["comparison"]["rows"]}
+    assert rows[option.label]["predicted"] == pytest.approx(6.975) and rows[option.label]["statement"] == 6.55
+    assert rows[option.label]["effect"] == pytest.approx(25 * 100 * (6.55 - 6.975))  # marked at the bid
+    assert rows[stock.symbol]["effect"] == pytest.approx(0)
+    assert service.state()["statement_marks_check"]["total_effect"] == pytest.approx(-1062.5)
+    bad = client.post(
+        "/api/statement_positions",
+        json={"date": str(day), "text": "hello"},
+        headers={"X-Control-Token": token},
+    )
+    assert bad.status_code == 422
+
+
+def test_a_chain_before_the_close_prices_options_on_the_smoothed_curve():
+    """Oct 23 at 15:56: SPCX 130C 19.60/20.40 sat above the smile (IV 55.9% vs 53.3/52.7%); the
+    clearing house's smoothing would mark it below its 20.00 midpoint, inside its bid/ask."""
+    from datetime import date
+
+    from hedge.moomoo_data import code_for
+
+    expiry = date(2026, 11, 20)
+    legs = {
+        13: (130, "C", 19.60, 20.40),
+        14: (145, "C", 9.85, 10.00),
+        16: (160, "C", 4.00, 4.10),
+        15: (145, "P", 7.30, 7.45),
+    }
+    contracts = [
+        Contract(con_id=i, symbol="SPCX", kind="OPT", expiry=expiry, strike=k, right=r, multiplier=100)
+        for i, (k, r, _, _) in legs.items()
+    ]
+    m = SimpleNamespace(
+        contracts=contracts, contract_map={c.con_id: c for c in contracts}, risk_free_rate=0.0344
+    )
+    quotes = {str(i): {"bid": b, "ask": a, "data_type": "live"} for i, (_, _, b, a) in legs.items()}
+    chain = {
+        "at": "2026-10-23T19:59:00+00:00",
+        "underlyings": {"SPCX": {"spot": 147.17}},
+        "options": [
+            {
+                "code": code_for(c),
+                "underlying": "SPCX",
+                "expiry": str(expiry),
+                "strike": c.strike,
+                "right": c.right,
+                "bid": legs[c.con_id][2],
+                "ask": legs[c.con_id][3],
+            }
+            for c in contracts
+        ],
+    }
+    plain, _ = statement_marks(m, None, {"pre_close": {"quotes": quotes}}, {})
+    marks, missing = statement_marks(m, None, {"pre_close": {"quotes": quotes}}, {}, {"pre_close": chain})
+    assert (
+        not missing
+        and plain[13]["mark"] == pytest.approx(20.0)
+        and plain[13]["source"] == "pre_close midpoint"
+    )
+    assert 19.6 <= marks[13]["mark"] < 19.97 and marks[13]["source"].startswith("pre_close smoothed IV")
+    assert marks[13]["mid"] == pytest.approx(20.0) and (marks[13]["low"], marks[13]["high"]) == (19.6, 20.4)
+    assert marks[14]["mark"] == pytest.approx(9.925, abs=0.05)  # a tight quote on the curve barely moves
+
+
+async def test_the_chain_is_taken_a_minute_before_each_option_close(manifest, store, tmp_path):
+    from hedge.service import TradingService
+
+    service = TradingService(manifest, store, demo=True)
+    service.moomoo_data = SimpleNamespace(path=tmp_path / "latest.json")
+    service.broker.positions = {101: -5}
+    service.last_snapshot = service.broker.snapshot()
+    calls = []
+
+    async def fetch(symbols, expiries, path):
+        calls.append((symbols, expiries, path.name))
+        return {"at": "2026-10-07T19:59:00+00:00", "underlyings": {}, "options": []}
+
+    service._fetch_chain = fetch
+    day = manifest.scoring_sessions[0]
+    attempted = set()
+    await service._chain_step(at(day, 15, 58), attempted)
+    assert not calls
+    await service._chain_step(at(day, 15, 59) + timedelta(seconds=5), attempted)
+    await service._chain_step(at(day, 15, 59) + timedelta(seconds=10), attempted)  # once per day
+    option = manifest.contract_map[101]
+    assert calls == [([option.symbol], [str(option.expiry)], f"chain-{day:%Y%m%d}-pre_close.json")]
+    assert [r["phase"] for r in store.records("option_chain", manifest.account)] == ["pre_close"]

@@ -13,30 +13,60 @@ closing bid/ask, and the spread is the uncertainty this module carries.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import numpy as np
 
 from .burner import option_commission, stock_commission
 from .config import LATE_OPTION_CLOSE, LATE_OPTION_SYMBOLS
+from .marks import smooth_marks
+from .moomoo_data import code_for
 
 SETTLE = timedelta(seconds=20)  # no fill this long before a cash push, or since: cash and positions agree
 MARKS_FIXED = LATE_OPTION_CLOSE + timedelta(minutes=1)  # 16:16 ET: every closing mark is known
 CAPTURE_TYPES = ("live", "synthetic")
+# The app's own captures, then (service._fallback_close_marks) the Moomoo collector's archive and its
+# final books when the app missed the close; post_close holds model values only.
+CLOSE_MARK_PHASES = ("pre_close", "options_close", "post_close", "archive_close", "final_book")
+FALLBACK_BOOK_AGE = timedelta(minutes=10)
 
 
 def marks_fixed_at(manifest, day):
     return manifest.session_close(day) + MARKS_FIXED
 
 
-def statement_marks(manifest, day, captures, stock_closes):
-    """({con_id: {"mark", "low", "high", "source"}}, [con_id without a mark]).
+def smoothed_chain_marks(manifest, chain):
+    """{Moomoo code: smoothed mark} from an option_chain record (ops/fetch_moomoo_chain.py, taken
+    just before the close): each underlying's chain through hedge/marks.py, the clearing house's
+    smoothed-IV method."""
+    if not chain or not chain.get("options"):
+        return {}
+    at = datetime.fromisoformat(chain["at"])
+    result = {}
+    for symbol, info in (chain.get("underlyings") or {}).items():
+        rows = [
+            {**o, "key": o["code"]}
+            for o in chain["options"]
+            if o.get("underlying") == symbol and o.get("bid") is not None and o.get("ask") is not None
+        ]
+        spot = (info or {}).get("spot")
+        if rows and spot:
+            marks = smooth_marks(rows, float(spot), at, manifest.risk_free_rate)
+            result.update({code: m for code, m in marks.items() if m["source"].startswith("smoothed")})
+    return result
+
+
+def statement_marks(manifest, day, captures, stock_closes, chains=None):
+    """({con_id: {"mark", "low", "high", "mid", "source"}}, [con_id without a mark]).
 
     `captures` maps close-mark phases ("pre_close" at 16:00, "options_close" at 16:15,
-    "post_close" at 16:20) to stored close_marks payloads; `stock_closes` maps share conIds to
-    their regular-session close. An option takes the closing midpoint of the capture at its own
-    close; its bid and ask bound the statement's mark."""
+    "post_close" at 16:20, fallbacks "archive_close" and "final_book") to stored close_marks
+    payloads; `stock_closes` maps share conIds to their regular-session close. An option takes the
+    closing book of the capture at its own close; its bid and ask bound the statement's mark. With a
+    chain taken just before that close (`chains`: phase -> option_chain record) the mark is the
+    clearing house's smoothed-IV price clipped to that bid/ask, else the midpoint."""
     marks, missing = {}, []
+    smoothed = {phase: smoothed_chain_marks(manifest, chain) for phase, chain in (chains or {}).items()}
     for c in manifest.contracts:
         if c.kind == "STK":
             close = stock_closes.get(c.con_id)
@@ -48,13 +78,14 @@ def statement_marks(manifest, day, captures, stock_closes):
                     "mark": value,
                     "low": value,
                     "high": value,
+                    "mid": value,
                     "source": "regular-session close",
                 }
             continue
         phases = (
-            ("options_close", "pre_close")
+            ("options_close", "archive_close", "final_book", "pre_close")
             if c.symbol in LATE_OPTION_SYMBOLS
-            else ("pre_close", "options_close")
+            else ("pre_close", "archive_close", "final_book", "options_close")
         )
         for phase in phases:
             quote = ((captures.get(phase) or {}).get("quotes") or {}).get(str(c.con_id))
@@ -63,12 +94,12 @@ def statement_marks(manifest, day, captures, stock_closes):
             bid, ask = float(quote.get("bid") or 0), float(quote.get("ask") or 0)
             if bid <= 0 or ask < bid:
                 continue
-            marks[c.con_id] = {
-                "mark": (bid + ask) / 2,
-                "low": bid,
-                "high": ask,
-                "source": f"{phase} midpoint",
-            }
+            mid, source = (bid + ask) / 2, f"{phase} midpoint"
+            curve = smoothed.get(phase, {}).get(code_for(c))
+            mark = mid
+            if curve is not None:
+                mark, source = min(max(curve["mark"], bid), ask), f"{phase} {curve['source']}"
+            marks[c.con_id] = {"mark": mark, "low": bid, "high": ask, "mid": mid, "source": source}
             break
         else:
             missing.append(c.con_id)
