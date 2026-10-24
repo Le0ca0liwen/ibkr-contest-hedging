@@ -166,6 +166,31 @@ statement), summed per leg as |error|.
 
 Decisions: SPY options are priced from their 16:00 book like every other class; the rebuild weighs
 each quote by 1/spread² (a tight quote stays at its midpoint, a wide one moves toward its chain).
-Both rest on two days: from Oct 26 every chain snapshot also carries the previous day's price of
-every listed option, so each night scores hundreds of contracts.
 
+### With IBKR's own 16:00 books (Oct 24 evening)
+
+IBKR's historical data (ops/fetch_ibkr_closing_books.py: the 15:59 one-minute BID and ASK bar
+closes, the quotes standing at 16:00) against every statement leg from Oct 8 and Oct 22's OCC prices
+(185 contracts with both so far; the run continues overnight):
+
+| | Midpoint | hedge/marks.py smoothing | Rebuild, fitted forward | Rebuild, per-class forward |
+|---|---|---|---|---|
+| Mean \|error\| per contract | $0.089 | $0.084 | $0.082 | **$0.062** |
+| SPY / SPCX / RKLB / BA | 0.107 / 0.031 / 0.123 / 0.009 | 0.096 / 0.034 / 0.121 / 0.021 | 0.094 / 0.019 / 0.126 / 0.038 | 0.070 / 0.015 / 0.096 / 0.039 |
+| Held legs' value error Oct 21 / 22 / 23 | $760 / $1,054 / $199 | $917 / $347 / -$39 | $792 / $468 / $168 | $892 / $4 / $77 |
+
+- Tight quotes on single stocks are priced at their midpoint (BA: all nine at the midpoint; SPCX's
+  tight legs to the cent); a wide one moves along its chain (RKLB 55P at its bid on Oct 21 and 22).
+- Each single-stock expiry's OCC prices satisfy put-call parity with one forward, the at-the-money
+  pair's (RKLB Nov 20: 51.58 from every strike; the 50-strike midpoints 51.63; the five-strike
+  median 51.40), so the rebuild now fixes it there ("forward": "atm").
+- SPY's OCC forward sits 0.2-0.3 below its 16:00 quotes' parity (calls below their bid, puts above
+  their ask) at about the share price carried at 3.9%: "forward_late": "spot", "rate": 0.039.
+  Our SPY legs are straddles, so this mostly cancels in value.
+- The burner's worst-case bound held every day: the statement's options were $1,408-4,829 above
+  every option at its least favorable 16:00 side (single SPY legs fell $75-150 outside).
+- In the statements the options are $199-1,054 *below* their 16:00 midpoints each day.
+
+Most of the evidence is Oct 22. The Oct 23 chain (IBKR books overnight, OCC prices from Moomoo on
+Monday morning) is the out-of-sample check; from Oct 26 every chain snapshot also carries the
+previous day's price of every listed option.

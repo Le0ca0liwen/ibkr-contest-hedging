@@ -33,11 +33,13 @@ sys.path.insert(0, str(ROOT))
 
 from hedge.config import LATE_OPTION_SYMBOLS, NY  # noqa: E402
 from hedge.marks import smooth_marks  # noqa: E402
-from hedge.occ_marks import occ_marks  # noqa: E402
+from hedge.occ_marks import occ_marks, symbol_params  # noqa: E402
 
 CODE = re.compile(r"^US\.([A-Z.]+?)(\d{6})([CP])(\d+)$")
 GRID = {
-    "weight": ["inv_spread2", "inv_spread", "inv_vega2", "unit"],
+    "weight": ["inv_spread2", "inv_spread"],
+    "forward": ["fit", "atm"],
+    "forward_late": ["fit", "atm", "spot"],
     "rate": [0.034, 0.039],
 }
 SPREADS = ((0.05, "<= 0.05"), (0.20, "0.05-0.20"), (0.50, "0.20-0.50"), (float("inf"), "> 0.50"))
@@ -204,8 +206,8 @@ def estimate(day, symbol, expiries, books, spot, params):
         result[row["key"]]["spread"] = row["ask"] - row["bid"]
     for code, m in smooth_marks(chain, spot, at, params["rate"]).items():
         result[code]["local"] = m["mark"]
-    occ = {k: v for k, v in params.items() if k != "rate"}
-    for code, m in occ_marks(chain, spot, at, params["rate"], occ).items():
+    occ = symbol_params(symbol, params)
+    for code, m in occ_marks(chain, spot, at, occ["rate"], occ).items():
         result[code]["occ"] = m["mark"]
     return dict(result)
 

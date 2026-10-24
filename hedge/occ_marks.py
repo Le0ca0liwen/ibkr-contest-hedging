@@ -28,7 +28,7 @@ import cvxpy as cp
 import numpy as np
 import QuantLib as ql
 
-from .config import NY
+from .config import LATE_OPTION_SYMBOLS, NY
 from .marks import _right, bs_price, implied_vol
 from .valuation import _QL_LOCK
 
@@ -37,6 +37,16 @@ PARAMS = {
     # (the one day with a full closing chain): $227 of option-value error on the six SPCX/RKLB legs,
     # against $526 for the midpoint, $367 for hedge/marks.py and $1,458 with inv_vega2.
     "weight": "inv_spread2",  # inv_spread2, inv_spread, inv_vega2 (squared IV-space errors), inv_vega, unit
+    # The forward: "fit" (the least-squares fit chooses it), "median5"/"atm" (parity of the five
+    # nearest pairs / the nearest pair, fixed), "spot" (spot carried at the rate, fixed). IBKR's
+    # 16:00 books against the Oct 7-23 statements and Oct 22's 2,912 OCC prices (185 contracts
+    # with both): single stocks follow their at-the-money parity (RKLB Nov 20: every strike's OCC
+    # pair implies 51.58, the 50-strike midpoints 51.63, the five-strike median 51.40); SPY's OCC
+    # forward sits 0.2-0.3 below its quotes' parity, at the share price carried at about 3.9%.
+    # Mean |error|: $0.062 a contract, against $0.089 for the midpoint and $0.082 with "fit".
+    "forward": "atm",
+    "forward_late": "spot",  # for SPY-style ETF options (config.LATE_OPTION_SYMBOLS)
+    "rate": 0.039,  # the forward's carry (SOFR-like), not the contest's 3.44% scoring rate
     "min_days": 1,  # quotes expiring sooner are filtered out
     "steps": 201,  # Leisen-Reimer tree steps
     "bound_penalty": 1e4,  # a crossed parity set may not fit every book: the overshoot costs this much
@@ -124,11 +134,15 @@ class _Tree:
         return self._run(work)
 
 
-def _forward(pairs, spot, t, rate):
-    """Median parity forward over the strikes nearest the money (quotes as given)."""
-    near = sorted(pairs, key=lambda p: abs(p["strike"] - spot))[:5]
-    values = [p["strike"] + math.exp(rate * t) * (p["C"]["mid"] - p["P"]["mid"]) for p in near]
-    return float(np.median(values)) if values else spot * math.exp(rate * t)
+def _forward(pairs, spot, t, rate, mode="fit", key="mid"):
+    """The expiry's forward: spot carried at `rate` ("spot"), the parity forward of the pair nearest
+    the money ("atm"), else the median parity forward of the five nearest (`key`: the quotes'
+    midpoints, or their de-Americanized ones)."""
+    if mode == "spot" or not pairs:
+        return spot * math.exp(rate * t)
+    near = sorted(pairs, key=lambda p: abs(p["strike"] - spot))[: 1 if mode == "atm" else 5]
+    values = [p["strike"] + math.exp(rate * t) * (p["C"][key] - p["P"][key]) for p in near]
+    return float(np.median(values))
 
 
 def _weights(rows, kind, forward, t, rate):
@@ -176,6 +190,8 @@ def _fit(pairs, forward, t, rate, params):
         cp.multiply(wp, cp.square(puts - mid_p))
     )
     constraints = [calls >= 0, puts >= 0, fwd >= 0.5 * forward, fwd <= 1.5 * forward]
+    if params["forward"] != "fit":  # the forward is given, not fitted
+        constraints.append(fwd == forward)
     if len(pairs) > 1:
         slopes = cp.multiply(cp.diff(calls), 1 / np.diff(strikes))
         constraints += [slopes <= 0, slopes >= -df]  # calls fall in strike, never faster than the bond
@@ -262,7 +278,7 @@ def occ_marks(chain, spot, at, rate, params=None):
 
 def _smooth(pairs, spot, t, rate, days, params):
     """{key: American smoothed price, "surface": f(strike, right)} for one expiry."""
-    forward = _forward(pairs, spot, t, rate)
+    forward = _forward(pairs, spot, t, rate, params["forward"])
     for _ in range(2):  # the borrow depends on the forward and the forward on the de-Americanized quotes
         borrow = rate - math.log(forward / spot) / t
         tree = _Tree(spot, rate, borrow, days, params["steps"])
@@ -276,14 +292,7 @@ def _smooth(pairs, spot, t, rate, days, params):
                 row["eep"] = premium
                 row["eu_mid"] = max(row["mid"] - premium, 1e-6)
                 row["eu_bid"], row["eu_ask"] = max(row["bid"] - premium, 0.0), max(row["ask"] - premium, 1e-6)
-        forward = float(
-            np.median(
-                [
-                    p["strike"] + math.exp(rate * t) * (p["C"]["eu_mid"] - p["P"]["eu_mid"])
-                    for p in sorted(pairs, key=lambda p: abs(p["strike"] - spot))[:5]
-                ]
-            )
-        )
+        forward = _forward(pairs, spot, t, rate, params["forward"], "eu_mid")
     calls, puts, fitted_forward = _fit(pairs, forward, t, rate, params)
     borrow = rate - math.log(fitted_forward / spot) / t
     tree = _Tree(spot, rate, borrow, days, params["steps"])
@@ -322,8 +331,11 @@ def chain_marks(chain, rate, params=None, workers=1):
         for o in chain["options"]:
             if o.get("underlying") == symbol and o.get("bid") is not None and o.get("ask") is not None:
                 expiries.setdefault(str(o.get("expiry")), []).append({**o, "key": o["code"]})
+        chosen = symbol_params(symbol, params)
         if spot:
-            tasks += [(rows, float(spot), at, rate, params) for rows in expiries.values()]
+            tasks += [
+                (rows, float(spot), at, chosen.get("rate") or rate, chosen) for rows in expiries.values()
+            ]
     if workers > 1 and len(tasks) > 1:
         # spawn (macOS's default) everywhere: forking a process with threads can deadlock.
         with ProcessPoolExecutor(min(workers, len(tasks)), mp_context=get_context("spawn")) as pool:
@@ -336,6 +348,14 @@ def chain_marks(chain, rate, params=None, workers=1):
         for code, mark in marks.items()
         if mark["source"].startswith("OCC rebuild")
     }
+
+
+def symbol_params(symbol, params=None):
+    """PARAMS with `params` over them, and the ETF forward rule for SPY-style options."""
+    chosen = {**PARAMS, **(params or {})}
+    if symbol in LATE_OPTION_SYMBOLS:
+        chosen["forward"] = chosen["forward_late"]
+    return chosen
 
 
 def _chain_task(task):
