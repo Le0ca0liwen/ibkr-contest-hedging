@@ -108,8 +108,8 @@ again. Generate a new one after the contest in any case if the token was ever pa
   question in **Why isn't it trading? Ask the app** (Overview). The answer is advice;
   the Today rows and the app's checks decide.
 - **The scored close (statement NAV):** cash after the post-market session plus positions at the
-  closing marks (shares at the 16:00 close, options at their closing midpoint, SPY options at
-  16:15). After 16:00 the market no longer moves it, so the app stops hedging then; only the burner
+  closing marks (shares at the 16:00 close, options at the clearing house's price from the 16:00
+  quotes, SPY options too). After 16:00 the market no longer moves it, so the app stops hedging then; only the burner
   trades after the close. From 16:16 the dashboard's NAV is this predicted statement NAV, and from
   20:05 ET it is recorded as the day's provisional close; the imported statement replaces it.
 - **04:00-09:30 ET (pre-market):** paper trading continues with shares only (SPCX, RKLB and any

@@ -71,16 +71,16 @@ def capture(prices, spread=0.0):
 def test_the_oct_22_statement_reconciles_to_the_cent(manifest):
     m = contest_manifest(manifest)
     late = {i: p for i, (s, _, p) in OPTIONS.items() if s == "SPY"}
-    early = {i: p for i, (s, _, p) in OPTIONS.items() if s != "SPY"}
     captures = {
-        "pre_close": capture(early | {i: 0.01 for i in late}),  # SPY at 16:00 is not its close
-        "options_close": capture(late),
+        "pre_close": capture({i: p for i, (_, _, p) in OPTIONS.items()}),
+        "options_close": capture({i: 99.0 for i in late}),  # Oct 23: SPY's 16:15 book is not its close
     }
     closes = {i: Decimal(p) for i, (_, _, p) in STOCKS.items()}
     marks, missing = statement_marks(m, None, captures, closes)
     assert not missing
-    assert all(marks[i]["source"] == "options_close midpoint" for i in late)
-    assert all(marks[i]["source"] == "pre_close midpoint" for i in early)
+    assert all(marks[i]["source"] == "pre_close midpoint" for i in OPTIONS)
+    only_late, _ = statement_marks(m, None, {"options_close": capture(late)}, closes)
+    assert all(only_late[i]["source"] == "options_close midpoint" for i in late)  # the last resort
     quantities = {i: q for i, (_, q, _) in STOCKS.items()} | {i: q for i, (_, q, _) in OPTIONS.items()}
     value = statement_value(Decimal("872744.50"), Decimal("1601.06"), quantities, marks, m.contract_map)
     assert value == pytest.approx(983_374.21, abs=0.005)

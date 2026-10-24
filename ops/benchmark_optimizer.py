@@ -33,7 +33,9 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config")
     parser.add_argument("--baseline", action="store_true")
-    parser.add_argument("--baseline-ref", default="HEAD", help="Git revision to compare when --baseline is set")
+    parser.add_argument(
+        "--baseline-ref", default="HEAD", help="Git revision to compare when --baseline is set"
+    )
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--gap", type=float, default=500)
     parser.add_argument("--output", type=Path)

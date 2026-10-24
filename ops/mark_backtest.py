@@ -9,8 +9,8 @@ every other listed code: Moomoo's prev_close_price, which equals the statement's
 (Oct 22, all ten legs). Each option_chain record carries the previous session's prices, and
 --prev-close FILE=DAY adds a chain file (ops/fetch_moomoo_chain.py) taken before Moomoo rolled DAY.
 Inputs per day: every closing book the app recorded at the option's close (option_chain records,
-the Moomoo archive's books, the close-mark captures; SPY-style options at 16:15, or 16:00 with
---late-at 16:00), the shares' 16:00 close, and optional extra chain files (JSON lists of
+the Moomoo archive's books, the close-mark captures; SPY-style options at 16:00 like the statement,
+or 16:15 with --late-at 16:15), the shares' 16:00 close, and optional extra chain files (JSON lists of
 {"day", "code", "bid", "ask"}). Estimators: the closing midpoint, hedge/marks.py's local smoothing,
 and hedge/occ_marks.py over a parameter grid. Parameters are chosen leave-one-day-out on --select,
 so a choice is always judged on a day it was not tuned on. CPU-bound: --workers spreads the grid
@@ -133,7 +133,7 @@ def _late(code):
     return (parsed[0] if parsed else code[3:]) in LATE_OPTION_SYMBOLS
 
 
-def load_books(dataset, conids, extra, late_at="16:15"):
+def load_books(dataset, conids, extra, late_at="16:00"):
     """({day: {code: (bid, ask)}}, {day: {symbol: spot}}): each option's book at its close, 16:00,
     or late_at for SPY-style options, and each underlying's price at that time."""
     books, spots = defaultdict(dict), defaultdict(dict)
@@ -319,7 +319,7 @@ def main(argv=None):
         metavar="FILE=DAY",
         help="a chain file taken before Moomoo rolled DAY: its prev_close prices are DAY's truth",
     )
-    parser.add_argument("--late-at", choices=["16:15", "16:00"], default="16:15")
+    parser.add_argument("--late-at", choices=["16:00", "16:15"], default="16:00")
     parser.add_argument("--select", choices=["price_mae", "spread_mae", "day_value_mae"], default="price_mae")
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--output", default=str(ROOT / "data/calibration/backtest.json"))

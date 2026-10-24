@@ -33,7 +33,10 @@ from .marks import _right, bs_price, implied_vol
 from .valuation import _QL_LOCK
 
 PARAMS = {
-    "weight": "inv_vega2",  # inv_vega2 (squared IV-space errors), inv_vega, unit, inv_spread2
+    # inv_spread2: a tight quote stays at its midpoint, a wide one moves toward the chain. Oct 23
+    # (the one day with a full closing chain): $227 of option-value error on the six SPCX/RKLB legs,
+    # against $526 for the midpoint, $367 for hedge/marks.py and $1,458 with inv_vega2.
+    "weight": "inv_spread2",  # inv_spread2, inv_vega2 (squared IV-space errors), inv_vega, unit
     "min_days": 1,  # quotes expiring sooner are filtered out
     "steps": 201,  # Leisen-Reimer tree steps
     "bound_penalty": 1e4,  # a crossed parity set may not fit every book: the overshoot costs this much

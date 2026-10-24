@@ -4,13 +4,12 @@ The Oct 22 statement (Ending Value 983,374.21) reconciles to the cent as
     cash 872,744.50 and accrued interest 1,601.06 after the post-market close (TotalCashValue and
     AccruedCash: post-market trades book to the day)
   + shares at their regular-session close (IBKR's RTH daily bar: RKLB 51.22, SPCX 144.75)
-  + options at their closing NBBO midpoint: 16:00 ET, SPY options at their 16:15 close (8 of 10
-    legs within a cent of our captured midpoints; one wide-spread long leg was marked at its bid).
-The option price is the Options Clearing Corporation's end-of-day price (hedge/occ_marks.py), which
-starts from the closing book and moves a quote only where it is out of line with the rest of its
-chain. OCC's filings name the 4:00 p.m. NBBO for every class, but Oct 22's four SPY prices are
-midpoints of a later book (the 770P's 14.415 sits below its 16:00 bid of 14.42), so SPY options stay
-at their 16:15 close until the backfilled statements say otherwise.
+  + options at the Options Clearing Corporation's end-of-day price (hedge/occ_marks.py), from the
+    4:00 p.m. NBBO for every class, SPY's included although its options trade until 16:15: on
+    Oct 23 the SPY Nov 20 770P's statement price (16.702) sits above its 16:15 ask (16.42), and on
+    Oct 22 the SPY legs are within 5 cents of their 15:59:52 midpoints but 10-18 cents from their
+    16:15 ones. Most legs are their closing midpoint; a wide quote out of line with its chain is
+    moved inside its bid/ask (Oct 22: RKLB 55P at its 6.55 bid in 6.55/7.40).
 After the close the day's scored NAV therefore no longer moves with the market: a later trade
 changes it only by quantity x (mark - price) - fees. Each option mark is uncertain within its
 closing bid/ask, and the spread is the uncertainty this module carries.
@@ -23,7 +22,7 @@ from datetime import datetime, timedelta
 import numpy as np
 
 from .burner import option_commission, stock_commission
-from .config import LATE_OPTION_CLOSE, LATE_OPTION_SYMBOLS
+from .config import LATE_OPTION_CLOSE
 from .marks import smooth_marks
 from .moomoo_data import code_for
 
@@ -97,12 +96,8 @@ def statement_marks(manifest, day, captures, stock_closes, chains=None):
                     "source": "regular-session close",
                 }
             continue
-        phases = (
-            ("options_close", "archive_close", "final_book", "pre_close")
-            if c.symbol in LATE_OPTION_SYMBOLS
-            else ("pre_close", "archive_close", "final_book", "options_close")
-        )
-        for phase in phases:
+        # The 4:00 p.m. book for every option; SPY's 16:15 book only when nothing else exists.
+        for phase in ("pre_close", "archive_close", "final_book", "options_close"):
             quote = ((captures.get(phase) or {}).get("quotes") or {}).get(str(c.con_id))
             if not quote or quote.get("data_type") not in CAPTURE_TYPES:
                 continue

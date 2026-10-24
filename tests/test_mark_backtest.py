@@ -96,7 +96,7 @@ def test_prev_close_prices_are_truth_for_every_listed_code(tmp_path):
     assert truth["2026-10-22"] == {"US.RKLB261120P55000": {"mark": 6.55, "quantity": 0.0}}
 
 
-def test_spy_style_options_use_their_1615_books_unless_asked_for_1600():
+def test_spy_style_options_use_their_1600_books_like_the_statement_or_1615_on_request():
     dataset = {
         "days": {
             "2026-10-22": {
@@ -117,8 +117,9 @@ def test_spy_style_options_use_their_1615_books_unless_asked_for_1600():
     }
     books, spots = load_books(dataset, {}, [])
     day = books["2026-10-22"]
-    assert day["US.SPY261120C770000"] == (10.71, 10.77) and day["US.RKLB261120P55000"] == (6.55, 7.40)
-    assert spots["2026-10-22"]["SPY"] == 760.1
-    books, spots = load_books(dataset, {}, [], late_at="16:00")
-    assert books["2026-10-22"]["US.SPY261120C770000"] == (10.68, 10.74)
+    assert day["US.SPY261120C770000"] == (10.68, 10.74) and day["US.RKLB261120P55000"] == (6.55, 7.40)
     assert spots["2026-10-22"]["SPY"] == 759.1
+    books, spots = load_books(dataset, {}, [], late_at="16:15")
+    assert books["2026-10-22"]["US.SPY261120C770000"] == (10.71, 10.77)
+    assert books["2026-10-22"]["US.RKLB261120P55000"] == (6.55, 7.40)
+    assert spots["2026-10-22"]["SPY"] == 760.1

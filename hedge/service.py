@@ -725,7 +725,8 @@ class TradingService:
             listing.unlink(missing_ok=True)  # never quote an earlier day's codes
             await self._fetch_chain(*_chain_args(held), listing, list_only=True)
         late = [c for c in held if c.symbol in LATE_OPTION_SYMBOLS]
-        # 16:00: every held chain, SPY's too (OCC's filings name the 4:00 p.m. NBBO for every class).
+        # 16:00: every held chain, SPY's too (the statement prices every class from the 4:00 p.m.
+        # NBBO); SPY-style chains again at 16:14:57, only to keep checking that timing.
         for phase, group in (("pre_close", held), ("options_close", late)):
             if not group or (day, phase) in attempted:
                 continue
@@ -1107,15 +1108,14 @@ class TradingService:
                 "archive_close": await asyncio.to_thread(
                     last_books,
                     archive_path(directory, day),
-                    {code: m.option_close(day, m.contract_map[i].symbol) for code, i in codes.items()},
+                    {code: m.session_close(day) for code in codes},  # OCC: the 4:00 p.m. NBBO
                     FALLBACK_BOOK_AGE,
                 ),
                 # A book older than the window (the Mac slept before the close) is not a closing book.
                 "final_book": {
                     code: b
                     for code, b in final_books(self.moomoo_data.path, list(codes)).items()
-                    if b["at"] is not None
-                    and b["at"] >= m.option_close(day, m.contract_map[codes[code]].symbol) - FALLBACK_BOOK_AGE
+                    if b["at"] is not None and b["at"] >= m.session_close(day) - FALLBACK_BOOK_AGE
                 },
             }
             for phase, found in books.items():

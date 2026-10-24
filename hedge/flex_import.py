@@ -16,13 +16,14 @@ from decimal import Decimal
 from pathlib import Path
 
 from .config import NY
-from .flex import LOCKED_OUT, FlexError, fetch_statement, parse_statement, read_flex_settings
+from .flex import LOCKED_OUT, NOT_AVAILABLE, FlexError, fetch_statement, parse_statement, read_flex_settings
 from .models import digest
 
 FIRST_TRY = timedelta(hours=8, minutes=10)  # after the regular close: 00:10 ET
 RETRY = timedelta(minutes=30)
 FATAL_RETRY = timedelta(hours=6)  # a token or query problem the operator must fix first
 LOCKOUT_RETRY = timedelta(hours=1)  # IBKR locked the token (1025): one request an hour, any day
+UNAVAILABLE_RETRY = timedelta(hours=1)  # 1003 counts as a failed attempt toward a lockout
 HISTORY = timedelta(days=45)  # paper daily statements cover the last 45 days
 SOURCE = "IBKR Flex Activity Statement"
 CENT = Decimal("0.01")
@@ -86,7 +87,8 @@ class StatementImporter:
             if exc.code == LOCKED_OUT:
                 self._locked_out(day, now, str(exc))
                 return None
-            self._failed(day, now, str(exc), RETRY if exc.retry else FATAL_RETRY, fatal=not exc.retry)
+            delay = UNAVAILABLE_RETRY if exc.code == NOT_AVAILABLE else RETRY if exc.retry else FATAL_RETRY
+            self._failed(day, now, str(exc), delay, fatal=not exc.retry)
             return None
         except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
             self._failed(day, now, f"{type(exc).__name__}: {exc}", RETRY)

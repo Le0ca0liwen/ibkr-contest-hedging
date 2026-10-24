@@ -43,7 +43,8 @@ It is not one snapshot. Each part has its own time (IBKR FAQs; Oct 22 numbers be
   prices are never used.
 - **Options:** OCC's once-daily closing price. OCC starts from the closing NBBO midpoint across
   exchanges and smooths implied volatility per class and expiry. Cboe says OCC uses the 16:00 NBBO
-  "in all cases". Our SPY legs fit 16:15, when SPY options stop trading, better.
+  "in all cases", and the Oct 22–23 statements confirm it for SPY options too, although they trade
+  until 16:15 (see "Option closing prices: real-data check" below).
 - **Rounding:** the statement keeps the 4-decimal close (9.0497, 18.4774). Rounding the closes to
   cents does not reproduce the Oct 22 total; the unrounded closes do.
 
@@ -56,14 +57,15 @@ The Oct 22 statement reconciles to the cent:
 | Cash | 872,744.50 | End-of-day cash; post-market trades (to 19:47) included. Equal to the API TotalCashValue after 20:00 |
 | Interest accruals | 1,601.06 | API AccruedCash |
 | Stock | 74,591.65 | RKLB 1,120 x **51.22** + SPCX 119 x **144.75**: the **regular-session (16:00) close**, IBKR's RTH daily TRADES bar. The after-hours marks gave 74,302.55 |
-| Options | 34,437.00 | Each leg at its **closing NBBO midpoint**: 16:00 ET for SPCX/RKLB options, **16:15** for SPY options (they trade until 16:15) |
+| Options | 34,437.00 | Each leg at OCC's end-of-day price from the **16:00 NBBO**, mostly its midpoint (SPY options too) |
 | **Total** | **983,374.21** | |
 
 Option marks against our captured books:
 - RKLB 45P 1.93 and SPCX 160C 3.70: the 16:00 midpoint, exact.
 - SPCX 145C 9.0497: the 16:00 midpoint, 9.05.
-- SPY legs (1120C 10.74, 1120P 14.415, 1127C 12.115, 1127P 15.24): between the 16:00 and 16:20
-  midpoints, consistent with 16:15.
+- SPY legs (1120C 10.74, 1120P 14.415, 1127C 12.115, 1127P 15.24): within 5 cents of the app's
+  15:59:52 midpoints, calls slightly above and puts slightly below (a put-call parity fit), and
+  10–18 cents from the 16:15 midpoints. At first read as 16:15; Oct 23 settled it (below).
 - SPCX 130C 18.4774: inside the spread, near the midpoint. Non-round, so possibly another feed or
   instant.
 - RKLB 55P long 6.55: the **bid** of a wide 6.55/7.40 book, $1,062.50 below the midpoint. One
@@ -88,9 +90,8 @@ and model-style option marks, so it was $140.17 off the statement.
     every position at its statement mark.
   - **After the base:** later fills roll it forward exactly.
   - **Share marks:** IBKR's RTH daily bar close, fetched at 16:05 and 16:30 (`official_closes`).
-  - **Option marks:** the midpoint of the close-mark capture at the option's close. That is
-    `pre_close` (last capture before 16:00) or `options_close` (last capture before 16:15, for SPY,
-    QQQ, IWM and DIA options).
+  - **Option marks:** from the `pre_close` capture (last before 16:00) for every option, SPY's
+    included; `options_close` (16:15) only when nothing else exists.
   - **Uncertainty:** each option mark is uncertain within its closing bid/ask. `low`/`high` put
     every mark at its least/most favorable side; `samples` draw them uniformly.
 - **Dashboard:** after 16:16 the ACCOUNT NAV card and the provisional daily score use the
@@ -150,3 +151,21 @@ With the Flex import set up, nothing: the statement NAV is recorded by itself af
 it, enter the previous day's statement Ending Value in Settings & alerts > Import an official
 closing NAV. The Previous official close row warns until you do. Trading still starts at 04:00 on
 the predicted value.
+
+## Option closing prices: real-data check (Oct 24)
+
+Truth: the Oct 22 and Oct 23 statements' option prices (Moomoo's prev_close_price equals them for all
+ten Oct 22 legs) and Oct 22's prev_close for the other recorded strikes. Error = size x (estimate -
+statement), summed per leg as |error|.
+
+| Day, inputs | Midpoint | hedge/marks.py smoothing | OCC rebuild |
+|---|---|---|---|
+| Oct 23, SPCX/RKLB legs, full final chain (Moomoo, 2,912 codes) | $526 | $367 | $1,458 (vega weights), **$227** (spread weights) |
+| Oct 22, all legs, app's 15:59:52 books | $1,485 (RKLB 55P: $1,062) | $1,550 (books from mixed seconds) | n/a: 1–3 strikes per expiry recorded |
+| SPY legs at 16:00 vs 16:15 books | Oct 22: $350 vs $1,197; Oct 23: $588 (15:56) vs $3,292 | | |
+
+Decisions: SPY options are priced from their 16:00 book like every other class; the rebuild weighs
+each quote by 1/spread² (a tight quote stays at its midpoint, a wide one moves toward its chain).
+Both rest on two days: from Oct 26 every chain snapshot also carries the previous day's price of
+every listed option, so each night scores hundreds of contracts.
+
