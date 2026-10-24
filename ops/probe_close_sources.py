@@ -1,0 +1,163 @@
+"""Read-only probe: can Moomoo or IBKR supply October's option closing data for tuning the rebuild?
+
+    .runtime/moomoo-env/bin/python ops/probe_close_sources.py moomoo [--start 2026-10-01 --end 2026-10-23]
+    .venv/bin/python ops/probe_close_sources.py ibkr --config config/local.contest.yaml [--day 2026-10-22]
+
+moomoo: daily K-lines (quote-only) of the option codes already in this month's historical quota, so
+no quota is spent (--allow-new N spends at most N), with each bar's close and last_close next to the
+IBKR statement's Close Price (data/calibration/statements). Every bar's last_close equal to the
+previous day's statement price would mean Moomoo's daily history carries the clearing house's price
+of every listed option on every day: the truth for tuning.
+ibkr: one read-only API connection (the app's client id + 300) asks for 1-second bid/ask bars of the
+held options around 16:00 on a past day: bars would mean IBKR can supply October's closing books.
+Writes data/calibration/probe-<source>.json. Never trades.
+"""
+
+import argparse
+import json
+import re
+from datetime import date, datetime, timedelta
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+STATEMENTS = ROOT / "data/calibration/statements"
+CLIENT_OFFSET = 300  # the app uses its client id and +100; the overnight marks script used 98
+CODE = re.compile(r"^US\.([A-Z.]+?)(\d{6})([CP])(\d+)$")
+
+
+def moomoo_code(symbol, expiry, right, strike):
+    return f"US.{symbol}{expiry.replace('-', '')[2:]}{right}{round(float(strike) * 1000)}"
+
+
+def statement_prices(folder=STATEMENTS):
+    """{day: {Moomoo code: statement Close Price}} for every option on a saved statement."""
+    prices = {}
+    for path in sorted(Path(folder).glob("*.json")):
+        data = json.loads(path.read_text())
+        for p in data.get("positions", []):
+            if p.get("asset") == "OPT" and p.get("mark") not in (None, ""):
+                code = moomoo_code(p["symbol"].split()[0], p["expiry"], p["put_call"], p["strike"])
+                prices.setdefault(data["date"], {})[code] = float(p["mark"])
+    return prices
+
+
+def compare(bars, prices):
+    """Rows of (code, day, close, last_close, statement that day, statement the day before) and the
+    count of last_close values equal to the previous statement price (to 1e-4)."""
+    days = sorted(prices)
+    rows, matches, checked = [], 0, 0
+    for code, items in sorted(bars.items()):
+        for bar in items:
+            day = bar["time_key"][:10]
+            before = [d for d in days if d < day]
+            previous = prices[before[-1]].get(code) if before else None
+            rows.append((code, day, bar["close"], bar["last_close"], prices.get(day, {}).get(code), previous))
+            if previous is not None and bar["last_close"] is not None:
+                checked += 1
+                matches += abs(bar["last_close"] - previous) < 1e-4
+    return rows, matches, checked
+
+
+def probe_moomoo(args):
+    import moomoo as sdk
+
+    prices = statement_prices()
+    held = sorted({code for day in prices.values() for code in day})
+    ctx = sdk.OpenQuoteContext(host="127.0.0.1", port=11111)
+    try:
+        ret, quota = ctx.get_history_kl_quota(get_detail=True)
+        used = {row.get("code") for row in (quota[2] if ret == sdk.RET_OK else [])}
+        codes = [c for c in held if c in used] + [c for c in held if c not in used][: args.allow_new]
+        bars, errors = {}, []
+        for code in codes:
+            ret, data, _ = ctx.request_history_kline(
+                code, start=str(args.start), end=str(args.end), ktype=sdk.KLType.K_DAY, max_count=100
+            )
+            if ret != sdk.RET_OK:
+                errors.append(f"{code}: {data}")
+                continue
+            bars[code] = [
+                {
+                    k: (None if row[k] != row[k] else row[k])
+                    for k in ("time_key", "close", "last_close", "volume")
+                }
+                for _, row in data.iterrows()
+            ]
+    finally:
+        ctx.close()
+    rows, matches, checked = compare(bars, prices)
+    for row in rows:
+        print("{:24} {} close {} last_close {} | statement {} / day before {}".format(*row))
+    skipped = [c for c in held if c not in codes]
+    print(
+        f"{matches} of {checked} last_close values equal the previous statement price; "
+        f"{len(bars)} codes, {len(skipped)} skipped to save quota, {len(errors)} errors"
+    )
+    return {"bars": bars, "matches": matches, "checked": checked, "skipped": skipped, "errors": errors}
+
+
+def probe_ibkr(args):
+    import yaml
+    from ib_async import IB, Option
+
+    config = yaml.safe_load(Path(args.config).read_text())
+    host, port = config.get("gateway_host", "127.0.0.1"), int(config["gateway_port"])
+    client = int(config.get("client_id", 1)) + CLIENT_OFFSET
+    held = sorted({code for day in statement_prices().values() for code in day})
+    contracts = []
+    for code in held:
+        symbol, ymd, right, strike = CODE.match(code).groups()
+        expiry, strike = "20" + ymd, int(strike) / 1000
+        if expiry >= f"{args.day:%Y%m%d}":  # expired options have no IBKR history
+            contracts.append((code, Option(symbol, expiry, strike, right, "SMART", currency="USD")))
+    ib, errors = IB(), []
+    ib.errorEvent += lambda req, code, message, contract: errors.append(f"{code}: {message}")
+    ib.connect(host, port, clientId=client, readonly=True, timeout=15)
+    result = {}
+    try:
+        end = f"{args.day:%Y%m%d} 16:00:30 US/Eastern"
+        for code, contract in contracts[: args.limit]:
+            if not ib.qualifyContracts(contract):
+                result[code] = {"error": "not qualified"}
+                continue
+            found = {}
+            for what in ("BID_ASK", "MIDPOINT"):
+                before = len(errors)
+                bars = ib.reqHistoricalData(contract, end, "60 S", "1 secs", what, useRTH=False, formatDate=2)
+                found[what] = {
+                    "bars": [
+                        {"at": str(b.date), "open": b.open, "high": b.high, "low": b.low, "close": b.close}
+                        for b in bars[-5:]
+                    ],
+                    "count": len(bars),
+                    "errors": errors[before:],
+                }
+                print(code, what, len(bars), "bars", (bars[-1] if bars else errors[before:]))
+            result[code] = found
+            ib.sleep(2)  # well inside IBKR's historical pacing (60 requests per 10 minutes)
+    finally:
+        ib.disconnect()
+    worked = sum(1 for r in result.values() if r.get("BID_ASK", {}).get("count"))
+    print(f"BID_ASK bars for {worked} of {len(result)} options on {args.day}")
+    return {"day": str(args.day), "options": result, "errors": errors}
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description="Read-only probe of option closing-data sources")
+    parser.add_argument("source", choices=["moomoo", "ibkr"])
+    parser.add_argument("--start", type=date.fromisoformat, default=date(2026, 10, 1))
+    parser.add_argument("--end", type=date.fromisoformat, default=date.today() - timedelta(days=1))
+    parser.add_argument("--allow-new", type=int, default=0, help="new Moomoo quota codes to spend")
+    parser.add_argument("--config", default="config/local.contest.yaml")
+    parser.add_argument("--day", type=date.fromisoformat, default=date(2026, 10, 22))
+    parser.add_argument("--limit", type=int, default=4, help="IBKR: options to ask about")
+    args = parser.parse_args(argv)
+    found = probe_moomoo(args) if args.source == "moomoo" else probe_ibkr(args)
+    path = ROOT / f"data/calibration/probe-{args.source}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps({"at": datetime.now().isoformat(), **found}, default=str, indent=1) + "\n")
+    print(f"wrote {path}")
+
+
+if __name__ == "__main__":
+    main()
