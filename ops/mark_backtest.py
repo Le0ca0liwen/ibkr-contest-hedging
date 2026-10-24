@@ -4,29 +4,34 @@
         --dataset data/calibration/marks-dataset.json [--chains extra.json ...] [--workers 8]
 
 Truth: each statement's Open Positions closing price per option (ops/statement_history.py, or the
-flex_statement / statement_positions records in the dataset). Inputs per day: every closing book the
-app recorded at or before 16:00 ET (option_chain records, the Moomoo archive's 16:00 books, the
-pre_close captures), the shares' 16:00 close, and optional extra chain files (JSON lists of
+flex_statement / statement_positions records in the dataset), and the clearing house's price of
+every other listed code: Moomoo's prev_close_price, which equals the statement's Close Price
+(Oct 22, all ten legs). Each option_chain record carries the previous session's prices, and
+--prev-close FILE=DAY adds a chain file (ops/fetch_moomoo_chain.py) taken before Moomoo rolled DAY.
+Inputs per day: every closing book the app recorded at the option's close (option_chain records,
+the Moomoo archive's books, the close-mark captures; SPY-style options at 16:15, or 16:00 with
+--late-at 16:00), the shares' 16:00 close, and optional extra chain files (JSON lists of
 {"day", "code", "bid", "ask"}). Estimators: the closing midpoint, hedge/marks.py's local smoothing,
-and hedge/occ_marks.py over a parameter grid. Parameters are chosen leave-one-day-out, so a choice
-is always judged on a day it was not tuned on. CPU-bound: --workers spreads the grid over processes
-(any machine with the repository and its virtualenv, e.g. a PC, can run it).
+and hedge/occ_marks.py over a parameter grid. Parameters are chosen leave-one-day-out on --select,
+so a choice is always judged on a day it was not tuned on. CPU-bound: --workers spreads the grid
+over processes (any machine with the repository and its virtualenv, e.g. a PC, can run it).
 """
 
 import argparse
 import itertools
 import json
+import math
 import re
 import sys
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from hedge.config import NY  # noqa: E402
+from hedge.config import LATE_OPTION_SYMBOLS, NY  # noqa: E402
 from hedge.marks import smooth_marks  # noqa: E402
 from hedge.occ_marks import occ_marks  # noqa: E402
 
@@ -57,8 +62,17 @@ def _date(value):
     return datetime.strptime(text, "%Y%m%d").date() if len(text) == 8 else None
 
 
-def load_truth(statements, dataset):
-    """{day: {code: {"mark", "quantity", "conid"}}} for every option on a statement."""
+def previous_weekday(day):
+    day = _date(day) - timedelta(days=1)
+    while day.weekday() >= 5:
+        day -= timedelta(days=1)
+    return str(day)
+
+
+def load_truth(statements, dataset, prev_close=()):
+    """({day: {code: {"mark", "quantity"}}}, {conid: code}): every option on a statement (with its
+    position), then every other code's Moomoo prev_close (quantity 0) from the dataset's chains
+    (the previous weekday's price) and from `prev_close` [(chain file, day)]."""
     truth, conids = defaultdict(dict), {}
 
     def add(day, row):
@@ -99,37 +113,66 @@ def load_truth(statements, dataset):
                 add(data["date"], p)
             elif p.get("asset") == "STK":
                 conids[str(p["conid"])] = f"US.{p['symbol']}"
+    chains = [
+        (previous_weekday(day), chain)
+        for day, entry in (dataset or {}).get("days", {}).items()
+        for chain in entry.get("option_chain", [])
+    ]
+    chains += [(str(_date(day)), json.loads(Path(path).read_text())) for path, day in prev_close]
+    for day, chain in chains:
+        for o in chain.get("options", []):
+            price = o.get("prev_close")
+            if price and o.get("code") and o["code"] not in truth[day]:
+                truth[day][o["code"]] = {"mark": float(price), "quantity": 0.0}
     return truth, conids
 
 
-def load_books(dataset, conids, extra):
-    """({day: {code: (bid, ask)}}, {day: {symbol: spot}}) of the closing books at or before 16:00."""
+def _late(code):
+    """A SPY-style option (or its underlying), whose options close at 16:15."""
+    parsed = parse_code(code)
+    return (parsed[0] if parsed else code[3:]) in LATE_OPTION_SYMBOLS
+
+
+def load_books(dataset, conids, extra, late_at="16:15"):
+    """({day: {code: (bid, ask)}}, {day: {symbol: spot}}): each option's book at its close, 16:00,
+    or late_at for SPY-style options, and each underlying's price at that time."""
     books, spots = defaultdict(dict), defaultdict(dict)
+    phase_at = {"pre_close": "16:00", "options_close": "16:15"}
+
+    def wanted(code, at):  # is `at` this code's close?
+        return at == (late_at if _late(code) else "16:00")
+
     for day, entry in (dataset or {}).get("days", {}).items():
-        for code, b in ((entry.get("archive") or {}).get("16:00") or {}).items():
-            books[day][code] = (b["bid"], b["ask"])
+        found, underlying = {}, {}
+        for at, archived in (entry.get("archive") or {}).items():
+            for code, b in archived.items():
+                if wanted(code, at):
+                    found[code] = (b["bid"], b["ask"])
         for capture in entry.get("close_marks", []):
-            if capture.get("phase") != "pre_close":
-                continue
+            at = phase_at.get(capture.get("phase"))
             for conid, q in (capture.get("quotes") or {}).items():
                 code = conids.get(str(conid))
-                if code and q.get("bid") and q.get("ask") and q.get("data_type") in ("live", "synthetic"):
-                    books[day][code] = (float(q["bid"]), float(q["ask"]))
+                if code and at and wanted(code, at) and q.get("bid") and q.get("ask"):
+                    if q.get("data_type") in ("live", "synthetic"):
+                        found[code] = (float(q["bid"]), float(q["ask"]))
         for chain in entry.get("option_chain", []):
-            if chain.get("phase") == "pre_close":
-                for o in chain.get("options", []):
-                    books[day][o["code"]] = (o["bid"], o["ask"])
-                for symbol, u in (chain.get("underlyings") or {}).items():
-                    if u.get("spot"):
-                        spots[day].setdefault(symbol, float(u["spot"]))
-        for record in entry.get("official_closes", []):
+            at = phase_at.get(chain.get("phase"))
+            for o in chain.get("options", []) if at else []:
+                if wanted(o["code"], at) and o.get("bid") is not None and o.get("ask") is not None:
+                    found[o["code"]] = (o["bid"], o["ask"])
+            for symbol, u in (chain.get("underlyings") or {}).items() if at else []:
+                if u.get("spot") and wanted(f"US.{symbol}", at):
+                    underlying[symbol] = float(u["spot"])
+        for record in entry.get("official_closes", []):  # the 16:00 close
             for conid, close in (record.get("closes") or {}).items():
                 code = conids.get(str(conid))
-                if code:
-                    spots[day][code[3:]] = float(close)
-        for code, (bid, ask) in list(books[day].items()):
-            if "." in code and not parse_code(code) and bid and ask:
-                spots[day].setdefault(code[3:], (bid + ask) / 2)
+                if code and wanted(code, "16:00"):
+                    underlying[code[3:]] = float(close)
+        for code, (bid, ask) in found.items():
+            if not parse_code(code) and bid and ask:
+                underlying.setdefault(code[3:], (bid + ask) / 2)
+        books[day].update(found)
+        spots[day].update(underlying)
     for path in extra or []:
         for row in json.loads(Path(path).read_text()):
             books[row["day"]][row["code"]] = (row["bid"], row["ask"])
@@ -214,40 +257,53 @@ def run(truth, books, spots, grid=GRID, workers=1):
 
 
 def summarize(rows):
-    """Per (estimator, params): mean |price error|, mean |error| in spreads, mean |day value error|."""
+    """Per (estimator, params): mean |price error|, mean |error| in spreads, and the mean |error of
+    the held options' value| per day with positions (None without any)."""
     groups = defaultdict(list)
     for r in rows:
         key = (r["estimator"], r["params"] if r["estimator"] == "occ" else "")
         groups[key].append(r)
     table = {}
     for key, items in groups.items():
-        unique = {(r["day"], r["code"]): r for r in items}.values()
+        unique = list({(r["day"], r["code"]): r for r in items}.values())
         days = defaultdict(float)
         for r in unique:
-            days[r["day"]] += r["quantity"] * 100 * (r["estimate"] - r["truth"])
+            if r["quantity"]:
+                days[r["day"]] += r["quantity"] * 100 * (r["estimate"] - r["truth"])
         table[key] = {
             "contracts": len(unique),
             "price_mae": sum(abs(r["estimate"] - r["truth"]) for r in unique) / len(unique),
             "spread_mae": sum(abs(r["estimate"] - r["truth"]) / max(r["spread"], 0.01) for r in unique)
             / len(unique),
-            "day_value_mae": sum(abs(v) for v in days.values()) / len(days),
+            "day_value_mae": sum(abs(v) for v in days.values()) / len(days) if days else None,
             "days": dict(days),
         }
     return table
 
 
-def leave_one_day_out(rows):
-    """Held-out daily value error of the OCC parameters chosen on the other days."""
-    occ = [r for r in rows if r["estimator"] == "occ"]
-    days = sorted({r["day"] for r in occ})
+def _metric(summary, select):
+    value = summary.get(select)
+    return math.inf if value is None else value
+
+
+def leave_one_day_out(rows, select="price_mae"):
+    """Per day: the OCC parameters chosen on the other days (by `select`) scored on that day, next
+    to the midpoint and the local smoothing on the same day."""
+    days = sorted({r["day"] for r in rows})
     held = {}
     for day in days:
+        occ = [r for r in rows if r["estimator"] == "occ"]
         train = summarize([r for r in occ if r["day"] != day])
-        if not train:
-            continue
-        best = min(train, key=lambda k: train[k]["day_value_mae"])
-        test = summarize([r for r in occ if r["day"] == day and r["params"] == best[1]])
-        held[day] = {"params": best[1], **(next(iter(test.values()), {}))}
+        result = {}
+        if train:
+            best = min(train, key=lambda k: _metric(train[k], select))
+            test = summarize([r for r in occ if r["day"] == day and r["params"] == best[1]])
+            result["occ"] = {"params": best[1], **next(iter(test.values()), {})}
+        for name in ("mid", "local"):
+            test = summarize([r for r in rows if r["day"] == day and r["estimator"] == name])
+            if test:
+                result[name] = next(iter(test.values()))
+        held[day] = result
     return held
 
 
@@ -256,27 +312,45 @@ def main(argv=None):
     parser.add_argument("--statements", default=str(ROOT / "data/calibration/statements"))
     parser.add_argument("--dataset", default=str(ROOT / "data/calibration/marks-dataset.json"))
     parser.add_argument("--chains", nargs="*", default=[])
+    parser.add_argument(
+        "--prev-close",
+        nargs="*",
+        default=[],
+        metavar="FILE=DAY",
+        help="a chain file taken before Moomoo rolled DAY: its prev_close prices are DAY's truth",
+    )
+    parser.add_argument("--late-at", choices=["16:15", "16:00"], default="16:15")
+    parser.add_argument("--select", choices=["price_mae", "spread_mae", "day_value_mae"], default="price_mae")
     parser.add_argument("--workers", type=int, default=1)
     parser.add_argument("--output", default=str(ROOT / "data/calibration/backtest.json"))
     args = parser.parse_args(argv)
     dataset = json.loads(Path(args.dataset).read_text()) if Path(args.dataset).exists() else {}
-    truth, conids = load_truth(args.statements, dataset)
-    books, spots = load_books(dataset, conids, args.chains)
+    prev_close = [tuple(item.rsplit("=", 1)) for item in args.prev_close]
+    truth, conids = load_truth(args.statements, dataset, prev_close)
+    books, spots = load_books(dataset, conids, args.chains, args.late_at)
     rows = run(truth, books, spots, workers=args.workers)
     table = summarize(rows)
-    held = leave_one_day_out(rows)
+    held = leave_one_day_out(rows, args.select)
+    held_positions = sum(1 for v in truth.values() for t in v.values() if t["quantity"])
     print(
-        f"{sum(len(v) for v in truth.values())} statement option prices on {len(truth)} days; {len(rows)} scored rows"
+        f"{sum(len(v) for v in truth.values())} true option prices ({held_positions} held) on "
+        f"{len(truth)} days; {len(rows)} scored rows; SPY-style options at {args.late_at}"
     )
-    for (name, params), s in sorted(table.items(), key=lambda kv: kv[1]["day_value_mae"])[:15]:
+    for (name, params), s in sorted(table.items(), key=lambda kv: _metric(kv[1], args.select))[:15]:
+        value = s["day_value_mae"]
         print(
-            f"{name:6} {s['contracts']:4} contracts  price MAE {s['price_mae']:.4f}  "
-            f"spread MAE {s['spread_mae']:.2f}  day value MAE ${s['day_value_mae']:,.0f}  {params}"
+            f"{name:6} {s['contracts']:5} contracts  price MAE {s['price_mae']:.4f}  "
+            f"spread MAE {s['spread_mae']:.2f}  day value MAE "
+            f"{'—' if value is None else f'${value:,.0f}'}  {params}"
         )
-    for day, h in held.items():
-        print(
-            f"held out {day}: day value error ${h.get('day_value_mae', float('nan')):,.0f} with {h['params']}"
-        )
+    for day, result in held.items():
+        parts = [
+            f"{name} {r['price_mae']:.4f}"
+            + (f" (${r['day_value_mae']:,.0f})" if r.get("day_value_mae") else "")
+            for name, r in result.items()
+            if r.get("contracts")
+        ]
+        print(f"held out {day}: price MAE " + ", ".join(parts))
     Path(args.output).parent.mkdir(parents=True, exist_ok=True)
     Path(args.output).write_text(
         json.dumps(
