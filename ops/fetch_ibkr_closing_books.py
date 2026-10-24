@@ -12,7 +12,8 @@ strikes each side), so a past day's held legs come with enough of their chain to
 For each contract and day it asks for the 15:59 one-minute BID and ASK bars (their closes: the
 quotes standing at 16:00, the NBBO the clearing house prices from) and, per underlying, the same
 for the shares. One-minute bars are not IBKR's "small bars", so the 60-per-10-minutes limit does
-not apply; requests still go at most --rate a second. Output: a JSON list of {"day", "code", "bid",
+not apply; --concurrency contracts are asked at once, at most --rate requests a second. The statement
+legs come first, then the chains nearest the money first, so a partial run is still useful. Output: a JSON list of {"day", "code", "bid",
 "ask"} (the format ops/mark_backtest.py --chains reads), written as it goes, so a re-run resumes.
 """
 
@@ -67,57 +68,73 @@ def strike_step(symbol, strike):
 
 
 def chain_wants(paths, days, moneyness):
-    """{day: {codes}} of every chain file's codes within `moneyness` of its spot, for every day."""
-    codes = set()
+    """{day: [codes]} of every chain file's codes within `moneyness` of its spot, for every day,
+    nearest the money first."""
+    distance = {}
     for path in paths:
         chain = json.loads(Path(path).read_text())
         spots = {s: (u or {}).get("spot") for s, u in (chain.get("underlyings") or {}).items()}
         for o in chain.get("options", []):
             spot = spots.get(o["underlying"])
             if spot and abs(o["strike"] / spot - 1) <= moneyness:
-                codes.add(o["code"])
-    return {str(day): set(codes) for day in days}
+                distance[o["code"]] = min(abs(o["strike"] / spot - 1), distance.get(o["code"], 1.0))
+    codes = sorted(distance, key=lambda c: (distance[c], c))
+    return {str(day): list(codes) for day in days}
 
 
-def plan(wanted, done):
-    """[(day, code)] still to fetch: options expiring on or after the day, and each underlying."""
-    todo = []
-    for day, codes in sorted(wanted.items()):
-        symbols = set()
-        for code in sorted(codes):
-            parsed = parse(code)
-            if parsed and parsed[1] >= day.replace("-", "") and (day, code) not in done:
-                todo.append((day, code))
-                symbols.add(parsed[0])
-        todo += [(day, f"US.{s}") for s in sorted(symbols) if (day, f"US.{s}") not in done]
+def plan(first, then, done):
+    """[(day, code)] still to fetch, in order: `first` (the statement legs and their neighbours),
+    then `then` (whole chains, nearest the money first); each day's shares before its options, and
+    no option on a day after its expiry."""
+    todo, seen = [], set(done)
+    for wanted in (first, then):
+        for day, codes in sorted(wanted.items()):
+            ordered = sorted(codes) if isinstance(codes, set) else codes
+            live = [c for c in ordered if parse(c) and parse(c)[1] >= day.replace("-", "")]
+            for code in [f"US.{s}" for s in sorted({parse(c)[0] for c in live})] + live:
+                if (day, code) not in seen:
+                    seen.add((day, code))
+                    todo.append((day, code))
     return todo
 
 
-async def fetch(ib, contracts, todo, rate, write, sleep=asyncio.sleep):
-    """Ask for each (day, code)'s 15:59 BID and ASK bars, at most `rate` requests a second;
-    write({"day", "code", "bid", "ask"}) per success. Returns {code: reason} of failures."""
+async def fetch(ib, contracts, todo, rate, write, sleep=asyncio.sleep, concurrency=8):
+    """Ask for each (day, code)'s 15:59 BID and ASK bars, `concurrency` contracts at a time and at
+    most `rate` requests starting a second (IBKR answers each in about 2.5 s: one at a time made 12
+    books a minute); write({"day", "code", "bid", "ask"}) per success. Returns {key: reason} of
+    failures."""
     failures, gap = {}, 1.0 / rate
-    for day, code in todo:
+    slots, pace = asyncio.Semaphore(concurrency), asyncio.Lock()
+
+    async def ask(contract, end, side, key):
+        async with pace:
+            await sleep(gap)
+        try:
+            return await ib.reqHistoricalDataAsync(
+                contract, end, "60 S", "1 min", side, useRTH=True, formatDate=2, timeout=30
+            )
+        except Exception as exc:  # a timeout or a dropped request (Mac asleep): recorded, never fatal
+            failures[key] = f"{side}: {type(exc).__name__}"
+            return []
+
+    async def one(day, code):
         contract = contracts.get(code)
         if contract is None:
             failures[code] = "not qualified"
-            continue
-        end = f"{day.replace('-', '')} 16:00:00 US/Eastern"
-        sides = {}
-        for side in ("BID", "ASK"):
-            await sleep(gap)
-            try:
-                bars = await ib.reqHistoricalDataAsync(
-                    contract, end, "60 S", "1 min", side, useRTH=True, formatDate=2, timeout=30
-                )
-            except Exception as exc:  # a timeout or a dropped request: recorded, never fatal
-                bars, failures[f"{day} {code}"] = [], f"{side}: {type(exc).__name__}"
-            if bars:
-                sides[side] = float(bars[-1].close)
+            return
+        key, end = f"{day} {code}", f"{day.replace('-', '')} 16:00:00 US/Eastern"
+        async with slots:
+            sides = {}
+            for side in ("BID", "ASK"):
+                bars = await ask(contract, end, side, key)
+                if bars:
+                    sides[side] = float(bars[-1].close)
         if len(sides) == 2 and 0 <= sides["BID"] <= sides["ASK"]:
             write({"day": day, "code": code, "bid": sides["BID"], "ask": sides["ASK"]})
         else:
-            failures.setdefault(f"{day} {code}", f"no bars ({', '.join(sides) or 'none'})")
+            failures.setdefault(key, f"no bars ({', '.join(sides) or 'none'})")
+
+    await asyncio.gather(*(one(day, code) for day, code in todo))
     return failures
 
 
@@ -172,6 +189,7 @@ def main(argv=None):
     parser.add_argument("--ladder", type=int, default=4, help="strikes each side of a statement leg")
     parser.add_argument("--moneyness", type=float, default=0.3)
     parser.add_argument("--rate", type=float, default=4.0, help="historical requests a second")
+    parser.add_argument("--concurrency", type=int, default=8, help="contracts asked at once (IBKR: 50)")
     parser.add_argument("--limit", type=int, help="fetch only this many (a quick check first)")
     parser.add_argument("--output", default=str(ROOT / "data/calibration/ibkr-books.json"))
     args = parser.parse_args(argv)
@@ -179,14 +197,14 @@ def main(argv=None):
     from ib_async import IB
 
     config = yaml.safe_load(Path(args.config).read_text())
-    wanted = chain_wants(args.chains, args.chain_days, args.moneyness)
-    for day, codes in statement_wants(args.statements, args.ladder, strike_step).items():
-        wanted.setdefault(day, set()).update(codes)
+    legs = statement_wants(args.statements, args.ladder, strike_step)
+    chains = chain_wants(args.chains, args.chain_days, args.moneyness)
     output = Path(args.output)
     rows = json.loads(output.read_text()) if output.exists() else []
     done = {(r["day"], r["code"]) for r in rows}
-    todo = plan(wanted, done)[: args.limit]
-    print(f"{len(done)} books on file; {len(todo)} to fetch over {len(wanted)} days", flush=True)
+    todo = plan(legs, chains, done)[: args.limit]
+    days = len(set(legs) | set(chains))
+    print(f"{len(done)} books on file; {len(todo)} to fetch over {days} days", flush=True)
 
     def write(row):
         rows.append(row)
@@ -210,7 +228,7 @@ def main(argv=None):
         try:
             contracts = await qualify(ib, {code for _, code in todo}, statement_conids(args.statements))
             print(f"{len(contracts)} of {len({c for _, c in todo})} contracts qualified", flush=True)
-            return await fetch(ib, contracts, todo, args.rate, write)
+            return await fetch(ib, contracts, todo, args.rate, write, concurrency=args.concurrency)
         finally:
             ib.disconnect()
 
