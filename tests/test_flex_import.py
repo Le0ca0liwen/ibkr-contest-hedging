@@ -142,3 +142,10 @@ async def test_the_statements_own_prices_value_its_day_once_imported(manifest, s
     await imp.step(at(day + timedelta(days=1), 0, 10))
     prices, basis = service.statement_prices(day)
     assert prices == {101: 6.55} and basis == "IBKR statement's closing prices"
+
+
+async def test_a_set_up_import_with_nothing_due_never_says_not_set_up(manifest, store):
+    service, imp, calls = importer(manifest, store, [lambda d: report(manifest.account, d)])
+    imp.due = lambda now: []
+    await imp.step(at(manifest.scoring_sessions[0], 10))
+    assert imp.state()["configured"] and not imp.state()["status"].startswith("Not set up") and not calls

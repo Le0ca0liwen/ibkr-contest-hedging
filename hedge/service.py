@@ -614,6 +614,10 @@ class TradingService:
             key=lambda r: r["date"],
             reverse=True,
         )
+        # A gap outside a few days' interest is a month-start reversal or a bad capture, not a lag.
+        cash = float(self.last_snapshot.cash) if self.last_snapshot and self.last_snapshot.cash else 1e6
+        limit = 5 * abs(cash) * 0.05 / 360
+        seen = [r for r in seen if 0 <= float(r["accrual_gap"]) <= limit]
         same = [r for r in seen if (date.fromisoformat(r["date"]).weekday() == 4) == friday]
         chosen = (same or seen or [None])[0]
         if chosen is None:
@@ -927,7 +931,13 @@ class TradingService:
                     {code: m.option_close(day, m.contract_map[i].symbol) for code, i in codes.items()},
                     FALLBACK_BOOK_AGE,
                 ),
-                "final_book": final_books(self.moomoo_data.path, list(codes)),
+                # A book older than the window (the Mac slept before the close) is not a closing book.
+                "final_book": {
+                    code: b
+                    for code, b in final_books(self.moomoo_data.path, list(codes)).items()
+                    if b["at"] is not None
+                    and b["at"] >= m.option_close(day, m.contract_map[codes[code]].symbol) - FALLBACK_BOOK_AGE
+                },
             }
             for phase, found in books.items():
                 if captures.get(phase) or not found:
@@ -938,7 +948,7 @@ class TradingService:
                         "ask": b["ask"],
                         "mid": (b["bid"] + b["ask"]) / 2,
                         "data_type": "live",
-                        "observed_at": b["at"].isoformat(),
+                        "observed_at": b["at"].isoformat() if b["at"] else None,
                         "source": b["source"],
                     }
                     for code, b in found.items()
@@ -964,7 +974,11 @@ class TradingService:
                         if phase == "archive_close"
                         else "final books after the close"
                     )
-                    + f" for {labels} (less exact)",
+                    + f" for {labels} (less exact; books from "
+                    + ", ".join(
+                        sorted({f"{b['at'].astimezone(NY):%H:%M}" for b in found.values() if b["at"]})
+                    )
+                    + " ET)",
                     key=("fallback_marks", str(day), phase),
                 )
         except Exception as exc:

@@ -129,7 +129,8 @@ def test_missing_score_evidence_is_not_reported_as_measured_underperformance(man
     assert "Held-out mean contest score did not improve" not in errors
     assert "Held-out tail contest score deteriorated" not in errors
     measured = promotion_errors(
-        RecoveryConfig(), {},
+        RecoveryConfig(),
+        {},
         {"recovery_mean_score": 3, "hedge_mean_score": 2, "recovery_p90": 4, "hedge_p90": 3},
         manifest,
     )

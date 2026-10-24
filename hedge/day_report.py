@@ -851,7 +851,7 @@ class DayReporter(AIFeature):
         existing, raw_fills, burns = self._scan()
         inputs_digest = self._digest(day, closes, existing, raw_fills, burns)
         start, end = self._window(day)
-        chosen, marks, notes = {}, {}, []
+        chosen, marks, notes, valuation = {}, {}, [], []  # valuation notes are not missing data
         for d in (previous, day):
             identifier, phase, note = self._choose(d, closes[d], existing)
             marks[d] = s.store.get_record(identifier, account, "close_marks") if identifier else None
@@ -866,7 +866,7 @@ class DayReporter(AIFeature):
                     "ibkr_marks": {str(i): {"market_price": p} for i, p in prices.items()},
                 }
                 chosen[d]["prices"] = basis
-                notes.append(f"{d} positions are valued at the {basis}.")
+                valuation.append(f"{d} positions are valued at the {basis}.")
         fills = [f for f in s.store.effective_fills(account) if start < timestamp(f["at"]) <= end]
         burn_results = s.burner._refresh_fees(
             self._records("burn_cycle_result", Record.payload["session"].as_string() == str(day))
@@ -891,6 +891,7 @@ class DayReporter(AIFeature):
             caution=risk.approval_for(day) if (risk := getattr(s, "event_risk", None)) else None,
             data_notes=notes,
         )
+        result["notes"] = valuation + list(result.get("notes") or [])
         fees_digest = digest(sorted((f["id"], str(f["commission"])) for f in fills))
         report_id = digest(("day_report", m.contest_id, str(day), inputs_digest, fees_digest))[:32]
         if report_id in self.reports:  # same inputs and fees: the recorded report stands

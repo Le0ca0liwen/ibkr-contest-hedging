@@ -241,7 +241,9 @@ async def test_turning_ai_off_never_waits_for_a_queued_review(tmp_path, monkeypa
     with pytest.raises(ValueError, match="before changing the model"):
         supervisor.configure("gemini-3.5-flash-lite", True)  # a model change still waits for the review
     assert supervisor.configure("gemini-3.8-flash", True)["enabled"] is True  # unchanged: no wait
-    assert supervisor.configure("gemini-3.5-flash-lite", False)["enabled"] is False  # Disable AI: never refused
+    assert (
+        supervisor.configure("gemini-3.5-flash-lite", False)["enabled"] is False
+    )  # Disable AI: never refused
     release.set()
     results = await asyncio.gather(*features, review, return_exceptions=True)
     assert results[2] is None and len(calls) == 2  # the queued review never went out

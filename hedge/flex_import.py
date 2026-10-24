@@ -68,6 +68,8 @@ class StatementImporter:
         if credentials is None:
             self.status = "Not set up: double-click Setup IBKR Flex.command"
             return None
+        if self.status.startswith("Not set up"):
+            self.status = ""  # set up: the dashboard shows "waiting for the next statement"
         due = self.due(now)
         if not due:
             return None

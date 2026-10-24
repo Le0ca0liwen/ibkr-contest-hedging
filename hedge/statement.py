@@ -98,7 +98,9 @@ def statement_marks(manifest, day, captures, stock_closes, chains=None):
             curve = smoothed.get(phase, {}).get(code_for(c))
             mark = mid
             if curve is not None:
-                mark, source = min(max(curve["mark"], bid), ask), f"{phase} {curve['source']}"
+                # The chain was quoted moments before this book: keep only its smoothing offset.
+                offset = curve["mark"] - (curve["low"] + curve["high"]) / 2
+                mark, source = min(max(mid + offset, bid), ask), f"{phase} {curve['source']}"
             marks[c.con_id] = {"mark": mark, "low": bid, "high": ask, "mid": mid, "source": source}
             break
         else:
@@ -124,19 +126,20 @@ def statement_value(cash, accrued, quantities, marks, contracts, field="mark"):
 
 
 def statement_samples(value, quantities, marks, contracts, n=64, seed=7):
-    """`n` equally likely statement NAVs around `value`: each option mark drawn uniformly within
-    its closing bid/ask (shares are exact)."""
+    """`n` equally likely statement NAVs around `value`: each option's statement price drawn as its
+    mark plus a uniform deviation the width of its closing book, kept inside that bid/ask (shares
+    are exact)."""
     rng = np.random.default_rng(seed)
     draws = np.zeros(n)
     for con_id in sorted(quantities):
         quantity, mark = quantities[con_id], marks.get(con_id)
         if not quantity or mark is None or mark["high"] <= mark["low"]:
             continue
-        draws += (
-            quantity
-            * contracts[con_id].multiplier
-            * (rng.uniform(mark["low"], mark["high"], n) - mark["mark"])
+        mid = mark.get("mid", mark["mark"])
+        price = np.clip(
+            mark["mark"] + rng.uniform(mark["low"], mark["high"], n) - mid, mark["low"], mark["high"]
         )
+        draws += quantity * contracts[con_id].multiplier * (price - mark["mark"])
     return value + draws
 
 

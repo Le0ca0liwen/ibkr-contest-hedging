@@ -456,6 +456,12 @@ def test_a_chain_before_the_close_prices_options_on_the_smoothed_curve():
     assert 19.6 <= marks[13]["mark"] < 19.97 and marks[13]["source"].startswith("pre_close smoothed IV")
     assert marks[13]["mid"] == pytest.approx(20.0) and (marks[13]["low"], marks[13]["high"]) == (19.6, 20.4)
     assert marks[14]["mark"] == pytest.approx(9.925, abs=0.05)  # a tight quote on the curve barely moves
+    # The 16:00 book moved after the chain (SPCX up): the smoothing offset follows the new book.
+    moved = {k: {**q, "bid": q["bid"] + 0.3, "ask": q["ask"] + 0.3} for k, q in quotes.items() if k == "13"}
+    later, _ = statement_marks(
+        m, None, {"pre_close": {"quotes": {**quotes, **moved}}}, {}, {"pre_close": chain}
+    )
+    assert later[13]["mark"] == pytest.approx(marks[13]["mark"] + 0.3)
 
 
 async def test_the_chain_is_taken_a_minute_before_each_option_close(manifest, store, tmp_path):
@@ -499,3 +505,42 @@ def test_the_dashboard_shows_the_statement_style_value_before_the_close(manifest
     assert service.state()["statement_basis_nav"] == pytest.approx(expected)
     service.now = lambda: marks_fixed_at(manifest, manifest.active_session(now))
     assert service.statement_basis_now() is None  # from 16:16 the predicted statement NAV is shown
+
+
+def test_samples_centre_on_the_mark_and_stay_inside_the_book():
+    """Review (Oct 24): with a smoothed mark off the midpoint the burner's samples must centre on
+    the mark, not on the midpoint, and never leave the closing bid/ask."""
+    contracts = {12: SimpleNamespace(multiplier=100)}
+    centred = {12: {"mark": 6.975, "low": 6.55, "high": 7.40, "mid": 6.975}}
+    samples = statement_samples(0.0, {12: 25}, centred, contracts, n=4000)
+    assert abs(samples.mean()) < 30
+    pinned = {12: {"mark": 6.55, "low": 6.55, "high": 7.40, "mid": 6.975}}  # Oct 22: marked at the bid
+    samples = statement_samples(0.0, {12: 25}, pinned, contracts, n=4000)
+    assert samples.min() >= 0 and samples.max() <= 25 * 100 * 0.85 + 1e-6
+    assert np.median(samples) < 25 * 100 * 0.425  # around the mark, not $1,062 above it
+
+
+async def test_a_book_from_before_a_sleep_is_never_taken_as_the_closing_book(manifest, store, tmp_path):
+    import json
+
+    from hedge.moomoo_data import code_for
+    from hedge.service import TradingService
+
+    service = TradingService(manifest, store, demo=True)
+    day = manifest.scoring_sessions[0]
+    now = marks_fixed_at(manifest, day) + timedelta(minutes=30)
+    service.broker.positions = {101: -5}
+    service.last_snapshot = service.broker.snapshot()
+    service.moomoo_data = SimpleNamespace(path=tmp_path / "latest.json")
+    code = code_for(manifest.contract_map[101])
+    book = {"order_book": {"Bid": [[6.0, 5, 1, []]], "Ask": [[6.2, 5, 1, []]]}, "book_push_count": 3}
+    (tmp_path / "latest.json").write_text(
+        json.dumps({"securities": {code: {**book, "book_push_at": at(day, 15, 30).isoformat()}}})
+    )
+    await service._fallback_close_marks(day, now)
+    assert not store.records("close_marks", manifest.account)  # the 15:30 book is not a close
+    (tmp_path / "latest.json").write_text(json.dumps({"securities": {code: book}}))  # no time at all
+    service.fallback_marks_at.clear()
+    await service._fallback_close_marks(day, now)
+    assert not store.records("close_marks", manifest.account)
+    assert not any("unavailable" in a["message"] for a in store.records("alert", manifest.account))
