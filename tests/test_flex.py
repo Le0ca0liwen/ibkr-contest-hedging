@@ -151,6 +151,25 @@ async def test_a_fatal_code_from_get_statement_is_not_retried():
     assert (caught.value.code, caught.value.retry, len(requests)) == (1015, False, 2)
 
 
+@pytest.mark.parametrize(
+    ("code", "message"),
+    [
+        (1003, "Statement is not available."),
+        (1025, "Too many failed attempts. Please review your configuration."),
+    ],
+)
+async def test_not_available_and_locked_out_are_answered_once_never_polled(code, message):
+    """Oct 23: polling 1003 six times a day for days before the account existed made IBKR lock
+    the token (1025). Both are worth asking again only much later, so each costs one request."""
+    transport, requests = scripted(SENT, status_xml("Fail", code, message))
+    sleeps, sleep = recorder()
+    with pytest.raises(FlexError) as caught:
+        await fetch_statement(TOKEN, QUERY, transport=transport, sleep=sleep)
+    assert (caught.value.code, caught.value.retry, len(requests)) == (code, True, 2)
+    assert sleeps == [5] and message in str(caught.value)
+    assert_secret(caught.value)
+
+
 async def test_still_in_progress_after_every_attempt_is_retryable():
     transport, requests = scripted(SENT, IN_PROGRESS)
     sleeps, sleep = recorder()

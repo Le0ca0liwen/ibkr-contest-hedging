@@ -68,6 +68,12 @@ In Client Portal (paper login), Performance & Reports > Flex Queries:
 3. Double-click **Setup IBKR Flex.command** on the Mac and enter both. They stay on this Mac,
    owner-only. Settings & alerts > Statement prices check shows each import.
 
+**Locked token (error 1025, "Too many failed attempts").** IBKR locks a token after a burst of failed
+requests. On Oct 23 this happened when an earlier history script asked repeatedly for days before the
+account existed. The app then asks only once an hour and says so on the Statement import row. If
+it still fails in the morning, generate a new token (same page) and run Setup IBKR Flex.command
+again. Generate a new one after the contest in any case if the token was ever pasted anywhere.
+
 ## Day 0 (Wed Oct 21), once
 
 1. Before 09:30 ET: in TWS, untick Read-Only API. Start the app.

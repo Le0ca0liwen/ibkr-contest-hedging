@@ -15,12 +15,14 @@ from datetime import timedelta
 from decimal import Decimal
 from pathlib import Path
 
-from .flex import FlexError, fetch_statement, parse_statement, read_flex_settings
+from .config import NY
+from .flex import LOCKED_OUT, FlexError, fetch_statement, parse_statement, read_flex_settings
 from .models import digest
 
 FIRST_TRY = timedelta(hours=8, minutes=10)  # after the regular close: 00:10 ET
 RETRY = timedelta(minutes=30)
 FATAL_RETRY = timedelta(hours=6)  # a token or query problem the operator must fix first
+LOCKOUT_RETRY = timedelta(hours=1)  # IBKR locked the token (1025): one request an hour, any day
 HISTORY = timedelta(days=45)  # paper daily statements cover the last 45 days
 SOURCE = "IBKR Flex Activity Statement"
 CENT = Decimal("0.01")
@@ -37,6 +39,7 @@ class StatementImporter:
         self.failures = {}  # day -> consecutive failures
         self.status = "Not set up: double-click Setup IBKR Flex.command"
         self.last = None
+        self.locked_until = None  # after a 1025 lockout no day is asked for before this
 
     @property
     def manifest(self):
@@ -70,6 +73,8 @@ class StatementImporter:
             return None
         if self.status.startswith("Not set up"):
             self.status = ""  # set up: the dashboard shows "waiting for the next statement"
+        if self.locked_until is not None and now < self.locked_until:
+            return None
         due = self.due(now)
         if not due:
             return None
@@ -78,6 +83,9 @@ class StatementImporter:
             text = await self.fetch(*credentials, from_date=day, to_date=day)
             result = self.record(day, parse_statement(text), now)
         except FlexError as exc:
+            if exc.code == LOCKED_OUT:
+                self._locked_out(day, now, str(exc))
+                return None
             self._failed(day, now, str(exc), RETRY if exc.retry else FATAL_RETRY, fatal=not exc.retry)
             return None
         except (ValueError, KeyError, TypeError, ArithmeticError) as exc:
@@ -85,7 +93,26 @@ class StatementImporter:
             return None
         self.attempted.pop(day, None)
         self.failures.pop(day, None)
+        self.locked_until = None
         return result
+
+    def _locked_out(self, day, now, reason):
+        """IBKR locked the token after too many failed requests: every further request may extend
+        it, so nothing is asked for an hour, whichever day is due."""
+        self.locked_until = now + LOCKOUT_RETRY
+        self.attempted[day] = (now, LOCKOUT_RETRY)
+        self.status = (
+            f"IBKR has locked the Flex token for now ({reason}); asking again hourly, "
+            f"next at {self.locked_until.astimezone(NY):%H:%M} ET"
+        )
+        self.service.alert(
+            "warning",
+            f"Automatic IBKR statement import paused: {reason}. The app asks again once an hour. "
+            "If it still fails in the morning, generate a new token in Client Portal (Performance & "
+            "Reports > Flex Queries > Flex Web Service) and run Setup IBKR Flex.command; you can also "
+            "enter the statement NAV in Settings & alerts.",
+            key=("flex_locked", str(now.date())),
+        )
 
     def _failed(self, day, now, reason, delay, fatal=False):
         self.attempted[day] = (now, delay)

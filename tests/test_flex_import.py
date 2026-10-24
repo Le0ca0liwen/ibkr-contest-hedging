@@ -102,6 +102,25 @@ async def test_not_ready_is_retried_every_30_minutes_and_flagged_after_two_hours
     assert day not in service.ledger.closes()
 
 
+async def test_a_locked_token_pauses_every_day_and_asks_again_hourly(manifest, store):
+    """IBKR locks the token after too many failed requests (1025): further requests may extend it,
+    so one request an hour, whichever day is due, and the operator is told how to recover."""
+    day = manifest.day_zero
+    locked = FlexError("IBKR Flex error 1025: Too many failed attempts.", code=1025, retry=True)
+    service, imp, calls = importer(manifest, store, [locked, locked, lambda d: report("DU_TEST", d)])
+    start = at(manifest.scoring_sessions[0] + timedelta(days=1), 0, 10)  # two days due
+    for minutes in (0, 1, 2, 30, 59):
+        await imp.step(start + timedelta(minutes=minutes))
+    assert len(calls) == 1 and "locked the Flex token" in imp.status
+    alerts = [a["message"] for a in store.records("alert", manifest.account)]
+    assert any("paused" in a and "new token" in a for a in alerts)
+    await imp.step(start + timedelta(minutes=60))
+    await imp.step(start + timedelta(minutes=61))
+    assert len(calls) == 2  # still locked: the next hour again
+    await imp.step(start + timedelta(minutes=120))
+    assert len(calls) == 3 and imp.locked_until is None and day in service.ledger.closes()
+
+
 async def test_a_wrong_account_or_bad_token_is_alerted_at_once(manifest, store):
     day = manifest.day_zero
     service, imp, calls = importer(manifest, store, [lambda d: report("DU0000000", d)])

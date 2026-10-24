@@ -27,8 +27,16 @@ GET_URL = f"{BASE_URL}/GetStatement"
 USER_AGENT = "Python/3.12 contest-hedge"
 TIMEOUT = 30
 RATE_LIMITED = 1018  # the next request waits out the per-minute window
-# Not ready, busy or rate limited: ask again later. Every other code (token, query, IP, account) is fatal.
-RETRY_CODES = frozenset({1001, 1003, 1004, 1005, 1006, 1007, 1008, 1009, 1018, 1019, 1021})
+# "Please try again shortly" (not ready, busy, rate limited): asked again within the fetch.
+RETRY_CODES = frozenset({1001, 1004, 1005, 1006, 1007, 1008, 1009, 1018, 1019, 1021})
+# "Statement is not available." (1003: no statement for that period, or not published yet) and
+# "Too many failed attempts" (1025, undocumented: IBKR locks the token after a burst of failed
+# requests, as on Oct 23 after 1003 was polled for days before the account existed): never asked
+# again within the fetch; the caller may try much later. Every other code (token, query, IP,
+# account) is fatal.
+NOT_AVAILABLE = 1003
+LOCKED_OUT = 1025
+LATER_CODES = frozenset({NOT_AVAILABLE, LOCKED_OUT})
 SETTINGS_FILE = Path(".runtime/ibkr-flex.json")
 TOKEN = re.compile(r"[0-9]{10,}")
 QUERY_ID = re.compile(r"[0-9]+")
@@ -112,6 +120,8 @@ async def fetch_statement(
                     raise FlexError("IBKR Flex accepted the request without a reference code", retry=True)
                 url = _statement_url(root.findtext("Url"))
                 continue
+            if code in LATER_CODES:
+                raise FlexError(_failure(root, code, token), code=code, retry=True)
             if code not in RETRY_CODES:
                 raise FlexError(_failure(root, code, token), code=code, retry=False)
     raise FlexError(
