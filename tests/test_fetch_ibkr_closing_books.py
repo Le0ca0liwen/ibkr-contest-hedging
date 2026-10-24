@@ -30,13 +30,16 @@ def test_the_plan_puts_shares_and_statement_legs_first_and_skips_expired_and_fet
         "2026-10-22": ["US.SPY261120C771000", "US.SPY261120C770000"],
         "2026-10-21": ["US.RKLB261120P50000"],
     }
-    todo = plan(legs, chains, {("2026-10-22", "US.SPY261120P770000")})
+    legs["2026-10-09"] = {"US.BA261016C195000"}  # held then, expired since: asked last
+    todo = plan(legs, chains, {("2026-10-22", "US.SPY261120P770000")}, "20261024")
     assert todo == [
+        ("2026-10-09", "US.BA"),
         ("2026-10-22", "US.SPY"),
         ("2026-10-22", "US.SPY261120C770000"),
         ("2026-10-21", "US.RKLB"),
         ("2026-10-21", "US.RKLB261120P50000"),
         ("2026-10-22", "US.SPY261120C771000"),  # chain order kept: nearest the money first
+        ("2026-10-09", "US.BA261016C195000"),
     ]
 
 
@@ -58,7 +61,9 @@ async def test_each_book_is_the_1559_bid_and_ask_bar_closes_at_a_bounded_rate():
     failures = await fetch(FakeIB(), contracts, todo, 4.0, rows.append, sleep, concurrency=2)
     assert rows == [{"day": "2026-10-22", "code": "US.RKLB261120P45000", "bid": 1.85, "ask": 2.01}]
     assert calls[0] == ("rklb", "20261022 16:00:00 US/Eastern", "60 S", "1 min", "BID", True)
-    assert set(failures) == {"2026-10-22 US.X261120C1000", "US.Q"} and slept == [0.25] * 4
+    assert (
+        set(failures) == {"2026-10-22 US.X261120C1000", "US.Q"} and slept == [0.25] * 3
+    )  # no ASK after an empty BID
 
 
 async def test_an_expired_option_is_tried_by_symbol_then_with_include_expired_then_by_conid():
