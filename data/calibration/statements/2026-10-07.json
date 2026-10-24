@@ -1,0 +1,92 @@
+{
+ "date": "2026-10-07",
+ "account": "DUR229973",
+ "from": "2026-10-07",
+ "to": "2026-10-07",
+ "nav": {
+  "2026-10-06": {
+   "total": "1000371.8",
+   "cash": "1000000",
+   "stock": "0",
+   "options": "0",
+   "interest_accruals": "371.8"
+  },
+  "2026-10-07": {
+   "total": "995294.189365",
+   "cash": "933358.649365",
+   "stock": "37664",
+   "options": "23806.79",
+   "interest_accruals": "464.75"
+  }
+ },
+ "ending_value": "995294.189365",
+ "starting_value": "1000371.8",
+ "ending_date": "2026-10-07",
+ "positions": [
+  {
+   "conid": 4762,
+   "symbol": "BA",
+   "asset": "STK",
+   "put_call": null,
+   "strike": null,
+   "expiry": null,
+   "multiplier": 1,
+   "quantity": "200",
+   "mark": "188.32",
+   "value": "37664",
+   "report_date": "2026-10-07"
+  },
+  {
+   "conid": 899813014,
+   "symbol": "BA    261016C00190000",
+   "asset": "OPT",
+   "put_call": "C",
+   "strike": 190.0,
+   "expiry": "2026-10-16",
+   "multiplier": 100,
+   "quantity": "4",
+   "mark": "2.89",
+   "value": "1156",
+   "report_date": "2026-10-07"
+  },
+  {
+   "conid": 899813068,
+   "symbol": "BA    261016C00195000",
+   "asset": "OPT",
+   "put_call": "C",
+   "strike": 195.0,
+   "expiry": "2026-10-16",
+   "multiplier": 100,
+   "quantity": "25",
+   "mark": "1.33",
+   "value": "3325",
+   "report_date": "2026-10-07"
+  },
+  {
+   "conid": 899815926,
+   "symbol": "BA    261016P00195000",
+   "asset": "OPT",
+   "put_call": "P",
+   "strike": 195.0,
+   "expiry": "2026-10-16",
+   "multiplier": 100,
+   "quantity": "25",
+   "mark": "7.9089",
+   "value": "19772.25",
+   "report_date": "2026-10-07"
+  },
+  {
+   "conid": 899815869,
+   "symbol": "BA    261016P00190000",
+   "asset": "OPT",
+   "put_call": "P",
+   "strike": 190.0,
+   "expiry": "2026-10-16",
+   "multiplier": 100,
+   "quantity": "-1",
+   "mark": "4.4646",
+   "value": "-446.46",
+   "report_date": "2026-10-07"
+  }
+ ]
+}

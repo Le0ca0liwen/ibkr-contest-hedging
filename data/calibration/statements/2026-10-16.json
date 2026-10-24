@@ -1,0 +1,131 @@
+{
+ "date": "2026-10-16",
+ "account": "DUR229973",
+ "from": "2026-10-16",
+ "to": "2026-10-16",
+ "nav": {
+  "2026-10-15": {
+   "total": "992159.03908025",
+   "cash": "751339.01908025",
+   "stock": "223519.8",
+   "options": "16260.79",
+   "interest_accruals": "1039.43"
+  },
+  "2026-10-16": {
+   "total": "989696.84658025",
+   "cash": "1162828.97658025",
+   "stock": "-174093.66",
+   "options": "-147.5",
+   "interest_accruals": "1109.03"
+  }
+ },
+ "ending_value": "989696.84658025",
+ "starting_value": "992159.03908025",
+ "ending_date": "2026-10-16",
+ "positions": [
+  {
+   "conid": 39046959,
+   "symbol": "ITA",
+   "asset": "STK",
+   "put_call": null,
+   "strike": null,
+   "expiry": null,
+   "multiplier": 1,
+   "quantity": "200",
+   "mark": "209.07",
+   "value": "41814",
+   "report_date": "2026-10-16"
+  },
+  {
+   "conid": 320227571,
+   "symbol": "QQQ",
+   "asset": "STK",
+   "put_call": null,
+   "strike": null,
+   "expiry": null,
+   "multiplier": 1,
+   "quantity": "1",
+   "mark": "709.8",
+   "value": "709.8",
+   "report_date": "2026-10-16"
+  },
+  {
+   "conid": 15547841,
+   "symbol": "TLT",
+   "asset": "STK",
+   "put_call": null,
+   "strike": null,
+   "expiry": null,
+   "multiplier": 1,
+   "quantity": "1",
+   "mark": "80.05",
+   "value": "80.05",
+   "report_date": "2026-10-16"
+  },
+  {
+   "conid": 79498203,
+   "symbol": "UAL",
+   "asset": "STK",
+   "put_call": null,
+   "strike": null,
+   "expiry": null,
+   "multiplier": 1,
+   "quantity": "1",
+   "mark": "96.1",
+   "value": "96.1",
+   "report_date": "2026-10-16"
+  },
+  {
+   "conid": 4215217,
+   "symbol": "XLE",
+   "asset": "STK",
+   "put_call": null,
+   "strike": null,
+   "expiry": null,
+   "multiplier": 1,
+   "quantity": "1",
+   "mark": "68.24",
+   "value": "68.24",
+   "report_date": "2026-10-16"
+  },
+  {
+   "conid": 4215227,
+   "symbol": "XLI",
+   "asset": "STK",
+   "put_call": null,
+   "strike": null,
+   "expiry": null,
+   "multiplier": 1,
+   "quantity": "1",
+   "mark": "167.76",
+   "value": "167.76",
+   "report_date": "2026-10-16"
+  },
+  {
+   "conid": 4762,
+   "symbol": "BA",
+   "asset": "STK",
+   "put_call": null,
+   "strike": null,
+   "expiry": null,
+   "multiplier": 1,
+   "quantity": "-1141",
+   "mark": "190.21",
+   "value": "-217029.61",
+   "report_date": "2026-10-16"
+  },
+  {
+   "conid": 920159842,
+   "symbol": "BA    261023C00195000",
+   "asset": "OPT",
+   "put_call": "C",
+   "strike": 195.0,
+   "expiry": "2026-10-23",
+   "multiplier": 100,
+   "quantity": "-1",
+   "mark": "1.475",
+   "value": "-147.5",
+   "report_date": "2026-10-16"
+  }
+ ]
+}

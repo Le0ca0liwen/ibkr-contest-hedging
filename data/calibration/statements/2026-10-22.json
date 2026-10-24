@@ -1,0 +1,183 @@
+{
+ "date": "2026-10-22",
+ "account": "DUR229973",
+ "from": "2026-10-22",
+ "to": "2026-10-22",
+ "nav": {
+  "2026-10-21": {
+   "total": "983891.694932116",
+   "cash": "839437.804932116",
+   "stock": "98982.04",
+   "options": "43964.55",
+   "interest_accruals": "1507.3"
+  },
+  "2026-10-22": {
+   "total": "983374.207618482",
+   "cash": "872744.497618482",
+   "stock": "74591.65",
+   "options": "34437",
+   "interest_accruals": "1601.06"
+  }
+ },
+ "ending_value": "983374.207618482",
+ "starting_value": "983891.694932116",
+ "ending_date": "2026-10-22",
+ "positions": [
+  {
+   "conid": 787273575,
+   "symbol": "RKLB",
+   "asset": "STK",
+   "put_call": null,
+   "strike": null,
+   "expiry": null,
+   "multiplier": 1,
+   "quantity": "1120",
+   "mark": "51.22",
+   "value": "57366.4",
+   "report_date": "2026-10-22"
+  },
+  {
+   "conid": 890493863,
+   "symbol": "SPCX",
+   "asset": "STK",
+   "put_call": null,
+   "strike": null,
+   "expiry": null,
+   "multiplier": 1,
+   "quantity": "119",
+   "mark": "144.75",
+   "value": "17225.25",
+   "report_date": "2026-10-22"
+  },
+  {
+   "conid": 925391721,
+   "symbol": "RKLB  261120P00055000",
+   "asset": "OPT",
+   "put_call": "P",
+   "strike": 55.0,
+   "expiry": "2026-11-20",
+   "multiplier": 100,
+   "quantity": "25",
+   "mark": "6.55",
+   "value": "16375",
+   "report_date": "2026-10-22"
+  },
+  {
+   "conid": 892863287,
+   "symbol": "SPCX  261120C00130000",
+   "asset": "OPT",
+   "put_call": "C",
+   "strike": 130.0,
+   "expiry": "2026-11-20",
+   "multiplier": 100,
+   "quantity": "25",
+   "mark": "18.4774",
+   "value": "46193.5",
+   "report_date": "2026-10-22"
+  },
+  {
+   "conid": 892865352,
+   "symbol": "SPCX  261120P00145000",
+   "asset": "OPT",
+   "put_call": "P",
+   "strike": 145.0,
+   "expiry": "2026-11-20",
+   "multiplier": 100,
+   "quantity": "1",
+   "mark": "8.8",
+   "value": "880",
+   "report_date": "2026-10-22"
+  },
+  {
+   "conid": 892863452,
+   "symbol": "SPCX  261120C00160000",
+   "asset": "OPT",
+   "put_call": "C",
+   "strike": 160.0,
+   "expiry": "2026-11-20",
+   "multiplier": 100,
+   "quantity": "25",
+   "mark": "3.7",
+   "value": "9250",
+   "report_date": "2026-10-22"
+  },
+  {
+   "conid": 882135148,
+   "symbol": "SPY   261120C00770000",
+   "asset": "OPT",
+   "put_call": "C",
+   "strike": 770.0,
+   "expiry": "2026-11-20",
+   "multiplier": 100,
+   "quantity": "25",
+   "mark": "10.74",
+   "value": "26850",
+   "report_date": "2026-10-22"
+  },
+  {
+   "conid": 882140613,
+   "symbol": "SPY   261120P00770000",
+   "asset": "OPT",
+   "put_call": "P",
+   "strike": 770.0,
+   "expiry": "2026-11-20",
+   "multiplier": 100,
+   "quantity": "25",
+   "mark": "14.415",
+   "value": "36037.5",
+   "report_date": "2026-10-22"
+  },
+  {
+   "conid": 925391546,
+   "symbol": "RKLB  261120P00045000",
+   "asset": "OPT",
+   "put_call": "P",
+   "strike": 45.0,
+   "expiry": "2026-11-20",
+   "multiplier": 100,
+   "quantity": "-25",
+   "mark": "1.93",
+   "value": "-4825",
+   "report_date": "2026-10-22"
+  },
+  {
+   "conid": 892863369,
+   "symbol": "SPCX  261120C00145000",
+   "asset": "OPT",
+   "put_call": "C",
+   "strike": 145.0,
+   "expiry": "2026-11-20",
+   "multiplier": 100,
+   "quantity": "-50",
+   "mark": "9.0497",
+   "value": "-45248.5",
+   "report_date": "2026-10-22"
+  },
+  {
+   "conid": 932680043,
+   "symbol": "SPY   261127C00770000",
+   "asset": "OPT",
+   "put_call": "C",
+   "strike": 770.0,
+   "expiry": "2026-11-27",
+   "multiplier": 100,
+   "quantity": "-17",
+   "mark": "12.115",
+   "value": "-20595.5",
+   "report_date": "2026-10-22"
+  },
+  {
+   "conid": 932680826,
+   "symbol": "SPY   261127P00770000",
+   "asset": "OPT",
+   "put_call": "P",
+   "strike": 770.0,
+   "expiry": "2026-11-27",
+   "multiplier": 100,
+   "quantity": "-20",
+   "mark": "15.24",
+   "value": "-30480",
+   "report_date": "2026-10-22"
+  }
+ ]
+}

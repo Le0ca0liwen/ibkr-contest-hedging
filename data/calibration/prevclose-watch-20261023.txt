@@ -1,0 +1,36 @@
+=== 2026-10-23 23:30:22 ET  get_market_snapshot ret=0
+US.RKLB261120P45000      prev_close 1.93       update_time 2026-10-23 15:50:42  last 1.59  same as Oct 22 OCC
+US.RKLB261120P55000      prev_close 6.55       update_time 2026-10-23 15:09:53  last 5.93  same as Oct 22 OCC
+US.SPCX261120C130000     prev_close 18.4774    update_time 2026-10-23 15:47:29  last 20.62  same as Oct 22 OCC
+US.SPCX261120C145000     prev_close 9.0497     update_time 2026-10-23 15:57:34  last 9.89  same as Oct 22 OCC
+US.SPCX261120P145000     prev_close 8.8        update_time 2026-10-23 15:59:23  last 7.1  same as Oct 22 OCC
+US.SPCX261120C160000     prev_close 3.7        update_time 2026-10-23 15:59:27  last 4.05  same as Oct 22 OCC
+US.SPY261120C770000      prev_close 10.74      update_time 2026-10-23 16:13:00  last 8.79  same as Oct 22 OCC
+US.SPY261120P770000      prev_close 14.415     update_time 2026-10-23 16:11:46  last 16.39  same as Oct 22 OCC
+US.SPY261127C770000      prev_close 12.115     update_time 2026-10-23 16:10:43  last 10.05  same as Oct 22 OCC
+US.SPY261127P770000      prev_close 15.24      update_time 2026-10-23 16:14:04  last 16.85  same as Oct 22 OCC
+CHANGED_COUNT 0
+=== 2026-10-24 01:00:26 ET  get_market_snapshot ret=0
+US.RKLB261120P45000      prev_close 1.93       update_time 2026-10-23 15:50:42  last 1.59  same as Oct 22 OCC
+US.RKLB261120P55000      prev_close 6.55       update_time 2026-10-23 15:09:53  last 5.93  same as Oct 22 OCC
+US.SPCX261120C130000     prev_close 18.4774    update_time 2026-10-23 15:47:29  last 20.62  same as Oct 22 OCC
+US.SPCX261120C145000     prev_close 9.0497     update_time 2026-10-23 15:57:34  last 9.89  same as Oct 22 OCC
+US.SPCX261120P145000     prev_close 8.8        update_time 2026-10-23 15:59:23  last 7.1  same as Oct 22 OCC
+US.SPCX261120C160000     prev_close 3.7        update_time 2026-10-23 15:59:27  last 4.05  same as Oct 22 OCC
+US.SPY261120C770000      prev_close 10.74      update_time 2026-10-23 16:13:00  last 8.79  same as Oct 22 OCC
+US.SPY261120P770000      prev_close 14.415     update_time 2026-10-23 16:11:46  last 16.39  same as Oct 22 OCC
+US.SPY261127C770000      prev_close 12.115     update_time 2026-10-23 16:10:43  last 10.05  same as Oct 22 OCC
+US.SPY261127P770000      prev_close 15.24      update_time 2026-10-23 16:14:04  last 16.85  same as Oct 22 OCC
+CHANGED_COUNT 0
+=== 2026-10-24 04:05:04 ET  get_market_snapshot ret=0
+US.RKLB261120P45000      prev_close 1.93       update_time 2026-10-23 15:50:42  last 1.59  same as Oct 22 OCC
+US.RKLB261120P55000      prev_close 6.55       update_time 2026-10-23 15:09:53  last 5.93  same as Oct 22 OCC
+US.SPCX261120C130000     prev_close 18.4774    update_time 2026-10-23 15:47:29  last 20.62  same as Oct 22 OCC
+US.SPCX261120C145000     prev_close 9.0497     update_time 2026-10-23 15:57:34  last 9.89  same as Oct 22 OCC
+US.SPCX261120P145000     prev_close 8.8        update_time 2026-10-23 15:59:23  last 7.1  same as Oct 22 OCC
+US.SPCX261120C160000     prev_close 3.7        update_time 2026-10-23 15:59:27  last 4.05  same as Oct 22 OCC
+US.SPY261120C770000      prev_close 10.74      update_time 2026-10-23 16:13:00  last 8.79  same as Oct 22 OCC
+US.SPY261120P770000      prev_close 14.415     update_time 2026-10-23 16:11:46  last 16.39  same as Oct 22 OCC
+US.SPY261127C770000      prev_close 12.115     update_time 2026-10-23 16:10:43  last 10.05  same as Oct 22 OCC
+US.SPY261127P770000      prev_close 15.24      update_time 2026-10-23 16:14:04  last 16.85  same as Oct 22 OCC
+CHANGED_COUNT 0

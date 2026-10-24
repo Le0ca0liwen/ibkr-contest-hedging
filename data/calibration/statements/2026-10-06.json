@@ -1,0 +1,26 @@
+{
+ "date": "2026-10-06",
+ "account": "DUR229973",
+ "from": "2026-10-06",
+ "to": "2026-10-06",
+ "nav": {
+  "2026-10-05": {
+   "total": "1000278.85",
+   "cash": "1000000",
+   "stock": "0",
+   "options": "0",
+   "interest_accruals": "278.85"
+  },
+  "2026-10-06": {
+   "total": "1000371.8",
+   "cash": "1000000",
+   "stock": "0",
+   "options": "0",
+   "interest_accruals": "371.8"
+  }
+ },
+ "ending_value": "1000371.8",
+ "starting_value": "1000278.85",
+ "ending_date": "2026-10-06",
+ "positions": []
+}

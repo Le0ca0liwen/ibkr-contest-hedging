@@ -1,0 +1,45 @@
+=== 2026-10-23 21:30:56 ET  IBKR updatePortfolio marketPrice (read-only, clientId 98)
+   8991352 IVV                      STK pos   51.0 marketPrice 764.419617 marketValue 38985.40
+ 925391546 RKLB  261120P00045000    OPT pos  -25.0 marketPrice 1.674272 marketValue -4185.68
+ 925391721 RKLB  261120P00055000    OPT pos   25.0 marketPrice 6.031202 marketValue 15078.01
+ 787273575 RKLB                     STK pos 1025.0 marketPrice 52.450001 marketValue 53761.25
+ 892863287 SPCX  261120C00130000    OPT pos   25.0 marketPrice 20.383131 marketValue 50957.83
+ 892863369 SPCX  261120C00145000    OPT pos  -50.0 marketPrice 10.088550 marketValue -50442.75
+ 892865352 SPCX  261120P00145000    OPT pos    1.0 marketPrice 7.061723 marketValue 706.17
+ 892863452 SPCX  261120C00160000    OPT pos   25.0 marketPrice 4.164260 marketValue 10410.65
+ 890493863 SPCX                     STK pos  105.0 marketPrice 147.580002 marketValue 15495.90
+ 882135148 SPY   261120C00770000    OPT pos   25.0 marketPrice 9.073310 marketValue 22683.27
+ 882140613 SPY   261120P00770000    OPT pos   25.0 marketPrice 15.777653 marketValue 39444.13
+ 932680043 SPY   261127C00770000    OPT pos  -17.0 marketPrice 10.454486 marketValue -17772.63
+ 932680826 SPY   261127P00770000    OPT pos  -20.0 marketPrice 16.610720 marketValue -33221.44
+NetLiquidation 984205.51
+=== 2026-10-23 23:30:16 ET  IBKR updatePortfolio marketPrice (read-only, clientId 98)
+   8991352 IVV                      STK pos   51.0 marketPrice 764.409851 marketValue 38984.90
+ 925391546 RKLB  261120P00045000    OPT pos  -25.0 marketPrice 1.674272 marketValue -4185.68
+ 925391721 RKLB  261120P00055000    OPT pos   25.0 marketPrice 6.031202 marketValue 15078.01
+ 787273575 RKLB                     STK pos 1025.0 marketPrice 52.450001 marketValue 53761.25
+ 892863287 SPCX  261120C00130000    OPT pos   25.0 marketPrice 20.383131 marketValue 50957.83
+ 892863369 SPCX  261120C00145000    OPT pos  -50.0 marketPrice 10.088550 marketValue -50442.75
+ 892865352 SPCX  261120P00145000    OPT pos    1.0 marketPrice 7.061723 marketValue 706.17
+ 892863452 SPCX  261120C00160000    OPT pos   25.0 marketPrice 4.164260 marketValue 10410.65
+ 890493863 SPCX                     STK pos  105.0 marketPrice 147.580002 marketValue 15495.90
+ 882135148 SPY   261120C00770000    OPT pos   25.0 marketPrice 9.073310 marketValue 22683.27
+ 882140613 SPY   261120P00770000    OPT pos   25.0 marketPrice 15.777653 marketValue 39444.13
+ 932680043 SPY   261127C00770000    OPT pos  -17.0 marketPrice 10.454486 marketValue -17772.63
+ 932680826 SPY   261127P00770000    OPT pos  -20.0 marketPrice 16.610720 marketValue -33221.44
+NetLiquidation 984282.87
+=== 2026-10-24 01:00:27 ET  IBKR updatePortfolio marketPrice (read-only, clientId 98)
+   8991352 IVV                      STK pos   51.0 marketPrice 764.419617 marketValue 38985.40
+ 925391546 RKLB  261120P00045000    OPT pos  -25.0 marketPrice 1.674272 marketValue -4185.68
+ 925391721 RKLB  261120P00055000    OPT pos   25.0 marketPrice 6.031202 marketValue 15078.01
+ 787273575 RKLB                     STK pos 1025.0 marketPrice 52.450001 marketValue 53761.25
+ 892863287 SPCX  261120C00130000    OPT pos   25.0 marketPrice 20.383131 marketValue 50957.83
+ 892863369 SPCX  261120C00145000    OPT pos  -50.0 marketPrice 10.088550 marketValue -50442.75
+ 892865352 SPCX  261120P00145000    OPT pos    1.0 marketPrice 7.061723 marketValue 706.17
+ 892863452 SPCX  261120C00160000    OPT pos   25.0 marketPrice 4.164260 marketValue 10410.65
+ 890493863 SPCX                     STK pos  105.0 marketPrice 147.580002 marketValue 15495.90
+ 882135148 SPY   261120C00770000    OPT pos   25.0 marketPrice 9.073310 marketValue 22683.27
+ 882140613 SPY   261120P00770000    OPT pos   25.0 marketPrice 15.777653 marketValue 39444.13
+ 932680043 SPY   261127C00770000    OPT pos  -17.0 marketPrice 10.454486 marketValue -17772.63
+ 932680826 SPY   261127P00770000    OPT pos  -20.0 marketPrice 16.610720 marketValue -33221.44
+NetLiquidation 984283.37
