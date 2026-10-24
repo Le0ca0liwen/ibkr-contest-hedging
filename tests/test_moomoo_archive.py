@@ -10,6 +10,7 @@ import pytest
 from hedge import moomoo_archive
 from hedge.config import NY
 from hedge.moomoo_archive import archive_path, final_books, last_books
+from ops import fetch_moomoo_chain
 from ops.fetch_moomoo_chain import fetch_chain, main
 
 DAY = date(2026, 10, 23)
@@ -354,3 +355,54 @@ def test_main_writes_the_chain_atomically_with_a_quote_only_context(tmp_path, mo
     with pytest.raises(SystemExit, match="not written"):
         main(["--underlyings", "RKLB", "--expiries", "2026-11-27", "--output", str(output)])
     assert opened[-2:] == ["open", "close"] and json.loads(output.read_text()) == written
+
+
+def test_list_then_snapshot_at_the_close_quotes_only_the_listed_codes(tmp_path, monkeypatch):
+    """The app lists the codes at 15:55 and quotes them at 15:59:57: the clearing house's 4:00 p.m. NBBO."""
+    chains = {**chain("RKLB", "2026-11-20", [45, 55]), **chain("SPY", "2026-11-20", [600])}
+    contexts = []
+
+    class Context(FakeContext):
+        def __init__(self, **kwargs):
+            super().__init__(chains, {"RKLB": (50.0, 49.9, 50.1), "SPY": (600.0, 599.9, 600.1)})
+            contexts.append(self)
+
+        def close(self):
+            pass
+
+    monkeypatch.setitem(sys.modules, "moomoo", SimpleNamespace(OpenQuoteContext=Context, RET_OK=0))
+    quiet = {"sleep": lambda s: None}
+    for name in ("list_chain", "snapshot_chain"):
+        original = getattr(fetch_moomoo_chain, name)
+        monkeypatch.setattr(fetch_moomoo_chain, name, lambda *a, _f=original, **k: _f(*a, **{**quiet, **k}))
+    waited = []
+    monkeypatch.setattr(fetch_moomoo_chain, "wait_until", waited.append)
+    listing = tmp_path / "listing.json"
+    main(
+        ["--underlyings", "RKLB", "SPY", "--expiries", "2026-11-20", "--list-only", "--output", str(listing)]
+    )
+    listed = json.loads(listing.read_text())
+    assert set(listed) == {"underlyings", "options", "errors"} and len(listed["options"]) == 6
+    assert all("bid" not in o for o in listed["options"])
+    assert not any(call[0] == "snapshot" and len(call[1]) > 1 for call in contexts[-1].calls)
+
+    output = tmp_path / "chain.json"
+    main(
+        ["--underlyings", "SPY", "--codes", str(listing), "--at", "2026-10-26T15:59:57-04:00"]
+        + ["--output", str(output)]
+    )
+    assert waited == [datetime.fromisoformat("2026-10-26T15:59:57-04:00").timestamp()]
+    calls = contexts[-1].calls
+    assert not any(call[0] == "chain" for call in calls)  # no listing at the close: quotes only
+    assert calls[0] == ("snapshot", ["US.SPY"])  # the spot is quoted again with the options
+    written = json.loads(output.read_text())
+    assert written["underlyings"] == {"SPY": {"spot": 600.0, "bid": 599.9, "ask": 600.1}}
+    assert sorted(o["code"] for o in written["options"]) == ["US.SPY261120C600000", "US.SPY261120P600000"]
+
+
+def test_wait_until_sleeps_only_for_a_future_time():
+    slept = []
+    fetch_moomoo_chain.wait_until(105.0, sleep=slept.append, clock=lambda: 100.0)
+    fetch_moomoo_chain.wait_until(95.0, sleep=slept.append, clock=lambda: 100.0)
+    fetch_moomoo_chain.wait_until(None, sleep=slept.append, clock=lambda: 100.0)
+    assert slept == [5.0]

@@ -7,7 +7,7 @@ from datetime import date, datetime
 import pytest
 
 from hedge.config import NY
-from hedge.occ_marks import _Tree, occ_marks
+from hedge.occ_marks import _Tree, chain_marks, occ_marks
 
 AT = datetime(2026, 10, 23, 16, tzinfo=NY)
 EXPIRY = date(2026, 11, 20)
@@ -74,3 +74,51 @@ def test_bad_books_are_left_out():
     rows = chain(prices, overrides={"C100": (0.0, 0.0), "P100": (5.2, 5.1)})
     marks = occ_marks(rows, SPOT, AT, RATE)
     assert "C100" not in marks and "P100" not in marks and "C105" in marks
+
+
+def chain_record(expiries=(EXPIRY,)):
+    options = []
+    for expiry in expiries:
+        for key, (k, right, p) in true_prices().items():
+            options.append(
+                {
+                    "code": f"US.XYZ{expiry:%y%m%d}{key}",
+                    "underlying": "XYZ",
+                    "expiry": str(expiry),
+                    "strike": k,
+                    "right": right,
+                    "bid": round(p - 0.05, 2),
+                    "ask": round(p + 0.05, 2),
+                }
+            )
+    return {"at": AT.isoformat(), "underlyings": {"XYZ": {"spot": SPOT}}, "options": options}
+
+
+def test_chain_marks_spreads_expiries_over_processes_with_the_same_result():
+    chain = chain_record((EXPIRY, date(2026, 12, 18)))
+    alone = chain_marks(chain, RATE)
+    assert len(alone) == len(chain["options"]) and all(m["fitted"] for m in alone.values())
+    assert chain_marks(chain, RATE, workers=2) == alone
+
+
+async def test_the_app_rebuilds_a_chain_in_its_own_process(manifest, store):
+    """QuantLib holds the interpreter lock: the service runs python -m hedge.occ_marks instead."""
+    from hedge.service import TradingService
+
+    service = TradingService(manifest, store, demo=True)
+    chain = chain_record()
+    marks = await service._rebuild_occ(chain)
+    assert marks == chain_marks(chain, manifest.risk_free_rate)
+
+
+def test_the_fast_tree_implied_vol_reprices_the_quote():
+    """The fixed point (Black vol of the price less its early-exercise premium) replaced QuantLib's
+    solver, which left up to 2.6 cents of repricing error and took 3x as long."""
+    tree = _Tree(SPOT, RATE, 0.0, DAYS, 201)
+    forward, t = SPOT * math.exp(RATE * DAYS / 365), DAYS / 365
+    # (A deep in-the-money put worth its intrinsic value has no implied vol to find.)
+    for k, right, vol in ((80, "P", 0.7), (100, "C", 0.5), (108, "P", 0.45), (90, "C", 0.6)):
+        price = tree.price(k, right, vol)
+        found = tree.implied(k, right, price, forward, t, RATE)
+        assert found == pytest.approx(vol, abs=1e-5)
+        assert tree.price(k, right, found) == pytest.approx(price, abs=1e-6)

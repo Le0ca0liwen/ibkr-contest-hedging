@@ -161,6 +161,10 @@ class BurnerPolicy(Frozen):
     # Spend toward this quantile of the closing gap (0.5 = the L1-optimal median). Lower keeps a
     # margin for forecast error: a burn cannot be undone if NAV falls before the close.
     spend_quantile: float = Field(default=0.5, ge=0.05, le=0.5)
+    # After the close the gap is uncertain only by each option's statement price within its closing
+    # bid/ask. worst_case spends only what stays above target with every option at its least
+    # favorable side; quantile spends toward spend_quantile of the samples around the predicted price.
+    post_close_basis: Literal["worst_case", "quantile"] = "worst_case"
     # Act only on IBKR's 1-second P&L stream rolled from a settled NetLiquidation (never on fill
     # attribution, whose base can be a NetLiquidation push sent mid-fill), and wait this long after
     # each cycle so its fills and commissions reach the stream before the next decision.

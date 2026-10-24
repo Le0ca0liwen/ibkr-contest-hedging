@@ -16,8 +16,13 @@ statement prices with ops/mark_backtest.py.
 
 from __future__ import annotations
 
+import argparse
+import json
 import math
+from concurrent.futures import ProcessPoolExecutor
 from datetime import datetime, time
+from multiprocessing import get_context
+from pathlib import Path
 
 import cvxpy as cp
 import numpy as np
@@ -92,7 +97,21 @@ class _Tree:
 
         return self._run(work)
 
-    def implied(self, strike, right, price):
+    def implied(self, strike, right, price, forward=None, t=None, rate=None):
+        """The vol at which the tree prices `price`. Given the forward, by the fixed point
+        vol = Black vol of (price - early-exercise premium at vol): two or three tree prices, where
+        QuantLib's solver takes about thirteen; that solver when the iteration does not settle."""
+        if forward is not None:
+            vol = implied_vol(price, forward, strike, t, rate, right)
+            for _ in range(5):
+                if vol is None:
+                    break
+                premium = self.price(strike, right, vol) - bs_price(forward, strike, t, rate, vol, right)
+                following = implied_vol(max(price - premium, 1e-9), forward, strike, t, rate, right)
+                if following is not None and abs(following - vol) < 1e-6:
+                    return following
+                vol = following
+
         def work():
             try:
                 return self.option(strike, right).impliedVolatility(price, self.process, 1e-7, 500, 1e-4, 5.0)
@@ -241,7 +260,7 @@ def _smooth(pairs, spot, t, rate, days, params):
         for pair in pairs:
             for right in ("C", "P"):
                 row = pair[right]
-                vol = tree.implied(row["strike"], right, row["mid"])
+                vol = tree.implied(row["strike"], right, row["mid"], forward, t, rate)
                 premium = 0.0
                 if vol is not None:
                     premium = max(row["mid"] - bs_price(forward, row["strike"], t, rate, vol, right), 0.0)
@@ -278,3 +297,58 @@ def _smooth(pairs, spot, t, rate, days, params):
 
     out["surface"] = surface
     return out
+
+
+def chain_marks(chain, rate, params=None, workers=1):
+    """{Moomoo code: rebuilt price} for an option_chain record (ops/fetch_moomoo_chain.py): every
+    contract the fit priced, from its own book or from the fitted surface. Each underlying's expiry
+    is an independent fit, so workers > 1 spreads them over processes."""
+    if not chain or not chain.get("options"):
+        return {}
+    at = datetime.fromisoformat(chain["at"])
+    tasks = []
+    for symbol, info in (chain.get("underlyings") or {}).items():
+        spot = (info or {}).get("spot")
+        expiries = {}
+        for o in chain["options"]:
+            if o.get("underlying") == symbol and o.get("bid") is not None and o.get("ask") is not None:
+                expiries.setdefault(str(o.get("expiry")), []).append({**o, "key": o["code"]})
+        if spot:
+            tasks += [(rows, float(spot), at, rate, params) for rows in expiries.values()]
+    if workers > 1 and len(tasks) > 1:
+        # spawn (macOS's default) everywhere: forking a process with threads can deadlock.
+        with ProcessPoolExecutor(min(workers, len(tasks)), mp_context=get_context("spawn")) as pool:
+            parts = list(pool.map(_chain_task, tasks))
+    else:
+        parts = [_chain_task(task) for task in tasks]
+    return {
+        code: mark
+        for marks in parts
+        for code, mark in marks.items()
+        if mark["source"].startswith("OCC rebuild")
+    }
+
+
+def _chain_task(task):
+    return occ_marks(*task)
+
+
+def main(argv=None):
+    """python -m hedge.occ_marks CHAIN.json OUTPUT.json --rate R [--workers N]. The app runs the
+    rebuild in its own processes: QuantLib holds the interpreter lock for seconds at a time."""
+    parser = argparse.ArgumentParser(description="Rebuild OCC's end-of-day option prices for a chain")
+    parser.add_argument("chain")
+    parser.add_argument("output")
+    parser.add_argument("--rate", type=float, required=True)
+    parser.add_argument("--workers", type=int, default=1)
+    args = parser.parse_args(argv)
+    marks = chain_marks(json.loads(Path(args.chain).read_text()), args.rate, workers=args.workers)
+    output = Path(args.output)
+    temporary = output.with_suffix(".tmp")
+    temporary.write_text(json.dumps(marks))
+    temporary.replace(output)
+    print(f"{len(marks)} OCC prices rebuilt")
+
+
+if __name__ == "__main__":
+    main()

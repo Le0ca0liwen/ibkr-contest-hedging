@@ -764,7 +764,10 @@ class ClosingBurner:
         if post_close:
             # No market risk is left: the gap is uncertain only by each option's statement mark
             # within its closing bid/ask (hedge/statement.py).
-            z = np.asarray(statement["samples"], dtype=float) - float(target) + p.bias
+            if p.post_close_basis == "worst_case":  # every option at its least favorable bid/ask side
+                z = np.asarray([float(statement["low"]) - float(target) + p.bias])
+            else:
+                z = np.asarray(statement["samples"], dtype=float) - float(target) + p.bias
             weights = np.full(len(z), 1 / len(z))
         else:
             z = closing_gaps(
@@ -796,6 +799,8 @@ class ClosingBurner:
             scenario_id=scenarios.identifier,
         )
         quantile = "Median" if p.spend_quantile == 0.5 else f"{p.spend_quantile:.0%} quantile"
+        if post_close and p.post_close_basis == "worst_case":
+            quantile = "Worst-case"
         if not self.active:
             self._set(
                 "MONITORING",
@@ -1133,6 +1138,7 @@ class ClosingBurner:
             "gap": last.get("gap"),
             "needed": last.get("needed"),
             "spend_quantile": self.policy.spend_quantile,
+            "post_close_basis": self.policy.post_close_basis,
             "spend_level": last.get("spend_level"),
             "spent": last.get("spent"),
             "budget": last.get("budget"),

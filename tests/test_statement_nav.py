@@ -11,6 +11,7 @@ import pytest
 
 from hedge.config import NY
 from hedge.models import Contract, Execution
+from hedge.moomoo_data import code_for
 from hedge.statement import (
     StatementTracker,
     marks_fixed_at,
@@ -400,6 +401,20 @@ def test_pasted_open_positions_are_compared_with_the_predicted_marks(manifest, s
     assert rows[option.label]["effect"] == pytest.approx(25 * 100 * (6.55 - 6.975))  # marked at the bid
     assert rows[stock.symbol]["effect"] == pytest.approx(0)
     assert service.state()["statement_marks_check"]["total_effect"] == pytest.approx(-1062.5)
+    # Every estimator is scored: here the long put at its worst side (the bid) was exactly right.
+    estimators = response.json()["comparison"]["estimators"]
+    assert estimators["mid"] == {
+        "effect": pytest.approx(-1062.5),
+        "abs_effect": pytest.approx(1062.5),
+        "contracts": 1,
+    }
+    assert estimators["bid_ask_worst"]["abs_effect"] == pytest.approx(0)
+    assert rows[option.label]["estimates"] == {
+        "mid": pytest.approx(6.975),
+        "bid_ask_worst": 6.55,
+        "ibkr_1956": None,
+        "ibkr_last": None,
+    }
     bad = client.post(
         "/api/statement_positions",
         json={"date": str(day), "text": "hello"},
@@ -464,29 +479,125 @@ def test_a_chain_before_the_close_prices_options_on_the_smoothed_curve():
     assert later[13]["mark"] == pytest.approx(marks[13]["mark"] + 0.3)
 
 
-async def test_the_chain_is_taken_a_minute_before_each_option_close(manifest, store, tmp_path):
+async def test_chains_are_listed_at_1555_and_quoted_at_each_option_close(
+    manifest, store, tmp_path, monkeypatch
+):
+    """Codes at 15:55 (slow listing), quotes at 15:59:57 for every held chain (OCC's 4:00 p.m. NBBO)
+    and again at 16:14:57 for SPY-style options; each chain gets its OCC rebuild once."""
+    from hedge import config
+    from hedge import service as service_module
     from hedge.service import TradingService
 
+    monkeypatch.setattr(config, "LATE_OPTION_SYMBOLS", frozenset({"BA"}))
+    monkeypatch.setattr(service_module, "LATE_OPTION_SYMBOLS", frozenset({"BA"}))
     service = TradingService(manifest, store, demo=True)
     service.moomoo_data = SimpleNamespace(path=tmp_path / "latest.json")
     service.broker.positions = {101: -5}
     service.last_snapshot = service.broker.snapshot()
-    calls = []
+    calls, rebuilt = [], []
 
-    async def fetch(symbols, expiries, path):
-        calls.append((symbols, expiries, path.name))
-        return {"at": "2026-10-07T19:59:00+00:00", "underlyings": {}, "options": []}
+    async def fetch(symbols, expiries, path, list_only=False, codes=None, at=None):
+        calls.append((path.name, list_only, codes.name if codes else None, at))
+        if list_only:
+            path.write_text("{}")
+            return None
+        return {"at": "2026-10-07T19:59:58+00:00", "underlyings": {}, "options": [{"code": "x"}]}
 
-    service._fetch_chain = fetch
+    async def occ(chain):
+        rebuilt.append(chain["phase"])
+        return {"US.BA": {"mark": 1.0, "low": 0.9, "high": 1.1, "source": "OCC rebuild (9 strikes)"}}
+
+    service._fetch_chain, service._rebuild_occ = fetch, occ
     day = manifest.scoring_sessions[0]
+    stamp = lambda h, m, s=0: at(day, h, m) + timedelta(seconds=s)  # noqa: E731
+    stale = tmp_path / f"chain-{day:%Y%m%d}-listing.json"
     attempted = set()
-    await service._chain_step(at(day, 15, 58), attempted)
-    assert not calls
-    await service._chain_step(at(day, 15, 59) + timedelta(seconds=5), attempted)
-    await service._chain_step(at(day, 15, 59) + timedelta(seconds=10), attempted)  # once per day
-    option = manifest.contract_map[101]
-    assert calls == [([option.symbol], [str(option.expiry)], f"chain-{day:%Y%m%d}-pre_close.json")]
-    assert [r["phase"] for r in store.records("option_chain", manifest.account)] == ["pre_close"]
+    for moment in (stamp(15, 54), stamp(15, 55, 2), stamp(15, 56), stamp(15, 59, 20)):
+        await service._chain_step(moment, attempted)
+    assert [c[:3] for c in calls] == [(stale.name, True, None)]
+    await service._chain_step(stamp(15, 59, 30), attempted)
+    await service._chain_step(stamp(15, 59, 35), attempted)  # once per day
+    assert calls[1] == (f"chain-{day:%Y%m%d}-pre_close.json", False, stale.name, stamp(15, 59, 57))
+    await service._chain_step(stamp(16, 14, 28), attempted)
+    assert calls[2] == (f"chain-{day:%Y%m%d}-options_close.json", False, stale.name, stamp(16, 14, 57))
+    assert len(calls) == 3 and rebuilt == ["pre_close", "options_close"]
+    await service._chain_step(stamp(16, 20), attempted)
+    assert rebuilt == ["pre_close", "options_close"]  # stored once, never recomputed
+    stored = store.records("occ_marks", manifest.account)
+    assert {r["phase"] for r in stored} == {"pre_close", "options_close"}
+    assert all(r["marks"]["US.BA"]["mark"] == 1.0 and r["params"] for r in stored)
+    _, chains = service._close_inputs(day)
+    assert chains["pre_close"]["occ"]["US.BA"]["source"].startswith("OCC rebuild")
+
+
+async def test_a_failed_occ_rebuild_alerts_once_and_keeps_the_chain(manifest, store, tmp_path, monkeypatch):
+    from hedge.models import digest
+    from hedge.service import TradingService
+
+    service = TradingService(manifest, store, demo=True)
+    day = manifest.scoring_sessions[0]
+    store.record(
+        "option_chain",
+        manifest.account,
+        {"contest": manifest.contest_id, "date": str(day), "phase": "pre_close", "options": []},
+        digest((manifest.contest_id, str(day), "pre_close_chain"))[:32],
+    )
+    tries = []
+
+    async def broken(chain):
+        tries.append(1)
+        raise RuntimeError("solver")
+
+    service._rebuild_occ = broken
+    await service._ensure_occ(day)
+    await service._ensure_occ(day)
+    assert tries == [1] and not store.records("occ_marks", manifest.account)
+    assert any(
+        "OCC closing-price rebuild failed" in a["message"] for a in store.records("alert", manifest.account)
+    )
+    _, chains = service._close_inputs(day)
+    assert chains["pre_close"]["occ"] == {}
+
+
+def test_ibkr_evening_marks_are_logged_every_three_minutes_and_split_at_1956(manifest, store):
+    from hedge.service import TradingService
+
+    service = TradingService(manifest, store, demo=True)
+    prices = iter(range(1, 1000))
+    service.broker.portfolio_marks = lambda: {
+        101: {"market_price": float(next(prices))},
+        999: {"market_price": 5},
+    }
+    day = manifest.scoring_sessions[0]
+    service._evening_marks_step(at(day, 15, 58))  # before the close: nothing
+    for minutes in range(0, 9 * 60 + 10, 1):
+        service._evening_marks_step(at(day, 16) + timedelta(minutes=minutes))
+    rows = store.records("evening_marks", manifest.account, 1000)
+    assert len(rows) == 9 * 20 + 1 and all(set(r["marks"]) == {"101"} for r in rows)
+    before, last = service._evening_marks(day)[101]
+    assert before == 234 // 3 + 1  # the 19:54 row: the last one before the burner stops at 19:56
+    assert last == len(rows)
+
+
+def test_statement_marks_prefer_the_stored_occ_rebuild_and_keep_every_estimate():
+    contract = Contract(
+        con_id=13, symbol="SPCX", kind="OPT", expiry=datetime(2026, 11, 20).date(), strike=130, right="C"
+    )
+    m = SimpleNamespace(contracts=[contract], contract_map={13: contract}, risk_free_rate=0.0344)
+    quotes = {"13": {"bid": 19.6, "ask": 20.4, "data_type": "live"}}
+    code = code_for(contract)
+    chain = {
+        "at": "2026-10-23T19:59:57+00:00",
+        "underlyings": {},
+        "options": [],
+        "occ": {code: {"mark": 19.7, "low": 19.5, "high": 20.3, "source": "OCC rebuild (12 strikes)"}},
+    }
+    marks, missing = statement_marks(m, None, {"pre_close": {"quotes": quotes}}, {}, {"pre_close": chain})
+    mark = marks[13]
+    assert not missing and mark["source"] == "pre_close OCC rebuild (12 strikes)"
+    # The chain's book was 0.2 below the 16:00 book: only the rebuild's offset (-0.2) carries over.
+    assert mark["mark"] == pytest.approx(19.8)
+    assert mark["estimates"] == {"mid": pytest.approx(20.0), "occ": pytest.approx(19.8)}
 
 
 def test_the_dashboard_shows_the_statement_style_value_before_the_close(manifest, store, quotes, now):

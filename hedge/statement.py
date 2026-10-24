@@ -6,6 +6,11 @@ The Oct 22 statement (Ending Value 983,374.21) reconciles to the cent as
   + shares at their regular-session close (IBKR's RTH daily bar: RKLB 51.22, SPCX 144.75)
   + options at their closing NBBO midpoint: 16:00 ET, SPY options at their 16:15 close (8 of 10
     legs within a cent of our captured midpoints; one wide-spread long leg was marked at its bid).
+The option price is the Options Clearing Corporation's end-of-day price (hedge/occ_marks.py), which
+starts from the closing book and moves a quote only where it is out of line with the rest of its
+chain. OCC's filings name the 4:00 p.m. NBBO for every class, but Oct 22's four SPY prices are
+midpoints of a later book (the 770P's 14.415 sits below its 16:00 bid of 14.42), so SPY options stay
+at their 16:15 close until the backfilled statements say otherwise.
 After the close the day's scored NAV therefore no longer moves with the market: a later trade
 changes it only by quantity x (mark - price) - fees. Each option mark is uncertain within its
 closing bid/ask, and the spread is the uncertainty this module carries.
@@ -56,17 +61,27 @@ def smoothed_chain_marks(manifest, chain):
     return result
 
 
+def _anchored(curve, mid, bid, ask):
+    """A chain price moved onto a later book: the chain quoted moments before it, so only the
+    curve's offset from that chain's own midpoint carries over, kept inside the later bid/ask."""
+    offset = curve["mark"] - (curve["low"] + curve["high"]) / 2
+    return min(max(mid + offset, bid), ask)
+
+
 def statement_marks(manifest, day, captures, stock_closes, chains=None):
-    """({con_id: {"mark", "low", "high", "mid", "source"}}, [con_id without a mark]).
+    """({con_id: {"mark", "low", "high", "mid", "source", "estimates"}}, [con_id without a mark]).
 
     `captures` maps close-mark phases ("pre_close" at 16:00, "options_close" at 16:15,
     "post_close" at 16:20, fallbacks "archive_close" and "final_book") to stored close_marks
     payloads; `stock_closes` maps share conIds to their regular-session close. An option takes the
     closing book of the capture at its own close; its bid and ask bound the statement's mark. With a
-    chain taken just before that close (`chains`: phase -> option_chain record) the mark is the
-    clearing house's smoothed-IV price clipped to that bid/ask, else the midpoint."""
+    chain taken at that close (`chains`: phase -> option_chain record, its "occ" the stored
+    hedge/occ_marks.chain_marks) the mark is OCC's rebuilt price, else the local smoothed-IV price, else the
+    midpoint, each kept inside that bid/ask. "estimates" holds every one that was available, for the
+    nightly comparison with the statement."""
     marks, missing = {}, []
     smoothed = {phase: smoothed_chain_marks(manifest, chain) for phase, chain in (chains or {}).items()}
+    rebuilt = {phase: (chain or {}).get("occ") or {} for phase, chain in (chains or {}).items()}
     for c in manifest.contracts:
         if c.kind == "STK":
             close = stock_closes.get(c.con_id)
@@ -94,14 +109,21 @@ def statement_marks(manifest, day, captures, stock_closes, chains=None):
             bid, ask = float(quote.get("bid") or 0), float(quote.get("ask") or 0)
             if bid <= 0 or ask < bid:
                 continue
-            mid, source = (bid + ask) / 2, f"{phase} midpoint"
-            curve = smoothed.get(phase, {}).get(code_for(c))
-            mark = mid
-            if curve is not None:
-                # The chain was quoted moments before this book: keep only its smoothing offset.
-                offset = curve["mark"] - (curve["low"] + curve["high"]) / 2
-                mark, source = min(max(mid + offset, bid), ask), f"{phase} {curve['source']}"
-            marks[c.con_id] = {"mark": mark, "low": bid, "high": ask, "mid": mid, "source": source}
+            mid, code = (bid + ask) / 2, code_for(c)
+            mark, source, estimates = mid, f"{phase} midpoint", {"mid": mid}
+            for name, curves in (("local", smoothed), ("occ", rebuilt)):  # the last one found wins
+                curve = curves.get(phase, {}).get(code)
+                if curve is not None:
+                    estimates[name] = mark = _anchored(curve, mid, bid, ask)
+                    source = f"{phase} {curve['source']}"
+            marks[c.con_id] = {
+                "mark": mark,
+                "low": bid,
+                "high": ask,
+                "mid": mid,
+                "source": source,
+                "estimates": estimates,
+            }
             break
         else:
             missing.append(c.con_id)

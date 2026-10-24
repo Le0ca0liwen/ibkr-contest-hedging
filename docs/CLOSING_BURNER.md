@@ -40,7 +40,9 @@ z = nav_estimate - target + bias + scenarios.changes @ holdings + cash carry to 
 - **After the close (contest)** the scenario term is gone: `z = predicted statement NAV - target
   + bias`, with 64 equally likely values that draw each option mark uniformly within its
   closing bid/ask (`TradingService.statement_estimate`). `require_pnl_stream` applies only
-  before the close.
+  before the close. With `post_close_basis: worst_case` (the default) `z` is the single value
+  `low - target + bias`: every option at the least favorable side of its closing bid/ask, so a
+  burn never takes the statement NAV below target whatever the option prices turn out to be.
 
 `needed = max(0, quantile(z, spend_quantile))` (lower weighted quantile of the 64 scenarios;
 0.5 is the median). Spending `L` changes the expected score by `E|z| - E|z - L|`, which keeps
@@ -320,6 +322,7 @@ dashboard poll scan the whole history. No schema columns change. Instead:
 | stock_entry_cutoff_minutes / option_entry_cutoff_minutes | 4 / 17 | No new entries after close minus these |
 | start_threshold / stop_threshold | 25 / 5 | USD hysteresis on the spend quantile of the gap |
 | spend_quantile | 0.5 | Gap quantile spent toward (contest: 0.4); 0.05-0.5 |
+| post_close_basis | worst_case | After the close: `worst_case` spends only the gap at the least favorable option prices; `quantile` spends toward spend_quantile |
 | require_pnl_stream | false | Act only on the settled 1-second IBKR P&L stream NAV (contest: true) |
 | settle_seconds | 0 | Wait after a cycle that filled before the next decision (contest: 8) |
 | bias / bias_source | 0 / "" | Signed model-vs-official calibration |

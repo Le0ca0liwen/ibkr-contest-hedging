@@ -6,6 +6,10 @@
 Each underlying's snapshot gives its spot; the listed strikes of each expiry within +/- moneyness of
 it are then snapshotted in requests of at most 400 codes, one request per 0.6 s (OpenD allows 60
 snapshot requests and 10 option chain requests per 30 s).
+
+Listing is slow (one option chain request per 3 s) and quoting is fast, so the app lists the codes
+minutes before the close (--list-only) and quotes them at 15:59:57 (--codes FILE --at TIME): the
+clearing house prices every option from the 4:00 p.m. NBBO.
 """
 
 import argparse
@@ -33,14 +37,7 @@ def _number(value):
     return value if math.isfinite(value) else None
 
 
-def fetch_chain(
-    ctx, sdk, underlyings, expiries, moneyness, pause=0.6, sleep=time.sleep, chain_pause=CHAIN_PAUSE
-):
-    """{"at", "underlyings": {symbol: {"spot", "bid", "ask"}}, "options": [{"code", "underlying",
-    "expiry", "strike", "right", "bid", "ask", "last", "update_time"}], "errors": [...]}.
-
-    Quote requests only (get_market_snapshot, get_option_chain), at least `pause` seconds apart
-    (`chain_pause` before an option chain request). A failed request is recorded and skipped."""
+def _requester(ctx, pause, sleep):
     made = []
 
     def request(name, *args, gap=pause, **kwargs):
@@ -49,6 +46,46 @@ def fetch_chain(
         made.append(name)
         return getattr(ctx, name)(*args, **kwargs)
 
+    return request
+
+
+def fetch_chain(
+    ctx, sdk, underlyings, expiries, moneyness, pause=0.6, sleep=time.sleep, chain_pause=CHAIN_PAUSE
+):
+    """{"at", "underlyings": {symbol: {"spot", "bid", "ask"}}, "options": [{"code", "underlying",
+    "expiry", "strike", "right", "bid", "ask", "last", "update_time"}], "errors": [...]}.
+
+    Quote requests only (get_market_snapshot, get_option_chain), at least `pause` seconds apart
+    (`chain_pause` before an option chain request). A failed request is recorded and skipped."""
+    request = _requester(ctx, pause, sleep)  # one pacing across both steps
+    listing = list_chain(ctx, sdk, underlyings, expiries, moneyness, pause, sleep, chain_pause, request)
+    return snapshot_chain(
+        ctx,
+        sdk,
+        listing,
+        pause,
+        sleep,
+        spots=listing["underlyings"],
+        errors=listing["errors"],
+        request=request,
+    )
+
+
+def list_chain(
+    ctx,
+    sdk,
+    underlyings,
+    expiries,
+    moneyness,
+    pause=0.6,
+    sleep=time.sleep,
+    chain_pause=CHAIN_PAUSE,
+    request=None,
+):
+    """The listed codes within +/- moneyness of each spot, without their quotes ({"underlyings",
+    "options", "errors"}): slow (one option chain request per 3 s), so taken minutes before the
+    close and snapshotted with snapshot_chain at the close."""
+    request = request or _requester(ctx, pause, sleep)
     spots, chosen, errors = {}, {}, []
     for symbol in underlyings:
         code = f"US.{symbol}"
@@ -85,6 +122,31 @@ def fetch_chain(
                     }
             if not listed:
                 errors.append(f"No options listed for {code} {expiry}")
+    return {"underlyings": spots, "options": list(chosen.values()), "errors": errors}
+
+
+def snapshot_chain(ctx, sdk, listing, pause=0.6, sleep=time.sleep, spots=None, errors=None, request=None):
+    """Quotes for a list_chain listing: one snapshot of the underlyings (unless `spots` are given)
+    and of the option codes in requests of at most CHUNK; a few seconds for a few hundred codes."""
+    request = request or _requester(ctx, pause, sleep)
+    errors = list(errors or [])
+    chosen = {o["code"]: dict(o) for o in listing["options"]}
+    if spots is None:
+        spots = {}
+        symbols = sorted(listing["underlyings"])
+        ret, data = request("get_market_snapshot", [f"US.{s}" for s in symbols])
+        rows = {r.get("code"): r for r in _records(data)} if ret == sdk.RET_OK else {}
+        for symbol in symbols:
+            row = rows.get(f"US.{symbol}", {})
+            bid, ask, last = (
+                _number(row.get("bid_price")),
+                _number(row.get("ask_price")),
+                _number(row.get("last_price")),
+            )
+            spot = (
+                last if last and last > 0 else ((bid + ask) / 2 if bid and ask and 0 < bid <= ask else None)
+            )
+            spots[symbol] = {"spot": spot or listing["underlyings"][symbol]["spot"], "bid": bid, "ask": ask}
     codes = list(chosen)
     for start in range(0, len(codes), CHUNK):
         chunk = codes[start : start + CHUNK]
@@ -115,6 +177,24 @@ def fetch_chain(
     }
 
 
+def wait_until(at, sleep=time.sleep, clock=time.time):
+    """Sleep until the epoch time `at` (no wait once it has passed)."""
+    if at is not None and at > clock():
+        sleep(at - clock())
+
+
+def only_underlyings(listing, underlyings):
+    """The listing restricted to `underlyings` (all of it when None)."""
+    if not underlyings:
+        return listing
+    keep = set(underlyings)
+    return {
+        **listing,
+        "underlyings": {s: v for s, v in listing["underlyings"].items() if s in keep},
+        "options": [o for o in listing["options"] if o["underlying"] in keep],
+    }
+
+
 def write_json(path, value):
     """Atomic replace: a reader never sees a partial file."""
     path = Path(path)
@@ -132,6 +212,15 @@ def main(argv=None):
     )
     parser.add_argument("--moneyness", type=float, default=0.3)
     parser.add_argument("--output")
+    parser.add_argument(
+        "--list-only", action="store_true", help="write the codes only (minutes before the close)"
+    )
+    parser.add_argument("--codes", help="snapshot the codes of an earlier --list-only file (at the close)")
+    parser.add_argument(
+        "--at",
+        type=datetime.fromisoformat,
+        help="quote the codes at this time (ISO, with offset): connect and list first, then wait",
+    )
     args = parser.parse_args(argv)
     if not 0 < args.moneyness < 1:
         parser.error("--moneyness is a fraction of spot, between 0 and 1")
@@ -141,10 +230,25 @@ def main(argv=None):
     import moomoo as sdk
 
     ctx = sdk.OpenQuoteContext(host="127.0.0.1", port=11111)
+    underlyings, expiries = [s.upper() for s in args.underlyings], [str(e) for e in args.expiries]
     try:
-        result = fetch_chain(
-            ctx, sdk, [s.upper() for s in args.underlyings], [str(e) for e in args.expiries], args.moneyness
-        )
+        if args.list_only:
+            listing = list_chain(ctx, sdk, underlyings, expiries, args.moneyness)
+            if not listing["options"]:
+                raise SystemExit(f"No option codes listed: {output} not written")
+            write_json(output, listing)
+            print(f"{len(listing['options'])} option codes listed in {output}")
+            return
+        if args.codes or args.at:
+            if args.codes:
+                listing = only_underlyings(json.loads(Path(args.codes).read_text()), underlyings)
+            else:
+                listing = list_chain(ctx, sdk, underlyings, expiries, args.moneyness)
+            wait_until(args.at.timestamp() if args.at else None)
+            # The spots are quoted again with the options, not taken from the listing.
+            result = snapshot_chain(ctx, sdk, listing, errors=listing.get("errors"))
+        else:
+            result = fetch_chain(ctx, sdk, underlyings, expiries, args.moneyness)
     finally:
         ctx.close()
     for error in result["errors"]:

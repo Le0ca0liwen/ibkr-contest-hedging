@@ -4,6 +4,8 @@ import asyncio
 import fcntl
 import json
 import os
+import sys
+import tempfile
 import time
 from datetime import date, datetime, timedelta
 from decimal import Decimal
@@ -25,6 +27,7 @@ from .flex_import import StatementImporter
 from .models import digest, utcnow
 from .moomoo_archive import archive_path, final_books, last_books
 from .moomoo_data import MoomooData, code_for, collector_codes, missing_codes
+from .occ_marks import PARAMS as OCC_PARAMS
 from .optimizer import HedgeOptimizer, execution_cost
 from .power import PowerMonitor, sleep_risk
 from .recovery import RecoveryController, recovery_budget_errors
@@ -48,7 +51,14 @@ from .supervisor import PROFILES, Supervisor
 from .universe import screen_snapshot
 from .valuation import NAVTracker
 
-CHAIN_LEAD = timedelta(seconds=60)  # option chain snapshot this long before each option close
+# The held options' chains are listed at 15:55 (slow: one option chain request per 3 s) and quoted
+# at 15:59:57 (SPY-style options again at 16:14:57): the clearing house prices from the closing NBBO.
+CHAIN_LIST_LEAD = timedelta(minutes=5)
+CHAIN_QUOTE_LEAD = timedelta(seconds=3)
+CHAIN_LAUNCH = timedelta(seconds=30)  # the script starts this early, connects, then waits to quote
+EVENING_MARKS = (timedelta(0), timedelta(hours=9))  # IBKR's position marks, 16:00 to 01:00 ET
+EVENING_MARKS_EVERY = timedelta(minutes=3)
+OCC_WORKERS = max(1, min(4, (os.cpu_count() or 2) - 1))  # processes for the OCC rebuild's expiries
 STATE_ROWS = 250  # most recent orders, fills and execution-quality rows in state()
 # Wall-clock time running this far ahead of the monotonic clock (which stops while the computer
 # sleeps, on macOS and Linux) means the app was asleep: refresh everything from IBKR at once.
@@ -63,6 +73,11 @@ MARKET_RISK_REASONS = (
     "Insufficient excess liquidity",
     "Stock notional cap",
 )
+
+
+def _chain_args(options):
+    """(underlyings, expiries) of the chains that hold `options`."""
+    return sorted({c.symbol for c in options}), sorted({str(c.expiry) for c in options})
 
 
 class TradingService:
@@ -165,6 +180,8 @@ class TradingService:
         self.fallback_marks_at = {}  # session -> next fallback close-mark check
         self.power = PowerMonitor()
         self.power_risk = ("ok", "Power status unknown")
+        self.occ_done = set()  # (session, phase) whose chain has its OCC rebuild stored or failed
+        self.evening_marks_at = None
         self.closing_recorder = ClosingRecorder(
             manifest, self.ledger, self.broker, self.now, self.alert, demo, statement=self.statement_estimate
         )
@@ -660,19 +677,27 @@ class TradingService:
             return self.store.get_record(digest((m.contest_id, str(day), phase))[:32], m.account, category)
 
         captures = {phase: get("close_marks", phase) for phase in CLOSE_MARK_PHASES}
-        chains = {phase: get("option_chain", f"{phase}_chain") for phase in ("pre_close", "options_close")}
-        return captures, {phase: chain for phase, chain in chains.items() if chain}
+        chains = {}
+        for phase in ("pre_close", "options_close"):
+            chain = get("option_chain", f"{phase}_chain")
+            if chain:
+                rebuilt = get("occ_marks", f"{phase}_occ")
+                chains[phase] = {**chain, "occ": (rebuilt or {}).get("marks") or {}}
+        return captures, chains
 
     async def _chain_loop(self):
-        """A minute before each option close (15:59 ET; 16:14 for SPY-style options) a quote-only
-        Moomoo snapshot of the held options' chains (ops/fetch_moomoo_chain.py), stored as an
-        option_chain record: statement_marks prices each held option on the smoothed IV curve, as
-        the clearing house does for the statement. Never raises."""
+        """The held options' chains at each option close, quote-only through Moomoo
+        (ops/fetch_moomoo_chain.py): codes listed at 15:55, quoted at 15:59:57 (SPY-style options
+        again at 16:14:57) and stored as option_chain records, each with OCC's rebuilt closing
+        prices (occ_marks records) that statement_marks uses. Also logs IBKR's own position marks
+        through the evening. Never raises."""
         attempted = set()
         while True:
             await asyncio.sleep(5)
             try:
-                await self._chain_step(self.now(), attempted)
+                now = self.now()
+                self._evening_marks_step(now)
+                await self._chain_step(now, attempted)
             except asyncio.CancelledError:
                 raise
             except Exception as exc:
@@ -692,17 +717,28 @@ class TradingService:
             for i, q in (self.last_snapshot.quantities() if self.last_snapshot else {}).items()
             if q and i in m.contract_map and m.contract_map[i].kind == "OPT"
         ]
-        for phase, late in (("pre_close", False), ("options_close", True)):
-            group = [c for c in held if (c.symbol in LATE_OPTION_SYMBOLS) == late]
+        folder = self.moomoo_data.path.parent
+        listing = folder / f"chain-{day:%Y%m%d}-listing.json"
+        list_at = m.session_close(day) - CHAIN_LIST_LEAD
+        if held and (day, "listing") not in attempted and list_at <= now <= list_at + timedelta(minutes=3):
+            attempted.add((day, "listing"))
+            listing.unlink(missing_ok=True)  # never quote an earlier day's codes
+            await self._fetch_chain(*_chain_args(held), listing, list_only=True)
+        late = [c for c in held if c.symbol in LATE_OPTION_SYMBOLS]
+        # 16:00: every held chain, SPY's too (OCC's filings name the 4:00 p.m. NBBO for every class).
+        for phase, group in (("pre_close", held), ("options_close", late)):
             if not group or (day, phase) in attempted:
                 continue
-            start = (m.option_close(day, group[0].symbol) if late else m.session_close(day)) - CHAIN_LEAD
-            if not start <= now <= start + timedelta(seconds=30):
+            close = m.option_close(day, group[0].symbol) if phase == "options_close" else m.session_close(day)
+            quote_at = close - CHAIN_QUOTE_LEAD
+            start = quote_at - CHAIN_LAUNCH
+            if not start <= now <= start + timedelta(seconds=25):
                 continue
             attempted.add((day, phase))
-            path = self.moomoo_data.path.parent / f"chain-{day:%Y%m%d}-{phase}.json"
-            symbols, expiries = sorted({c.symbol for c in group}), sorted({str(c.expiry) for c in group})
-            chain = await self._fetch_chain(symbols, expiries, path)
+            path = folder / f"chain-{day:%Y%m%d}-{phase}.json"
+            chain = await self._fetch_chain(
+                *_chain_args(group), path, codes=listing if listing.exists() else None, at=quote_at
+            )
             if chain:
                 self.store.record(
                     "option_chain",
@@ -710,26 +746,102 @@ class TradingService:
                     {"contest": m.contest_id, "date": str(day), "phase": phase, **chain},
                     digest((m.contest_id, str(day), f"{phase}_chain"))[:32],
                 )
+        await self._ensure_occ(day)
 
-    async def _fetch_chain(self, symbols, expiries, path):
-        """Run the quote-only chain script with the Moomoo Python; its JSON, or None."""
+    async def _ensure_occ(self, day):
+        """OCC's rebuilt closing prices for each of `day`'s stored chains, once, stored as an
+        occ_marks record."""
+        m = self.manifest
+        for phase in ("pre_close", "options_close"):
+            if (day, phase) in self.occ_done:
+                continue
+            chain = self.store.get_record(
+                digest((m.contest_id, str(day), f"{phase}_chain"))[:32], m.account, "option_chain"
+            )
+            if chain is None:
+                continue
+            self.occ_done.add((day, phase))  # one attempt: a failing fit must not spin every 5 s
+            key = digest((m.contest_id, str(day), f"{phase}_occ"))[:32]
+            if self.store.get_record(key, m.account, "occ_marks") is not None:
+                continue
+            started = time.monotonic()
+            try:
+                marks = await self._rebuild_occ(chain)
+            except Exception as exc:
+                self.alert(
+                    "warning",
+                    f"OCC closing-price rebuild failed for the {phase} chain ({type(exc).__name__}); "
+                    "the smoothed-IV marks are used instead",
+                    key=("occ_failed", str(day), phase),
+                )
+                continue
+            self.store.record(
+                "occ_marks",
+                m.account,
+                {
+                    "contest": m.contest_id,
+                    "date": str(day),
+                    "phase": phase,
+                    "params": OCC_PARAMS,
+                    "seconds": round(time.monotonic() - started, 2),
+                    "marks": marks,
+                },
+                key,
+            )
+
+    async def _rebuild_occ(self, chain):
+        """hedge/occ_marks.chain_marks for `chain`, in its own processes (python -m
+        hedge.occ_marks): QuantLib holds the interpreter lock, so in the app it would stall the
+        event loop for seconds (about 6 s per SPY expiry)."""
+        with tempfile.TemporaryDirectory() as folder:
+            source, target = Path(folder) / "chain.json", Path(folder) / "occ.json"
+            source.write_text(json.dumps(chain, default=str))
+            process = await asyncio.create_subprocess_exec(
+                sys.executable,
+                "-m",
+                "hedge.occ_marks",
+                str(source),
+                str(target),
+                "--rate",
+                str(self.manifest.risk_free_rate),
+                "--workers",
+                str(OCC_WORKERS),
+                cwd=str(Path(__file__).resolve().parents[1]),
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+            try:
+                output, _ = await asyncio.wait_for(process.communicate(), 300)
+            except TimeoutError:
+                process.kill()
+                raise
+            if process.returncode != 0:
+                raise RuntimeError(output.decode(errors="replace").strip()[-300:])
+            return json.loads(target.read_text())
+
+    async def _fetch_chain(self, symbols, expiries, path, list_only=False, codes=None, at=None):
+        """Run the quote-only chain script with the Moomoo Python; its JSON, or None. list_only
+        writes the codes; codes (an earlier listing) skips the listing; at is the quote time."""
         python = Path(".runtime/moomoo-env/bin/python")
         if not python.exists():
             return None
+        args = ["--underlyings", *symbols, "--expiries", *expiries, "--output", str(path)]
+        if list_only:
+            args.append("--list-only")
+        if codes is not None:
+            args += ["--codes", str(codes)]
+        if at is not None:
+            args += ["--at", at.isoformat()]
         process = await asyncio.create_subprocess_exec(
             str(python),
             "ops/fetch_moomoo_chain.py",
-            "--underlyings",
-            *symbols,
-            "--expiries",
-            *expiries,
-            "--output",
-            str(path),
+            *args,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
         )
+        wait = 0 if at is None else max(0.0, (at - self.now()).total_seconds())
         try:
-            output, _ = await asyncio.wait_for(process.communicate(), 50)
+            output, _ = await asyncio.wait_for(process.communicate(), 60 + wait)
         except TimeoutError:
             process.kill()
             raise
@@ -742,6 +854,58 @@ class TradingService:
             return None
         return json.loads(path.read_text())
 
+    def _evening_marks_step(self, now):
+        """Every 3 minutes from 16:00 to 01:00 ET, IBKR's own mark of each held position
+        (updatePortfolio marketPrice) as an evening_marks record: when IBKR switches to the
+        clearing house's price, these marks show it, and the nightly comparison scores them."""
+        m = self.manifest
+        if self.evening_marks_at is not None and now - self.evening_marks_at < EVENING_MARKS_EVERY:
+            return
+        day = next(
+            (
+                d
+                for d in (m.day_zero, *m.scoring_sessions)
+                if m.session_close(d) + EVENING_MARKS[0] <= now <= m.session_close(d) + EVENING_MARKS[1]
+            ),
+            None,
+        )
+        if day is None:
+            return
+        marks = getattr(self.broker, "portfolio_marks", dict)()
+        if not marks:
+            return
+        self.evening_marks_at = now
+        self.store.record(
+            "evening_marks",
+            m.account,
+            {
+                "contest": m.contest_id,
+                "date": str(day),
+                "at": now.isoformat(),
+                "marks": {str(i): v["market_price"] for i, v in marks.items() if i in m.contract_map},
+            },
+        )
+
+    def _evening_marks(self, day):
+        """{conId: (IBKR's last mark before the burner's 19:56 end, its last mark of the evening)}."""
+        m = self.manifest
+        cutoff = m.session_close(day) + timedelta(hours=3, minutes=56)
+        rows = sorted(
+            (
+                r
+                for r in self.store.records("evening_marks", m.account, 400)
+                if r.get("date") == str(day) and r.get("contest") == m.contest_id
+            ),
+            key=lambda r: r["at"],
+        )
+        result = {}
+        for row in rows:
+            early = datetime.fromisoformat(row["at"]) <= cutoff
+            for key, price in (row.get("marks") or {}).items():
+                before, _ = result.get(int(key), (None, None))
+                result[int(key)] = (float(price) if early else before, float(price))
+        return result
+
     def statement_marks_comparison(self, day, closes):
         """The statement's own closes ({str(conId): {"quantity", "close"}}) against the marks the
         app predicted for `day`: the calibration of hedge/statement.py. effect = quantity x
@@ -749,15 +913,29 @@ class TradingService:
         m = self.manifest
         captures, chains = self._close_inputs(day)
         marks, _ = statement_marks(m, day, captures, self._official_closes(day), chains)
-        rows, total = [], 0.0
+        evening = self._evening_marks(day)
+        rows, total, estimators = [], 0.0, {}
         for key, row in sorted(closes.items()):
             con_id = int(key)
             contract, mark = m.contract_map.get(con_id), marks.get(con_id)
             close, quantity = float(row["close"]), float(row["quantity"])
-            effect = None
+            effect, estimates = None, {}
             if contract is not None and mark is not None:
                 effect = quantity * contract.multiplier * (close - mark["mark"])
                 total += effect
+                estimates = dict(mark.get("estimates") or {})
+                if contract.kind == "OPT":
+                    estimates["bid_ask_worst"] = mark["low"] if quantity > 0 else mark["high"]
+            if contract is not None and contract.kind == "OPT":
+                before, last = evening.get(con_id, (None, None))
+                estimates.update(ibkr_1956=before, ibkr_last=last)
+                for name, price in estimates.items():
+                    if price is not None:
+                        error = quantity * contract.multiplier * (close - price)
+                        estimators.setdefault(name, {"effect": 0.0, "abs_effect": 0.0, "contracts": 0})
+                        estimators[name]["effect"] += error
+                        estimators[name]["abs_effect"] += abs(error)
+                        estimators[name]["contracts"] += 1
             rows.append(
                 {
                     "label": contract.label if contract else row.get("label", key),
@@ -768,9 +946,10 @@ class TradingService:
                     "ask": mark["high"] if mark else None,
                     "source": mark["source"] if mark else "no capture",
                     "effect": effect,
+                    "estimates": estimates,
                 }
             )
-        return {"date": str(day), "rows": rows, "total_effect": total}
+        return {"date": str(day), "rows": rows, "total_effect": total, "estimators": estimators}
 
     def import_statement_positions(self, day, text):
         """The operator pasted (or uploaded) a statement's Open Positions for `day`: stored per

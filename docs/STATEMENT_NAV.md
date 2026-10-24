@@ -101,8 +101,10 @@ and model-style option marks, so it was $140.17 off the statement.
   asks for it before the next open.
 - **Closing burner:** in the contest it works after the close, from 16:16 until the post-market
   cutoffs before 20:00, shares only.
-  - **Gap:** predicted statement NAV minus target. Its distribution covers only the option-mark
-    uncertainty; spending goes toward its `spend_quantile`.
+  - **Gap:** predicted statement NAV minus target. It is uncertain only by the option prices.
+    With `post_close_basis: worst_case` (the default) the burner spends only `low` minus target,
+    the gap with every option at the least favorable side of its closing bid/ask. With `quantile`
+    it spends toward `spend_quantile` of the samples around the predicted prices.
   - **No just-in-time wait:** the gap no longer moves with the market.
   - **Cost per round trip:** exactly the spread paid plus commissions.
 - **Official close:** `api_close_official` is False. An API row is provisional and warns until the
@@ -119,12 +121,20 @@ and model-style option marks, so it was $140.17 off the statement.
 - **Missed closing capture** (`service._fallback_close_marks`): when the app has no 16:00/16:15
   option capture, for example because the Mac slept, it takes the Moomoo collector's archived book
   from the last 10 minutes before each option's close, else Moomoo's final book after the close.
-- **Smoothed option prices** (`hedge/marks.py`):
-  - **Snapshot:** a minute before each option close the app takes a quote-only snapshot of the held
-    options' chains (`ops/fetch_moomoo_chain.py`).
-  - **Price:** each held option is priced on a smoothed implied-volatility curve, as the clearing
-    house does, kept inside its closing bid/ask.
-  - **Unvalidated:** check it against the statements (Statement prices check).
+- **Option closing prices** (`hedge/occ_marks.py`, `hedge/marks.py`):
+  - **Snapshot:** at 15:55 the app lists the held options' chains (strikes within ±30%), then
+    quotes them at 15:59:57, SPY's included, and SPY-style chains again at 16:14:57
+    (`ops/fetch_moomoo_chain.py`, quote-only).
+  - **Price:** right after each snapshot the app rebuilds the Options Clearing Corporation's
+    end-of-day price from that chain, once, in a thread (an `occ_marks` record). Each held
+    option's statement mark is that price, else the local smoothed-IV price, else the midpoint,
+    always inside its closing bid/ask. The mark's `source` says which.
+  - **Scoring:** the Statement prices check scores every estimator against each statement:
+    midpoint, local smoothing, OCC rebuild, each option at its worst bid/ask side, and IBKR's own
+    marks at 19:56 and at the end of the evening (`evening_marks`, every 3 minutes 16:00–01:00).
+  - **Tuning:** `ops/mark_backtest.py` scores the estimators on every past statement
+    (`ops/statement_history.py` fetches up to 45 days through Flex). PARAMS in
+    `hedge/occ_marks.py` change only after that review.
 - **Statement prices check:** each statement's own prices are compared with the predicted marks.
   They come from the nightly import or from Open Positions pasted in Settings & alerts.
 - **Statement-style value:** before 16:16 the dashboard also shows the account valued at live

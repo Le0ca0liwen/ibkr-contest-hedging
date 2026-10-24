@@ -95,6 +95,7 @@ burner:
   start_threshold: 25               # USD hysteresis on the closing gap quantile below
   stop_threshold: 5
   spend_quantile: 0.4               # spend toward this gap quantile (0.5 = median); lower = safer
+  post_close_basis: worst_case      # after the close: spend only the gap at the worst option prices
   require_pnl_stream: true          # act only on the settled 1-second NAV (never fill attribution)
   settle_seconds: 8                 # after each cycle, let fills and fees reach the NAV stream
   bias: 0                           # signed model-vs-official bias; needs bias_source if nonzero

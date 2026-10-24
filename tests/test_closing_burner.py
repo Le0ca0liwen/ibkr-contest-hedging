@@ -1219,7 +1219,7 @@ def post_close_window(burner, clock, monkeypatch):
 async def test_after_the_close_the_burner_spends_against_the_predicted_statement_nav(burning, monkeypatch):
     """Statement NAV (Oct 23): after the close the day's NAV moves only with our trades, so the
     burner spends at once (no just-in-time wait) toward the statement gap's quantile."""
-    service, clock = await burning(require_pnl_stream=True, spend_quantile=0.4)
+    service, clock = await burning(require_pnl_stream=True, spend_quantile=0.4, post_close_basis="quantile")
     burner = service.burner
     post_close_window(burner, clock, monkeypatch)
     target = float(service.closing_target(service.broker.snapshot(), clock.at))
@@ -1234,6 +1234,39 @@ async def test_after_the_close_the_burner_spends_against_the_predicted_statement
     assert info["nav_source"] == "predicted statement NAV"  # never the 1-second stream gate
     assert info["needed"] == pytest.approx(np.quantile(samples - target, 0.4), abs=2)
     assert info["jit"]["waiting"] is False and burner.state_name == "ENTRY"
+
+
+def worst_case_estimate(target, low):
+    samples = target + np.linspace(100, 200, 64)  # the predicted price's own spread: unused here
+    return {"status": "ok", "value": target + 150, "low": low, "high": target + 240, "samples": samples}
+
+
+async def test_after_the_close_the_burner_spends_only_the_worst_case_gap_by_default(burning, monkeypatch):
+    """Operator (Oct 24): until the rebuilt statement prices prove themselves, spend only what stays
+    above target with every option at the least favorable side of its closing bid/ask."""
+    service, clock = await burning(require_pnl_stream=True)
+    burner = service.burner
+    assert burner.policy.post_close_basis == "worst_case"
+    post_close_window(burner, clock, monkeypatch)
+    target = float(service.closing_target(service.broker.snapshot(), clock.at))
+    estimate = worst_case_estimate(target, target + 60)
+    monkeypatch.setattr(service, "statement_estimate", lambda now=None: estimate)
+    await steps(service)
+    assert burner.last["needed"] == pytest.approx(60) and burner.last["gap"]["mean"] == pytest.approx(60)
+    assert burner.state_name == "ENTRY"
+
+
+async def test_a_worst_case_below_target_spends_nothing_however_rich_the_prediction(burning, monkeypatch):
+    service, clock = await burning(require_pnl_stream=True)
+    burner = service.burner
+    post_close_window(burner, clock, monkeypatch)
+    target = float(service.closing_target(service.broker.snapshot(), clock.at))
+    estimate = worst_case_estimate(target, target - 1)
+    monkeypatch.setattr(service, "statement_estimate", lambda now=None: estimate)
+    await steps(service)
+    assert burner.last["needed"] == 0 and burner.state_name == "MONITORING"
+    assert burner.reason.startswith("Worst-case closing gap")
+    assert not service.execution.burn_open()
 
 
 async def test_after_the_close_the_burner_waits_for_every_closing_mark(burning, monkeypatch):
@@ -1262,7 +1295,12 @@ async def test_a_resting_post_market_burn_leg_never_trips_the_working_order_chec
     monkeypatch.setattr(
         service,
         "statement_estimate",
-        lambda now=None: {"status": "ok", "value": float(samples.mean()), "samples": samples},
+        lambda now=None: {
+            "status": "ok",
+            "value": float(samples.mean()),
+            "low": float(samples.min()),
+            "samples": samples,
+        },
     )
     await steps(service)
     entry = next(r for r in service.store.intents(service.manifest.account) if r.get("leg") == "entry")
