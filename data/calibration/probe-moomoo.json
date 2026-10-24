@@ -1,0 +1,263 @@
+{
+ "at": "2026-10-24T15:08:58.490210",
+ "bars": {
+  "US.BA261016C190000": [
+   {
+    "time_key": "2026-10-01 00:00:00",
+    "close": 7.0,
+    "last_close": 3.75,
+    "volume": 1053.0
+   },
+   {
+    "time_key": "2026-10-02 00:00:00",
+    "close": 7.05,
+    "last_close": 7.0,
+    "volume": 304.0
+   },
+   {
+    "time_key": "2026-10-05 00:00:00",
+    "close": 6.5,
+    "last_close": 7.05,
+    "volume": 386.0
+   },
+   {
+    "time_key": "2026-10-06 00:00:00",
+    "close": 3.9,
+    "last_close": 6.5,
+    "volume": 1400.0
+   },
+   {
+    "time_key": "2026-10-07 00:00:00",
+    "close": 2.8,
+    "last_close": 3.9,
+    "volume": 2839.0
+   },
+   {
+    "time_key": "2026-10-08 00:00:00",
+    "close": 2.44,
+    "last_close": 2.8,
+    "volume": 4611.0
+   },
+   {
+    "time_key": "2026-10-09 00:00:00",
+    "close": 3.28,
+    "last_close": 2.44,
+    "volume": 1591.0
+   },
+   {
+    "time_key": "2026-10-12 00:00:00",
+    "close": 2.45,
+    "last_close": 3.28,
+    "volume": 1422.0
+   },
+   {
+    "time_key": "2026-10-13 00:00:00",
+    "close": 0.98,
+    "last_close": 2.45,
+    "volume": 3543.0
+   },
+   {
+    "time_key": "2026-10-14 00:00:00",
+    "close": 0.35,
+    "last_close": 0.98,
+    "volume": 3408.0
+   },
+   {
+    "time_key": "2026-10-15 00:00:00",
+    "close": 0.75,
+    "last_close": 0.35,
+    "volume": 3600.0
+   },
+   {
+    "time_key": "2026-10-16 00:00:00",
+    "close": 0.19,
+    "last_close": 0.75,
+    "volume": 14561.0
+   },
+   {
+    "time_key": "2026-10-19 00:00:00",
+    "close": 0.19,
+    "last_close": 0.19,
+    "volume": 0.0
+   }
+  ],
+  "US.BA261016C192500": [
+   {
+    "time_key": "2026-10-01 00:00:00",
+    "close": 6.2,
+    "last_close": 2.92,
+    "volume": 167.0
+   },
+   {
+    "time_key": "2026-10-02 00:00:00",
+    "close": 5.73,
+    "last_close": 6.2,
+    "volume": 478.0
+   },
+   {
+    "time_key": "2026-10-05 00:00:00",
+    "close": 4.34,
+    "last_close": 5.73,
+    "volume": 2132.0
+   },
+   {
+    "time_key": "2026-10-06 00:00:00",
+    "close": 2.75,
+    "last_close": 4.34,
+    "volume": 841.0
+   },
+   {
+    "time_key": "2026-10-07 00:00:00",
+    "close": 1.92,
+    "last_close": 2.75,
+    "volume": 439.0
+   },
+   {
+    "time_key": "2026-10-08 00:00:00",
+    "close": 1.58,
+    "last_close": 1.92,
+    "volume": 773.0
+   },
+   {
+    "time_key": "2026-10-09 00:00:00",
+    "close": 2.13,
+    "last_close": 1.58,
+    "volume": 2031.0
+   },
+   {
+    "time_key": "2026-10-12 00:00:00",
+    "close": 1.43,
+    "last_close": 2.13,
+    "volume": 1468.0
+   },
+   {
+    "time_key": "2026-10-13 00:00:00",
+    "close": 0.49,
+    "last_close": 1.43,
+    "volume": 1596.0
+   },
+   {
+    "time_key": "2026-10-14 00:00:00",
+    "close": 0.16,
+    "last_close": 0.49,
+    "volume": 1862.0
+   },
+   {
+    "time_key": "2026-10-15 00:00:00",
+    "close": 0.26,
+    "last_close": 0.16,
+    "volume": 3262.0
+   },
+   {
+    "time_key": "2026-10-16 00:00:00",
+    "close": 0.01,
+    "last_close": 0.26,
+    "volume": 8555.0
+   },
+   {
+    "time_key": "2026-10-19 00:00:00",
+    "close": 0.01,
+    "last_close": 0.01,
+    "volume": 0.0
+   }
+  ],
+  "US.BA261016C195000": [
+   {
+    "time_key": "2026-10-01 00:00:00",
+    "close": 4.75,
+    "last_close": 2.27,
+    "volume": 3680.0
+   },
+   {
+    "time_key": "2026-10-02 00:00:00",
+    "close": 4.25,
+    "last_close": 4.75,
+    "volume": 790.0
+   },
+   {
+    "time_key": "2026-10-05 00:00:00",
+    "close": 3.3,
+    "last_close": 4.25,
+    "volume": 1151.0
+   },
+   {
+    "time_key": "2026-10-06 00:00:00",
+    "close": 1.98,
+    "last_close": 3.3,
+    "volume": 3137.0
+   },
+   {
+    "time_key": "2026-10-07 00:00:00",
+    "close": 1.27,
+    "last_close": 1.98,
+    "volume": 1260.0
+   },
+   {
+    "time_key": "2026-10-08 00:00:00",
+    "close": 1.06,
+    "last_close": 1.27,
+    "volume": 1833.0
+   },
+   {
+    "time_key": "2026-10-09 00:00:00",
+    "close": 1.34,
+    "last_close": 1.06,
+    "volume": 3648.0
+   },
+   {
+    "time_key": "2026-10-12 00:00:00",
+    "close": 0.83,
+    "last_close": 1.34,
+    "volume": 2407.0
+   },
+   {
+    "time_key": "2026-10-13 00:00:00",
+    "close": 0.25,
+    "last_close": 0.83,
+    "volume": 2379.0
+   },
+   {
+    "time_key": "2026-10-14 00:00:00",
+    "close": 0.09,
+    "last_close": 0.25,
+    "volume": 1313.0
+   },
+   {
+    "time_key": "2026-10-15 00:00:00",
+    "close": 0.1,
+    "last_close": 0.09,
+    "volume": 2968.0
+   },
+   {
+    "time_key": "2026-10-16 00:00:00",
+    "close": 0.01,
+    "last_close": 0.1,
+    "volume": 1768.0
+   },
+   {
+    "time_key": "2026-10-19 00:00:00",
+    "close": 0.01,
+    "last_close": 0.01,
+    "volume": 0.0
+   }
+  ]
+ },
+ "matches": 2,
+ "checked": 19,
+ "skipped": [
+  "US.BA261016P190000",
+  "US.BA261016P195000",
+  "US.BA261023C195000",
+  "US.RKLB261120P45000",
+  "US.RKLB261120P55000",
+  "US.SPCX261120C130000",
+  "US.SPCX261120C145000",
+  "US.SPCX261120C160000",
+  "US.SPCX261120P145000",
+  "US.SPY261120C770000",
+  "US.SPY261120P770000",
+  "US.SPY261127C770000",
+  "US.SPY261127P770000"
+ ],
+ "errors": []
+}
