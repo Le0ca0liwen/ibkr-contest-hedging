@@ -219,6 +219,7 @@ class FakeContext:
                     "last_price": 1.5,
                     "bid_price": 1.4,
                     "ask_price": 1.6,
+                    "prev_close_price": 1.4774,
                     "update_time": "2026-10-23 16:14:59",
                     "option_strike_price": option["strike_price"],
                     "option_type": option["option_type"],
@@ -283,6 +284,7 @@ def test_fetch_chain_filters_by_moneyness_and_chunks_snapshots():
         "bid": 1.4,
         "ask": 1.6,
         "last": 1.5,
+        "prev_close": 1.4774,
         "update_time": "2026-10-23 16:14:59",
     }
     snapshots = [call[1] for call in ctx.calls if call[0] == "snapshot"]
@@ -396,7 +398,8 @@ def test_list_then_snapshot_at_the_close_quotes_only_the_listed_codes(tmp_path, 
     assert not any(call[0] == "chain" for call in calls)  # no listing at the close: quotes only
     assert calls[0] == ("snapshot", ["US.SPY"])  # the spot is quoted again with the options
     written = json.loads(output.read_text())
-    assert written["underlyings"] == {"SPY": {"spot": 600.0, "bid": 599.9, "ask": 600.1}}
+    assert written["underlyings"] == {"SPY": {"spot": 600.0, "bid": 599.9, "ask": 600.1, "prev_close": None}}
+    assert all(o["prev_close"] == 1.4774 for o in written["options"])  # yesterday's OCC price
     assert sorted(o["code"] for o in written["options"]) == ["US.SPY261120C600000", "US.SPY261120P600000"]
 
 

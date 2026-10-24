@@ -53,7 +53,10 @@ def fetch_chain(
     ctx, sdk, underlyings, expiries, moneyness, pause=0.6, sleep=time.sleep, chain_pause=CHAIN_PAUSE
 ):
     """{"at", "underlyings": {symbol: {"spot", "bid", "ask"}}, "options": [{"code", "underlying",
-    "expiry", "strike", "right", "bid", "ask", "last", "update_time"}], "errors": [...]}.
+    "expiry", "strike", "right", "bid", "ask", "last", "prev_close", "update_time"}], "errors": [...]}.
+
+    prev_close is Moomoo's prev_close_price: the clearing house's end-of-day price of the previous
+    session (the IBKR statement's Close Price), so each day's chain also scores the day before.
 
     Quote requests only (get_market_snapshot, get_option_chain), at least `pause` seconds apart
     (`chain_pause` before an option chain request). A failed request is recorded and skipped."""
@@ -146,7 +149,12 @@ def snapshot_chain(ctx, sdk, listing, pause=0.6, sleep=time.sleep, spots=None, e
             spot = (
                 last if last and last > 0 else ((bid + ask) / 2 if bid and ask and 0 < bid <= ask else None)
             )
-            spots[symbol] = {"spot": spot or listing["underlyings"][symbol]["spot"], "bid": bid, "ask": ask}
+            spots[symbol] = {
+                "spot": spot or listing["underlyings"][symbol]["spot"],
+                "bid": bid,
+                "ask": ask,
+                "prev_close": _number(row.get("prev_close_price")),
+            }
     codes = list(chosen)
     for start in range(0, len(codes), CHUNK):
         chunk = codes[start : start + CHUNK]
@@ -161,6 +169,9 @@ def snapshot_chain(ctx, sdk, listing, pause=0.6, sleep=time.sleep, spots=None, e
                     bid=_number(row.get("bid_price")),
                     ask=_number(row.get("ask_price")),
                     last=_number(row.get("last_price")),
+                    # The previous session's OCC end-of-day price: equal to the IBKR statement's
+                    # Close Price for all ten Oct 22 legs (until Moomoo rolls the trading day).
+                    prev_close=_number(row.get("prev_close_price")),
                     update_time=row.get("update_time"),
                 )
     options = sorted(
