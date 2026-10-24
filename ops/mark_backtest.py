@@ -173,9 +173,11 @@ def load_books(dataset, conids, extra, late_at="16:00"):
                 underlying.setdefault(code[3:], (bid + ask) / 2)
         books[day].update(found)
         spots[day].update(underlying)
-    for path in extra or []:
+    for path in extra or []:  # e.g. ops/fetch_ibkr_closing_books.py: options and their shares
         for row in json.loads(Path(path).read_text()):
             books[row["day"]][row["code"]] = (row["bid"], row["ask"])
+            if not parse_code(row["code"]) and row["bid"] and row["ask"]:
+                spots[row["day"]].setdefault(row["code"][3:], (row["bid"] + row["ask"]) / 2)
     return books, spots
 
 
