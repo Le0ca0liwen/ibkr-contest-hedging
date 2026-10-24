@@ -37,8 +37,8 @@ def test_the_plan_puts_shares_and_statement_legs_first_and_skips_expired_and_fet
         ("2026-10-22", "US.SPY"),
         ("2026-10-22", "US.SPY261120C770000"),
         ("2026-10-21", "US.RKLB"),
-        ("2026-10-21", "US.RKLB261120P50000"),
-        ("2026-10-22", "US.SPY261120C771000"),  # chain order kept: nearest the money first
+        ("2026-10-21", "US.RKLB261120P50000"),  # each day's nearest first, the days side by side
+        ("2026-10-22", "US.SPY261120C771000"),
         ("2026-10-09", "US.BA261016C195000"),
     ]
 

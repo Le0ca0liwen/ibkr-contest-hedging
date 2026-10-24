@@ -84,19 +84,25 @@ def chain_wants(paths, days, moneyness):
 
 def plan(first, then, done, today):
     """[(day, code)] still to fetch, in order: `first` (the statement legs and their neighbours),
-    then `then` (whole chains, nearest the money first), each day's shares before its options, no
+    then `then` (whole chains, nearest the money first, the days side by side), each day's shares
+    before its options, no
     option on a day after its expiry; options expired by `today` (YYYYMMDD) last, as IBKR mostly has
     no history left for them."""
     todo, later, seen = [], [], set(done)
     for wanted in (first, then):
+        batch = []
         for day, codes in sorted(wanted.items()):
             ordered = sorted(codes) if isinstance(codes, set) else codes
             live = [c for c in ordered if parse(c) and parse(c)[1] >= day.replace("-", "")]
-            for code in [f"US.{s}" for s in sorted({parse(c)[0] for c in live})] + live:
-                if (day, code) not in seen:
-                    seen.add((day, code))
-                    expired = parse(code) is not None and parse(code)[1] < today
-                    (later if expired else todo).append((day, code))
+            shares = [f"US.{s}" for s in sorted({parse(c)[0] for c in live})]
+            batch += [(-1, day, code) for code in shares] + [(i, day, code) for i, code in enumerate(live)]
+        if wanted is then:  # the days' chains side by side, nearest the money first
+            batch.sort(key=lambda item: (item[0], item[1]))
+        for _, day, code in batch:
+            if (day, code) not in seen:
+                seen.add((day, code))
+                expired = parse(code) is not None and parse(code)[1] < today
+                (later if expired else todo).append((day, code))
     return todo + later
 
 
