@@ -36,6 +36,7 @@ from .statement import (
     CLOSE_MARK_PHASES,
     FALLBACK_BOOK_AGE,
     StatementTracker,
+    fill_fee,
     marks_fixed_at,
     statement_marks,
     statement_samples,
@@ -787,6 +788,32 @@ class TradingService:
             },
         )
         return {**parsed, "comparison": comparison}
+
+    def statement_prices(self, day):
+        """({conId: price}, basis) valuing `day`'s close as the statement does: the statement's own
+        closes once imported (Flex or pasted Open Positions), else the predicted statement marks
+        (shares' regular-session close, options' closing book), else ({}, None)."""
+        m = self.manifest
+        rows = [
+            r
+            for category in ("flex_statement", "statement_positions")
+            for r in self.store.records(category, m.account, 20)
+            if r.get("date") == str(day)
+        ]
+        if rows:
+            latest = max(rows, key=lambda r: r.get("at") or r.get("fetched_at") or "")
+            prices = {}
+            for key, row in (latest.get("positions") or latest.get("rows") or {}).items():
+                price = row.get("mark", row.get("close"))
+                if price is not None and int(key) in m.contract_map:
+                    prices[int(key)] = float(price)
+            if prices:
+                return prices, "IBKR statement's closing prices"
+        captures, chains = self._close_inputs(day)
+        marks, _ = statement_marks(m, day, captures, self._official_closes(day), chains)
+        return (
+            ({i: v["mark"] for i, v in marks.items()}, "predicted statement marks") if marks else ({}, None)
+        )
 
     def latest_marks_check(self):
         """The newest statement-vs-predicted comparison (pasted Open Positions or the Flex import)."""
@@ -2995,6 +3022,39 @@ class TradingService:
             }
         )
 
+    def statement_basis_now(self):
+        """Display only, before the closing marks are fixed: the account valued the way the
+        statement values it at the close (cash and accrued interest, plus every holding at its live
+        midpoint), next to IBKR's NAV figure, which uses IBKR's own marks (Oct 22 at 16:00: options
+        $633 above the statement). Fills since IBKR's last cash push are taken out of cash at their
+        price and commission. None when a holding has no quote."""
+        snapshot, now = self.live_snapshot(), self.now()
+        day = self.manifest.active_session(now)
+        if (
+            snapshot is None
+            or snapshot.cash is None
+            or day is None
+            or now >= marks_fixed_at(self.manifest, day)
+        ):
+            return None
+        contracts, quotes = self.manifest.contract_map, self.last_quotes
+        value = (
+            float(snapshot.cash)
+            + float(snapshot.accrued_cash or 0)
+            + self._interest_adjustment(day)["amount"]
+        )
+        for con_id, quantity in snapshot.quantities().items():
+            quote = quotes.get(con_id)
+            if quantity and (quote is None or con_id not in contracts):
+                return None
+            if quantity:
+                value += quantity * contracts[con_id].multiplier * quote.mid
+        for e in self.nav_tracker.executions.values():
+            if e.at > snapshot.account_at and e.con_id in contracts:
+                value -= e.signed_quantity * contracts[e.con_id].multiplier * float(e.price)
+                value -= fill_fee(self.manifest.policy, contracts[e.con_id], e, self.nav_tracker.fees)
+        return value
+
     def live_snapshot(self):
         """A fresh broker snapshot (it carries the 1-2 s P&L stream) for the NAV shown on the
         dashboard; the monitor's last snapshot (up to risk_seconds old) when none can be read."""
@@ -3120,6 +3180,7 @@ class TradingService:
                 "official_account_nav": self.ledger.latest_report(),
                 "statement_import": self.statement_importer.state(),
                 "statement_marks_check": self.latest_marks_check(),
+                "statement_basis_nav": self.statement_basis_now(),
                 "closing_recorder": self.closing_recorder.state(),
                 "provisional_score": abs(estimate - float(closing_target))
                 if estimate is not None and closing_target is not None

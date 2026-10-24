@@ -5,6 +5,32 @@ Value** (confirmed Oct 23). That replaces the Oct 21 working assumption that the
 NetLiquidation was official, and the Oct 22 one that the NAV after the 20:00 ET post-market
 close was. Implementation: `hedge/statement.py`.
 
+## IBKR's definition
+
+- **NAV:** on statements, NAV "represents Net Liquidation Value as of the date indicated in the
+  report" (IBKR glossary).
+- **Ending NAV:** the statement's NAV section shows one row per asset class plus rows for interest
+  accruals and dividend accruals, each valued "at the close of the period covered by the statement"
+  (IBKR Reporting Reference, Net Asset Value). For this account that is Ending NAV = Cash + Stock +
+  Options + Interest Accruals (+ Dividend Accruals: none expected, as SPCX and RKLB pay none and
+  IVV/VOO go ex-dividend in December).
+- **Change in NAV:** mark-to-market (position MTM and transaction MTM), interest (including accruals
+  and reversals), commissions, transaction fees, dividends, deposits and withdrawals, and other items.
+- **Interest accruals** (IBKR interest calculation page):
+  - **Balance:** interest is calculated daily on **settled** cash above USD 10,000.
+  - **Rate:** the benchmark minus 0.5% on IBKR Pro (3.38% on Oct 23) or minus 1.5% on IBKR Lite.
+  - **Arithmetic:** a 360-day year for USD, rounded to the cent per tier.
+  - **Posting:** each day's interest is added to an Accrued Cash balance. Early in the next month
+    IBKR reverses that balance and books the final interest to cash, which leaves NAV unchanged up
+    to small recalculation differences. Expect this around Nov 2-4.
+  - **What the app sees:** IBKR's API AccruedCash stayed at 1,601.06 from the Oct 22 statement
+    through Oct 23 evening. The app learns the statement's extra accrual from each imported
+    statement, and learns Fridays separately, since a Friday statement may carry the weekend.
+- **Timing:** "The reporting window closes at ... 8:20PM EST for securities. Statements will be
+  available around midnight (EST)" (IBKR Web API docs). The Account Management API that sentence
+  comes from is for brokers and advisors and returns PDFs; individual accounts automate statements
+  through the Flex Web Service.
+
 ## When it is taken
 
 It is not one snapshot. Each part has its own time (IBKR FAQs; Oct 22 numbers below):
@@ -82,8 +108,35 @@ and model-style option marks, so it was $140.17 off the statement.
 - **Official close:** `api_close_official` is False. An API row is provisional and warns until the
   statement is imported.
 
+## Automatic statement import, fallbacks and calibration (Oct 24)
+
+- **Nightly import** (`hedge/flex_import.py`):
+  - **When:** from 00:10 ET after each session the app asks the Flex Web Service for that day's
+    statement only. If it is not ready, it asks again every 30 minutes, and Day 0 and missed days are
+    backfilled.
+  - **What it records:** the NAV becomes the official close (a statement row) and the position
+    prices are stored. One-time setup: Setup IBKR Flex.command.
+- **Missed closing capture** (`service._fallback_close_marks`): when the app has no 16:00/16:15
+  option capture, for example because the Mac slept, it takes the Moomoo collector's archived book
+  from the last 10 minutes before each option's close, else Moomoo's final book after the close.
+- **Smoothed option prices** (`hedge/marks.py`):
+  - **Snapshot:** a minute before each option close the app takes a quote-only snapshot of the held
+    options' chains (`ops/fetch_moomoo_chain.py`).
+  - **Price:** each held option is priced on a smoothed implied-volatility curve, as the clearing
+    house does, kept inside its closing bid/ask.
+  - **Unvalidated:** check it against the statements (Statement prices check).
+- **Statement prices check:** each statement's own prices are compared with the predicted marks.
+  They come from the nightly import or from Open Positions pasted in Settings & alerts.
+- **Statement-style value:** before 16:16 the dashboard also shows the account valued at live
+  midpoints, next to IBKR's NAV, which uses IBKR's own marks.
+- **Day-end report:** each close is valued at the statement's prices once imported, else at the
+  predicted statement marks.
+- **Power:** the Today panel has a Power row, and from 90 minutes before a scored close the app
+  alerts when the Mac is on battery or its lid is closed.
+
 ## Each morning
 
-Enter the previous day's statement Ending Value in Settings & alerts > Import an official
+With the Flex import set up, nothing: the statement NAV is recorded by itself after midnight. Without
+it, enter the previous day's statement Ending Value in Settings & alerts > Import an official
 closing NAV. The Previous official close row warns until you do. Trading still starts at 04:00 on
 the predicted value.

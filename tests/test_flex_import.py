@@ -133,3 +133,12 @@ async def test_the_statements_extra_interest_accrual_is_learned(manifest, store)
     interest = service._interest_adjustment(later)
     assert interest["amount"] == 81.06 and str(day) in interest["source"]
     assert service._interest_adjustment(day)["amount"] == 0.0  # never from its own or a later statement
+
+
+async def test_the_statements_own_prices_value_its_day_once_imported(manifest, store):
+    day = manifest.day_zero
+    service, imp, _ = importer(manifest, store, [lambda d: report(manifest.account, d)])
+    assert service.statement_prices(day) == ({}, None)
+    await imp.step(at(day + timedelta(days=1), 0, 10))
+    prices, basis = service.statement_prices(day)
+    assert prices == {101: 6.55} and basis == "IBKR statement's closing prices"

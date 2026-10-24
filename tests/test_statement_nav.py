@@ -481,3 +481,21 @@ async def test_the_chain_is_taken_a_minute_before_each_option_close(manifest, st
     option = manifest.contract_map[101]
     assert calls == [([option.symbol], [str(option.expiry)], f"chain-{day:%Y%m%d}-pre_close.json")]
     assert [r["phase"] for r in store.records("option_chain", manifest.account)] == ["pre_close"]
+
+
+def test_the_dashboard_shows_the_statement_style_value_before_the_close(manifest, store, quotes, now):
+    from hedge.service import TradingService
+
+    service = TradingService(manifest, store, demo=True)
+    service.now = lambda: now
+    service.broker.update_quotes(quotes, now)
+    service.last_snapshot, service.last_quotes = service.broker.snapshot(), quotes
+    snap = service.last_snapshot
+    expected = (
+        float(snap.cash)
+        + float(snap.accrued_cash or 0)
+        + sum(q * manifest.contract_map[i].multiplier * quotes[i].mid for i, q in snap.quantities().items())
+    )
+    assert service.state()["statement_basis_nav"] == pytest.approx(expected)
+    service.now = lambda: marks_fixed_at(manifest, manifest.active_session(now))
+    assert service.statement_basis_now() is None  # from 16:16 the predicted statement NAV is shown

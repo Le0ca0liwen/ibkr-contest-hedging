@@ -54,8 +54,19 @@ reason in plain words. The badge counts the ✗ rows.
 | Quotes | Moomoo quotes are live 09:30-16:00 ET. Outside those hours this row is a !, not a problem. |
 | Price history | Press **Refresh price history now** if it failed or is old. The app also refreshes it by itself between 08:30 and 09:29 ET. |
 | Previous official close | The scored close is the IBKR statement NAV. The app records its predicted value after 20:05 ET (! until you import the statement); enter the statement "Ending Value" in Settings & alerts > Import an official closing NAV each morning. Missing blocks paper trading. |
+| Power | On battery or lid closed: plug in the Mac and keep the lid open through 20:10 ET; a sleeping Mac misses the 16:00 closing capture. Advice only. |
+| Statement import | Not set up: double-click Setup IBKR Flex.command (Flex token and query from Client Portal). |
 | Automatic paper start | Shows whether it is on and what it waits for. |
 | Trading | The current mode and why it waits, if it does. |
+
+## Automatic statement import (once)
+
+In Client Portal (paper login), Performance & Reports > Flex Queries:
+1. Turn on **Flex Web Service Configuration** (gear icon) and generate a token (longest expiry).
+2. Create an **Activity Flex Query** with sections Net Asset Value (NAV) in Base, Change in NAV and
+   Open Positions; Format XML, Period Last Business Day. Note its Query ID (info icon).
+3. Double-click **Setup IBKR Flex.command** on the Mac and enter both. They stay on this Mac,
+   owner-only. Settings & alerts > Statement prices check shows each import.
 
 ## Day 0 (Wed Oct 21), once
 
@@ -72,10 +83,10 @@ reason in plain words. The badge counts the ✗ rows.
 ## Every scored day (Oct 22-23, Oct 26-30, Nov 2-4)
 
 - **Before 09:30 ET:** the app can stay running overnight. The instructor scores the IBKR
-  statement NAV: enter yesterday's statement "Ending Value" (Settings & alerts > Import an official
-  closing NAV; "$1,234,567.89" is accepted as printed). Until you do, the app uses its own
-  prediction and the Previous official close row warns. Once, also enter the Oct 21 (Day 0)
-  statement Ending Value: the first score is measured from it.
+  statement NAV. Once **Setup IBKR Flex.command** is done, the app records each statement NAV
+  (Day 0 included) by itself after midnight (Today row Statement import). Otherwise enter yesterday's
+  statement "Ending Value" (Settings & alerts > Import an official closing NAV), and once the Oct 21
+  (Day 0) one; until then the Previous official close row warns.
 - **About 08:45 ET:** with AI on, **Event risk today** (Overview) lists the day's known events
   (earnings, Fed, CPI/jobs data, launches) with their sources and may propose a forecast caution.
   Review it, then press **Approve caution** or leave it; nothing applies until you approve, and an

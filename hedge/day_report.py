@@ -857,6 +857,16 @@ class DayReporter(AIFeature):
             marks[d] = s.store.get_record(identifier, account, "close_marks") if identifier else None
             chosen[d] = {"id": identifier, "phase": phase, "at": (marks[d] or {}).get("at")}
             notes += [note] if note else []
+            # The score is the statement's: value each close at the statement's prices (or their
+            # prediction), not IBKR's live marks, which the attribution otherwise prefers.
+            prices, basis = s.statement_prices(d) if marks[d] else ({}, None)
+            if prices:
+                marks[d] = {
+                    **marks[d],
+                    "ibkr_marks": {str(i): {"market_price": p} for i, p in prices.items()},
+                }
+                chosen[d]["prices"] = basis
+                notes.append(f"{d} positions are valued at the {basis}.")
         fills = [f for f in s.store.effective_fills(account) if start < timestamp(f["at"]) <= end]
         burn_results = s.burner._refresh_fees(
             self._records("burn_cycle_result", Record.payload["session"].as_string() == str(day))
