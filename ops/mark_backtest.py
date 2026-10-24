@@ -37,10 +37,10 @@ from hedge.occ_marks import occ_marks  # noqa: E402
 
 CODE = re.compile(r"^US\.([A-Z.]+?)(\d{6})([CP])(\d+)$")
 GRID = {
-    "weight": ["inv_vega2", "inv_vega", "unit", "inv_spread2"],
-    "bound_penalty": [1e2, 1e4],
+    "weight": ["inv_spread2", "inv_spread", "inv_vega2", "unit"],
     "rate": [0.034, 0.039],
 }
+SPREADS = ((0.05, "<= 0.05"), (0.20, "0.05-0.20"), (0.50, "0.20-0.50"), (float("inf"), "> 0.50"))
 
 
 def code_of(symbol, expiry, right, strike):
@@ -145,7 +145,7 @@ def load_books(dataset, conids, extra, late_at="16:00"):
     for day, entry in (dataset or {}).get("days", {}).items():
         found, underlying = {}, {}
         for at, archived in (entry.get("archive") or {}).items():
-            for code, b in archived.items():
+            for code, b in archived.items() if isinstance(archived, dict) else ():  # "codes" is a list
                 if wanted(code, at):
                     found[code] = (b["bid"], b["ask"])
         for capture in entry.get("close_marks", []):
@@ -253,6 +253,7 @@ def run(truth, books, spots, grid=GRID, workers=1):
                             "truth": info["mark"],
                             "quantity": info["quantity"],
                             "spread": m["spread"],
+                            "mid": m["mid"],
                         }
                     )
     return rows
@@ -286,6 +287,36 @@ def summarize(rows):
 def _metric(summary, select):
     value = summary.get(select)
     return math.inf if value is None else value
+
+
+def breakdown(rows, occ_params):
+    """{estimator: {group: (contracts, mean |error|)}} by underlying and by closing spread, for the
+    midpoint, the local smoothing and the OCC rebuild with `occ_params`; plus how often the truth
+    sits at the midpoint (within half a cent) and inside the book."""
+    picked = [r for r in rows if r["estimator"] != "occ" or r["params"] == occ_params]
+    table = defaultdict(lambda: defaultdict(list))
+    for r in {(r["estimator"], r["day"], r["code"]): r for r in picked}.values():
+        error = abs(r["estimate"] - r["truth"])
+        table[r["estimator"]][parse_code(r["code"])[0]].append(error)
+        bucket = next(label for limit, label in SPREADS if r["spread"] <= limit)
+        table[r["estimator"]][f"spread {bucket}"].append(error)
+        table[r["estimator"]]["all"].append(error)
+    result = {
+        name: {g: (len(v), sum(v) / len(v)) for g, v in groups.items()} for name, groups in table.items()
+    }
+    mids = list({(r["day"], r["code"]): r for r in picked if r["estimator"] == "mid"}.values())
+    if mids:
+        result["truth"] = {
+            "at the midpoint": (
+                len(mids),
+                sum(abs(r["truth"] - r["mid"]) <= 0.005 for r in mids) / len(mids),
+            ),
+            "inside the book": (
+                len(mids),
+                sum(abs(r["truth"] - r["mid"]) <= r["spread"] / 2 + 1e-9 for r in mids) / len(mids),
+            ),
+        }
+    return result
 
 
 def leave_one_day_out(rows, select="price_mae"):
@@ -345,6 +376,13 @@ def main(argv=None):
             f"spread MAE {s['spread_mae']:.2f}  day value MAE "
             f"{'—' if value is None else f'${value:,.0f}'}  {params}"
         )
+    occ_rows = {k: v for k, v in table.items() if k[0] == "occ"}
+    if occ_rows:
+        best = min(occ_rows, key=lambda k: _metric(occ_rows[k], args.select))[1]
+        print(f"Breakdown (OCC rebuild with {best}): contracts, mean |estimate - truth|")
+        parts = breakdown(rows, best)
+        for name, groups in parts.items():
+            print(f"  {name:6} " + "; ".join(f"{g} {n} {v:.4f}" for g, (n, v) in sorted(groups.items())))
     for day, result in held.items():
         parts = [
             f"{name} {r['price_mae']:.4f}"
