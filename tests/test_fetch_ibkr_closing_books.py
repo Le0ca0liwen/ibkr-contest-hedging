@@ -49,3 +49,21 @@ async def test_each_book_is_the_1559_bid_and_ask_bar_closes_at_a_bounded_rate():
     assert rows == [{"day": "2026-10-22", "code": "US.RKLB261120P45000", "bid": 1.85, "ask": 2.01}]
     assert calls[0] == ("rklb", "20261022 16:00:00 US/Eastern", "60 S", "1 min", "BID", True)
     assert set(failures) == {"2026-10-22 US.X261120C1000", "US.Q"} and slept == [0.25] * 4
+
+
+async def test_an_expired_option_is_tried_by_symbol_then_with_include_expired_then_by_conid():
+    from ops.fetch_ibkr_closing_books import qualify
+
+    seen = []
+
+    class FakeIB:
+        async def qualifyContractsAsync(self, *contracts):
+            for c in contracts:
+                seen.append((c.conId or c.symbol, getattr(c, "includeExpired", False)))
+                if c.secType == "STK" or c.conId == 77 or (c.symbol == "SPY" and not c.includeExpired):
+                    c.conId = c.conId or 1
+
+    codes = {"US.SPY261120C770000", "US.BA261016C195000", "US.BA261016P195000", "US.BA"}
+    found = await qualify(FakeIB(), codes, {"US.BA261016C195000": 77})
+    assert set(found) == {"US.SPY261120C770000", "US.BA261016C195000", "US.BA"}
+    assert ("BA", True) in seen and (77, False) in seen  # second and third attempts

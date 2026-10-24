@@ -121,25 +121,46 @@ async def fetch(ib, contracts, todo, rate, write, sleep=asyncio.sleep):
     return failures
 
 
-async def qualify(ib, codes, include_expired=True):
-    """{code: qualified ib_async contract} for option and share codes IBKR knows."""
-    from ib_async import Option, Stock
+def statement_conids(folder):
+    """{code: IBKR conId} of every option on a saved statement: an expired contract IBKR no longer
+    finds by its symbol may still answer by its conId."""
+    found = {}
+    for path in sorted(Path(folder).glob("*.json")) if folder else []:
+        for p in json.loads(path.read_text()).get("positions", []):
+            if p.get("asset") == "OPT" and p.get("conid"):
+                code = code_of(
+                    p["symbol"].split()[0], p["expiry"].replace("-", ""), p["put_call"], p["strike"]
+                )
+                found[code] = int(p["conid"])
+    return found
 
-    contracts = {}
-    for code in sorted(codes):
+
+async def qualify(ib, codes, conids=None):
+    """{code: qualified ib_async contract} for option and share codes IBKR knows. An option is looked
+    up by its symbol (this finds one expired the day before, Oct 24), then with includeExpired, then
+    by its statement conId."""
+    from ib_async import Contract, Option, Stock
+
+    def build(code, attempt):
         parsed = parse(code)
-        if parsed:
-            symbol, expiry, right, strike = parsed
-            contract = Option(symbol, expiry, strike, right, "SMART", currency="USD")
-            contract.includeExpired = include_expired
-        else:
-            contract = Stock(code[3:], "SMART", "USD")
-        contracts[code] = contract
-    items = list(contracts.items())
-    for start in range(0, len(items), 50):
-        batch = [c for _, c in items[start : start + 50]]
-        await ib.qualifyContractsAsync(*batch)
-    return {code: c for code, c in contracts.items() if c.conId}
+        if not parsed:
+            return Stock(code[3:], "SMART", "USD")
+        if attempt == 2:
+            return Contract(conId=conids[code], exchange="SMART")
+        symbol, expiry, right, strike = parsed
+        contract = Option(symbol, expiry, strike, right, "SMART", currency="USD")
+        contract.includeExpired = attempt == 1
+        return contract
+
+    found, left = {}, sorted(codes)
+    for attempt in range(3):
+        pending = {code: build(code, attempt) for code in left if attempt < 2 or code in (conids or {})}
+        items = list(pending.values())
+        for start in range(0, len(items), 50):
+            await ib.qualifyContractsAsync(*items[start : start + 50])
+        found.update({code: c for code, c in pending.items() if c.conId})
+        left = [code for code in left if code not in found]
+    return found
 
 
 def main(argv=None):
@@ -187,7 +208,7 @@ def main(argv=None):
             timeout=15,
         )
         try:
-            contracts = await qualify(ib, {code for _, code in todo})
+            contracts = await qualify(ib, {code for _, code in todo}, statement_conids(args.statements))
             print(f"{len(contracts)} of {len({c for _, c in todo})} contracts qualified", flush=True)
             return await fetch(ib, contracts, todo, args.rate, write)
         finally:
