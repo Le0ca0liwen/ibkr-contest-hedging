@@ -358,13 +358,16 @@ def main(argv=None):
     parser.add_argument("--late-at", choices=["16:00", "16:15"], default="16:00")
     parser.add_argument("--select", choices=["price_mae", "spread_mae", "day_value_mae"], default="price_mae")
     parser.add_argument("--workers", type=int, default=1)
+    parser.add_argument(
+        "--grid", help='JSON {param: [values]} in place of GRID, e.g. {"clip_surface": [false, true]}'
+    )
     parser.add_argument("--output", default=str(ROOT / "data/calibration/backtest.json"))
     args = parser.parse_args(argv)
     dataset = json.loads(Path(args.dataset).read_text()) if Path(args.dataset).exists() else {}
     prev_close = [tuple(item.rsplit("=", 1)) for item in args.prev_close]
     truth, conids = load_truth(args.statements, dataset, prev_close)
     books, spots = load_books(dataset, conids, args.chains, args.late_at)
-    rows = run(truth, books, spots, workers=args.workers)
+    rows = run(truth, books, spots, grid=json.loads(args.grid) if args.grid else GRID, workers=args.workers)
     table = summarize(rows)
     held = leave_one_day_out(rows, args.select)
     held_positions = sum(1 for v in truth.values() for t in v.values() if t["quantity"])

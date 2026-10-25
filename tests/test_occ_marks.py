@@ -111,6 +111,18 @@ def test_a_one_sided_strike_is_priced_from_the_surface_and_too_few_strikes_keep_
     assert all(m["source"] == "closing midpoint" for m in occ_marks(few, SPOT, AT, RATE).values())
 
 
+def test_a_one_sided_strike_can_be_kept_inside_its_own_book():
+    """OCC: final prices stay within the bid/ask. A strike without its counterpart is priced from the
+    surface; with clip_surface its valid book bounds that price."""
+    prices = true_prices()
+    true = prices["C95"][2]
+    off = (round(true + 0.20, 2), round(true + 0.30, 2))  # the surface value sits below this book
+    rows = [r for r in chain(prices, overrides={"C95": off}) if r["key"] != "P95"]
+    free = occ_marks(rows, SPOT, AT, RATE)["C95"]
+    kept = occ_marks(rows, SPOT, AT, RATE, {"clip_surface": True})["C95"]
+    assert free["mark"] < off[0] and kept["mark"] == off[0] and "surface" in kept["source"]
+
+
 def test_bad_books_are_left_out():
     prices = true_prices()
     rows = chain(prices, overrides={"C100": (0.0, 0.0), "P100": (5.2, 5.1)})

@@ -70,6 +70,10 @@ PARAMS = {
     "steps": 201,  # Leisen-Reimer tree steps
     "bound_penalty": 1e4,  # a crossed parity set may not fit every book: the overshoot costs this much
     "round": 4,  # decimals the statement prints
+    # A quote priced from the surface (its strike has no counterpart) but with a valid book of its
+    # own is kept inside that book: OCC's "final prices remain within the bid-ask spread" (82 FR
+    # 61062 fn 27). Off, a far-out call one-sided at 195 got $0.02 against OCC's $0.26 (bid 0.07).
+    "clip_surface": False,
 }
 YEAR = 365.0  # calendar-day convention (SR-OCC-2024-016)
 
@@ -266,6 +270,7 @@ def occ_marks(chain, spot, at, rate, params=None):
         usable = [
             r for r in rows if days >= params["min_days"] and r["ask"] >= intrinsic[r["right"]](r["strike"])
         ]
+        usable_keys = {r["key"] for r in usable}
         by_strike = {}
         for r in usable:
             by_strike.setdefault(r["strike"], {})[r["right"]] = r
@@ -289,6 +294,8 @@ def occ_marks(chain, spot, at, rate, params=None):
                 }
             elif fitted and "surface" in fitted:
                 price = fitted["surface"](r["strike"], r["right"])
+                if params["clip_surface"] and r["key"] in usable_keys:
+                    price = min(max(price, low), high)
                 result[r["key"]] = {
                     "mark": round(price, params["round"]),
                     "low": low,
