@@ -228,6 +228,9 @@ def main(argv=None):
     parser.add_argument("--ladder", type=int, default=4, help="strikes each side of a statement leg")
     parser.add_argument("--moneyness", type=float, default=0.3)
     parser.add_argument("--symbols", nargs="*", help="chain underlyings to keep (default: all)")
+    parser.add_argument(
+        "--wanted", help="JSON {day: [codes]} to fetch too (ops/rank_history.py --wanted-output)"
+    )
     parser.add_argument("--close", default="16:00:00", help="ET end of the one-minute bars")
     parser.add_argument(
         "--client-offset", type=int, default=CLIENT_OFFSET, help="added to the app's client id"
@@ -248,6 +251,8 @@ def main(argv=None):
     config = yaml.safe_load(Path(args.config).read_text())
     legs = statement_wants(args.statements, args.ladder, strike_step, listed_strikes(args.chains))
     chains = chain_wants(args.chains, args.chain_days, args.moneyness, args.symbols)
+    for day, codes in (json.loads(Path(args.wanted).read_text()) if args.wanted else {}).items():
+        chains[day] = list(dict.fromkeys([*chains.get(day, []), *codes]))
     output = Path(args.output)
     rows = json.loads(output.read_text()) if output.exists() else []
     done = {(r["day"], r["code"]) for r in rows}
