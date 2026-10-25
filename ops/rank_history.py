@@ -37,7 +37,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PAGE, PAGES = 200, 5  # OpenD: 200 rows a page, five pages at most
 PAUSE = 0.6  # 60 ranking requests per 30 s; only a paged query's first request counts
 PARTS = [(right, money) for right in (1, 2) for money in (0, 1)]  # (call/put, out/in the money)
-CODE = re.compile(r"^US\.([A-Z.]+?)(\d{6})[CP]\d+$")
+CODE = re.compile(r"^US\.([A-Z.]+?)(\d{6})([CP])(\d+)$")
 
 
 def previous_weekday(day):
@@ -163,6 +163,33 @@ def wanted(days, symbols, per_day, today):
     return found
 
 
+def chain_wanted(days, symbols, today, expiries=2, pairs=8):
+    """{truth day: [codes]} of dense chains for the IBKR books fetch: per day and underlying, the
+    `expiries` listed expiries with the most strikes priced on both sides, and on each the `pairs`
+    strikes nearest the money (smallest |call - put|), calls and puts. The rebuild fits an expiry only
+    from three or more such pairs; 40 most-traded contracts a day spread over ~17 expiries gave it 1-5."""
+    found = {}
+    for day, value in sorted(days.items()):
+        truth_day = str(previous_weekday(date.fromisoformat(day)))
+        for symbol in symbols:
+            chains = {}
+            for o in value["option_chain"][0]["options"]:
+                match = CODE.match(o["code"])
+                if match and match[1] == symbol and f"20{match[2]}" >= f"{today:%Y%m%d}":
+                    chains.setdefault(match[2], {}).setdefault(int(match[4]), {})[match[3]] = o
+            ranked = []
+            for expiry, strikes in chains.items():
+                both = {k: v for k, v in strikes.items() if "C" in v and "P" in v}
+                if len(both) >= 3:
+                    volume = sum(_number(o["volume"]) or 0 for v in both.values() for o in v.values())
+                    ranked.append((len(both), volume, expiry, both))
+            for _, _, _, both in sorted(ranked, reverse=True)[:expiries]:
+                near = sorted(both.values(), key=lambda v: abs(v["C"]["prev_close"] - v["P"]["prev_close"]))
+                for v in near[:pairs]:
+                    found.setdefault(truth_day, []).extend([v["C"]["code"], v["P"]["code"]])
+    return found
+
+
 def statement_truth(folder):
     """{day: {code: Close Price}} of every held option on a saved statement."""
     truth = {}
@@ -225,7 +252,17 @@ def main(argv=None):
     parser.add_argument("--wanted-output", help="also write {truth day: [codes]} for the IBKR books fetch")
     parser.add_argument("--wanted-underlyings", nargs="*", default=["RKLB", "SPCX"])
     parser.add_argument("--wanted-per-day", type=int, default=40)
+    parser.add_argument(
+        "--wanted-chains",
+        action="store_true",
+        help="dense chains (2 expiries x 8 strikes, calls and puts) instead of the most traded contracts",
+    )
+    parser.add_argument("--wanted-from", help="build --wanted-output from this rank-history file; no OpenD")
     args = parser.parse_args(argv)
+    if args.wanted_from:
+        days = json.loads(Path(args.wanted_from).read_text())["days"]
+        write_wanted(args, days)
+        return
     import moomoo as sdk
     from moomoo.quote.quote_option_event_info import OptionRankFilter  # not exported by moomoo
 
@@ -276,10 +313,17 @@ def main(argv=None):
     for error in errors[:10]:
         print("  ", error)
     if args.wanted_output:
-        today = datetime.now(ZoneInfo("America/New_York")).date()
+        write_wanted(args, days)
+
+
+def write_wanted(args, days):
+    today = datetime.now(ZoneInfo("America/New_York")).date()
+    if args.wanted_chains:
+        lists = chain_wanted(days, args.wanted_underlyings, today)
+    else:
         lists = wanted(days, args.wanted_underlyings, args.wanted_per_day, today)
-        Path(args.wanted_output).write_text(json.dumps(lists, indent=1) + "\n")
-        print(f"{sum(map(len, lists.values()))} codes over {len(lists)} days wanted in {args.wanted_output}")
+    Path(args.wanted_output).write_text(json.dumps(lists, indent=1) + "\n")
+    print(f"{sum(map(len, lists.values()))} codes over {len(lists)} days wanted in {args.wanted_output}")
 
 
 if __name__ == "__main__":

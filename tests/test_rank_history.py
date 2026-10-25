@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pandas as pd
 import pytest
 
-from ops.rank_history import build, check, implied_previous, rank_day, wanted
+from ops.rank_history import build, chain_wanted, check, implied_previous, rank_day, wanted
 
 SDK = SimpleNamespace(
     RET_OK=0,
@@ -103,3 +103,16 @@ def test_the_wanted_list_keeps_the_most_traded_listed_contracts_under_the_day_be
     }
     found = wanted(days, ["RKLB"], 1, date(2026, 10, 25))
     assert found == {"2026-10-21": ["US.RKLB261120P45000"]}
+
+
+def test_dense_chains_take_the_expiries_with_most_pairs_and_the_strikes_nearest_the_money():
+    options = []
+    for expiry, strikes in (("261120", range(45, 61)), ("261127", range(48, 53)), ("261106", (50, 51))):
+        for k in strikes:
+            options += [
+                {"code": f"US.RKLB{expiry}C{k * 1000}", "prev_close": max(52 - k, 0) + 2.0, "volume": 1},
+                {"code": f"US.RKLB{expiry}P{k * 1000}", "prev_close": max(k - 52, 0) + 2.0, "volume": 1},
+            ]
+    days = {"2026-10-22": {"option_chain": [{"options": options}]}}
+    found = chain_wanted(days, ["RKLB"], date(2026, 10, 25), expiries=1, pairs=3)["2026-10-21"]
+    assert sorted(found) == sorted(f"US.RKLB261120{r}{k * 1000}" for k in (51, 52, 53) for r in "CP")
