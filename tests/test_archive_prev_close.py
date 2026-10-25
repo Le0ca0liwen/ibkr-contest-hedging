@@ -111,3 +111,16 @@ def test_an_archive_not_named_by_day_is_split_by_the_day_each_line_arrived(tmp_p
     result = build([tmp_path / "split"], None)
     assert result["days"]["2026-10-16"]["option_chain"][0]["options"][0]["prev_close"] == 1.15
     assert result["days"]["2026-10-15"]["archive"]["16:00"][PUT]["bid"] == 1.10
+
+
+def test_a_weekend_archive_gives_no_prices(tmp_path):
+    """Oct 10-11 (Sat/Sun): quotes still carried Thursday Oct 8's prices, labelled Friday's."""
+    archive = tmp_path / "moomoo"
+    archive.mkdir()
+    write(archive, 10, [(ny(10, 10, 0), {PUT: item(1.045, ny(10, 10, 0))})])
+    write(archive, 12, [(ny(12, 10, 0), {PUT: item(1.315, ny(12, 10, 0))})])
+    result = build([archive], None)
+    assert "2026-10-10" not in result["days"]
+    assert result["days"]["2026-10-12"]["option_chain"][0]["options"][0]["prev_close"] == 1.315
+    truth, _ = load_truth(None, result)
+    assert truth["2026-10-09"][PUT]["mark"] == 1.315

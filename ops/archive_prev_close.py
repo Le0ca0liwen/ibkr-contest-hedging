@@ -8,7 +8,8 @@ Every Moomoo quote of an option carries prev_close_price: the previous trading d
 equals the statement's Close Price on every held leg checked, Oct 22). ops/record_moomoo.py archives
 each watched code's latest quote about every 5 s (data/moomoo/raw-YYYYMMDD.jsonl.gz), so each
 archived day D gives the day before's OCC price of every option the app watched that day. Only a
-quote pushed on D after Moomoo's morning roll counts ("push"); a quote from the collector's
+quote pushed on a weekday D after Moomoo's morning roll counts ("push"; Moomoo rolls only on trading
+days, so a weekend quote still carries Thursday's price); a quote from the collector's
 subscription snapshot has no time and may predate the roll, so it is kept apart ("snapshot") until
 the statements confirm it. An archive not named by day (raw.jsonl, the Oct 7-19 practice run) is
 first split by the New York day each line was received into --split-dir.
@@ -158,6 +159,8 @@ def build(archive_dirs, statements, include_snapshots=False):
     dataset, held = {}, statement_marks(statements)
     check = {"push": [0, 0], "snapshot": [0, 0], "misses": []}
     for day in days:
+        if day.weekday() >= 5:  # a weekend quote still carries Thursday's price, not Friday's
+            continue
         prices = day_prices(paths[day], day)
         truth_day = previous_weekday(day)
         options = [
