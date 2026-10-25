@@ -35,6 +35,9 @@ from hedge.config import NY  # noqa: E402
 from hedge.moomoo_archive import RECEIVED, _lines, _snapshots, archive_path, last_books  # noqa: E402
 
 ROLLED = time(9, 31)  # Moomoo rolls options' prev_close by 09:25 (SPY's by 07:30)
+# A book counts as the 16:00 book only from this close to it: on Oct 13-21 the collector sometimes
+# stopped at 15:30-15:42, and those books missed the statement by $0.16-0.38 a contract.
+BOOK_AGE = timedelta(minutes=2)
 
 
 def previous_weekday(day):
@@ -190,9 +193,9 @@ def build(archive_dirs, statements, include_snapshots=False):
         if codes:
             close = datetime.combine(truth_day, time(16), NY)
             cutoffs = {code: close for code in [*codes, *{f"US.{_symbol(c)}" for c in codes}]}
-            books = last_books(paths[truth_day], cutoffs) if truth_day in paths else {}
-            archive = dataset.setdefault(str(truth_day), {}).setdefault("archive", {})
+            books = last_books(paths[truth_day], cutoffs, BOOK_AGE) if truth_day in paths else {}
             for code, book in books.items():
+                archive = dataset.setdefault(str(truth_day), {}).setdefault("archive", {})
                 archive.setdefault("16:00", {})[code] = {
                     "bid": book["bid"],
                     "ask": book["ask"],

@@ -124,3 +124,13 @@ def test_a_weekend_archive_gives_no_prices(tmp_path):
     assert result["days"]["2026-10-12"]["option_chain"][0]["options"][0]["prev_close"] == 1.315
     truth, _ = load_truth(None, result)
     assert truth["2026-10-09"][PUT]["mark"] == 1.315
+
+
+def test_a_book_from_well_before_the_close_is_not_taken_as_the_16_00_book(tmp_path):
+    archive = tmp_path / "moomoo"
+    archive.mkdir()
+    write(archive, 15, [(ny(15, 15, 32), {PUT: item(1.0, ny(15, 15, 32), (7.10, 7.60, ny(15, 15, 32)))})])
+    write(archive, 16, [(ny(16, 10, 0), {PUT: item(6.39, ny(16, 10, 0))})])
+    result = build([archive], None)
+    assert "archive" not in result["days"]["2026-10-15"]  # the collector stopped at 15:32
+    assert result["days"]["2026-10-16"]["option_chain"][0]["options"][0]["prev_close"] == 6.39
