@@ -761,14 +761,29 @@ class ClosingBurner:
         if not set(scenarios.ids).issubset(quotes):
             return self._wait("Quote coverage incomplete for the scenario universe", info)
         quantities = snapshot.quantities()
+        basis = p.post_close_basis
         if post_close:
             # No market risk is left: the gap is uncertain only by each option's statement mark
             # within its closing bid/ask (hedge/statement.py).
-            if p.post_close_basis == "worst_case":  # every option at its least favorable bid/ask side
+            if basis == "prediction":
+                # The rebuild's own error on the held legs was ~$30 (Oct 21-23); a held option
+                # priced without it (midpoint fallback) takes the worst case instead.
+                sources = {k: v.get("source", "") for k, v in (statement.get("marks") or {}).items()}
+                held = [m.contract_map[i] for i, q in quantities.items() if q and i in m.contract_map]
+                unrebuilt = sorted(
+                    c.label for c in held if c.kind == "OPT" and "OCC rebuild" not in sources.get(c.label, "")
+                )
+                if unrebuilt:
+                    basis = "worst_case"
+                    info["unrebuilt"] = unrebuilt
+            if basis == "worst_case":  # every option at its least favorable bid/ask side
                 z = np.asarray([float(statement["low"]) - float(target) + p.bias])
+            elif basis == "prediction":
+                z = np.asarray([float(statement["value"]) - float(target) + p.bias - p.post_close_margin])
             else:
                 z = np.asarray(statement["samples"], dtype=float) - float(target) + p.bias
             weights = np.full(len(z), 1 / len(z))
+            info["post_close_basis"] = basis
         else:
             z = closing_gaps(
                 m, scenarios, quotes, quantities, snapshot.cash, snapshot.nav, estimate, target, p.bias
@@ -799,8 +814,10 @@ class ClosingBurner:
             scenario_id=scenarios.identifier,
         )
         quantile = "Median" if p.spend_quantile == 0.5 else f"{p.spend_quantile:.0%} quantile"
-        if post_close and p.post_close_basis == "worst_case":
+        if post_close and basis == "worst_case":
             quantile = "Worst-case"
+        elif post_close and basis == "prediction":
+            quantile = f"Predicted (less ${p.post_close_margin:,.0f} margin)"
         if not self.active:
             self._set(
                 "MONITORING",
@@ -1138,7 +1155,9 @@ class ClosingBurner:
             "gap": last.get("gap"),
             "needed": last.get("needed"),
             "spend_quantile": self.policy.spend_quantile,
-            "post_close_basis": self.policy.post_close_basis,
+            "post_close_basis": last.get("post_close_basis") or self.policy.post_close_basis,
+            "post_close_margin": self.policy.post_close_margin,
+            "unrebuilt": last.get("unrebuilt"),
             "spend_level": last.get("spend_level"),
             "spent": last.get("spent"),
             "budget": last.get("budget"),

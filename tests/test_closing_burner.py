@@ -1269,6 +1269,60 @@ async def test_a_worst_case_below_target_spends_nothing_however_rich_the_predict
     assert not service.execution.burn_open()
 
 
+def rebuilt_estimate(target, value, put_source="pre_close OCC rebuild (14 strikes)"):
+    estimate = worst_case_estimate(target, target + 60)
+    marks = {
+        "BA 2026-10-16 195C": {"source": "pre_close OCC rebuild (14 strikes)"},
+        "BA 2026-10-16 195P": {"source": put_source},
+    }
+    return {**estimate, "value": value, "marks": marks}
+
+
+async def test_the_prediction_basis_spends_down_to_the_predicted_nav_less_its_margin(burning, monkeypatch):
+    """Oct 25 comparison: on the real Oct 21-23 books the rebuild missed the held legs by ~$30, so
+    aiming $50 under the prediction beats the worst case (~$970 expected gap) and the 40% quantile
+    of the book-width samples (~$170-270)."""
+    service, clock = await burning(require_pnl_stream=True, post_close_basis="prediction")
+    burner = service.burner
+    assert burner.policy.post_close_margin == 50
+    post_close_window(burner, clock, monkeypatch)
+    target = float(service.closing_target(service.broker.snapshot(), clock.at))
+    monkeypatch.setattr(
+        service, "statement_estimate", lambda now=None: rebuilt_estimate(target, target + 150)
+    )
+    await steps(service)
+    assert burner.last["needed"] == pytest.approx(100) and burner.last["post_close_basis"] == "prediction"
+    assert burner.state_name == "ENTRY"
+
+
+async def test_the_prediction_basis_keeps_its_margin_near_target(burning, monkeypatch):
+    service, clock = await burning(require_pnl_stream=True, post_close_basis="prediction")
+    burner = service.burner
+    post_close_window(burner, clock, monkeypatch)
+    target = float(service.closing_target(service.broker.snapshot(), clock.at))
+    monkeypatch.setattr(service, "statement_estimate", lambda now=None: rebuilt_estimate(target, target + 40))
+    await steps(service)
+    assert burner.last["needed"] == 0 and burner.state_name == "MONITORING"
+    assert burner.reason.startswith("Predicted (less $50 margin) closing gap")
+
+
+async def test_a_held_option_without_the_rebuild_falls_back_to_the_worst_case(burning, monkeypatch):
+    service, clock = await burning(require_pnl_stream=True, post_close_basis="prediction")
+    burner = service.burner
+    post_close_window(burner, clock, monkeypatch)
+    target = float(service.closing_target(service.broker.snapshot(), clock.at))
+    estimate = rebuilt_estimate(target, target + 150, put_source="pre_close midpoint")
+    monkeypatch.setattr(service, "statement_estimate", lambda now=None: estimate)
+    await steps(service)
+    assert burner.last["needed"] == pytest.approx(60) and burner.last["post_close_basis"] == "worst_case"
+    assert burner.last["unrebuilt"] == ["BA 2026-10-16 195P"]
+
+
+def test_the_post_close_margin_is_validated(manifest):
+    with pytest.raises(ValidationError):
+        with_burner(manifest, post_close_margin=-1)
+
+
 async def test_after_the_close_the_burner_waits_for_every_closing_mark(burning, monkeypatch):
     service, clock = await burning(surplus=300)
     burner = service.burner

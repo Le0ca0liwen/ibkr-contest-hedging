@@ -43,11 +43,31 @@ z = nav_estimate - target + bias + scenarios.changes @ holdings + cash carry to 
   before the close. With `post_close_basis: worst_case` (the code default) `z` is the single value
   `low - target + bias`: every option at the least favorable side of its closing bid/ask, so a
   burn never takes the statement NAV below target whatever the option prices turn out to be.
-  The contest uses `quantile` from Oct 26 (operator's choice, Oct 25). The worst case sat
-  $1,408-4,829 below the statement on Oct 21-23, so a smaller surplus was never burned. Spending
-  toward 0.4 of the samples would have landed -$50, -$77 and +$207 from target on those days.
-  Simulated, it gains about $50-150 a scored day; it lands below target on 20-40% of days, and a
-  mark miss such as Oct 21's RKLB 55P (-$568) passes straight through.
+  With `prediction` (the contest's setting from Oct 26) `z` is the single value
+  `predicted statement NAV - target + bias - post_close_margin`, falling back to the worst case
+  when any held option's mark is not the OCC rebuild (a midpoint fallback); `unrebuilt` in the
+  decision names them. `quantile` spends toward `spend_quantile` of the 64 samples.
+
+  Why `prediction` with a $50 margin (Oct 25 comparison, live rebuild settings on the real Oct
+  21-23 closing books of the held legs): the rebuild missed the statement by +$30, +$26 and +$29
+  (above it each day). The samples are drawn across each book's whole width, so their spread
+  ($520-1,700) dwarfs that error, and their quantiles sit far from the prediction: the 0.4
+  quantile was +$183, +$20 and -$301 from it, the worst case -$1,434 to -$4,858. Simulated with a
+  surplus uniform on $0-2,000, the expected |statement NAV - target| after the burn is:
+
+  | Rule | error sd $25 | $75 | $150 | $300 |
+  |---|---|---|---|---|
+  | worst case | 970 | 967 | 968 | 960 |
+  | quantile 0.4 (Oct 26 plan) | 171 | 178 | 200 | 273 |
+  | quantile 0.5 | 238 | 247 | 268 | 334 |
+  | prediction | 32 | 64 | 120 | 231 |
+  | prediction - $50 | 27 | 62 | 118 | 228 |
+  | prediction - $100 | 70 | 83 | 127 | 231 |
+
+  Near target (surplus -$300 to +$300) the $50 margin is again within a few dollars of the best
+  rule up to an error sd of $150; at sd $300 the worst case (149) beats it (188). Three days of
+  held-leg books is a small sample: a miss as large as Oct 21's RKLB 55P before the dense fetch
+  (-$568) would pass straight through.
 
 `needed = max(0, quantile(z, spend_quantile))` (lower weighted quantile of the 64 scenarios;
 0.5 is the median). Spending `L` changes the expected score by `E|z| - E|z - L|`, which keeps
@@ -327,7 +347,8 @@ dashboard poll scan the whole history. No schema columns change. Instead:
 | stock_entry_cutoff_minutes / option_entry_cutoff_minutes | 4 / 17 | No new entries after close minus these |
 | start_threshold / stop_threshold | 25 / 5 | USD hysteresis on the spend quantile of the gap |
 | spend_quantile | 0.5 | Gap quantile spent toward (contest: 0.4); 0.05-0.5 |
-| post_close_basis | worst_case | After the close: `worst_case` spends only the gap at the least favorable option prices; `quantile` (contest, from Oct 26) spends toward spend_quantile |
+| post_close_basis | worst_case | After the close: `worst_case` spends only the gap at the least favorable option prices; `quantile` spends toward spend_quantile of the samples; `prediction` (contest, from Oct 26) spends down to the prediction less post_close_margin |
+| post_close_margin | 50 | USD kept under the predicted statement NAV by `prediction` |
 | require_pnl_stream | false | Act only on the settled 1-second IBKR P&L stream NAV (contest: true) |
 | settle_seconds | 0 | Wait after a cycle that filled before the next decision (contest: 8) |
 | bias / bias_source | 0 / "" | Signed model-vs-official calibration |
