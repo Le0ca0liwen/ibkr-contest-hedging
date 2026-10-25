@@ -241,6 +241,30 @@ previous day's price of every listed option.
     Oct 7, 8 and 22. Together with IBKR's books, the rebuild scores $0.047 a contract against
     $0.111 for the midpoint on 1,301 contracts over 13 days, each day held out.
 
+**Moomoo's option ranking (Oct 25)** gives past days' OCC prices for whole chains:
+`get_option_rank(trading_date=D)` lists each contract's last trade and its change against the
+previous close, which is OCC's price of the day before. `ops/rank_history.py` recovers them for
+Sep 14 – Oct 22: about 306,000 prices, 7,000–13,000 a day over SPY, RKLB, SPCX, BA, QQQ and IWM.
+Against Oct 22's known prices they are equal on 2,003 of 2,004 traded rows and 91 of 91 untraded
+rows. The 16:00 books come from IBKR: `--wanted-chains` picks two expiries a day, the 8 strikes
+nearest the money, calls and puts.
+
+**29-day backtest (Oct 25).** 5,212 contracts over 30 days, mean |error| per contract:
+
+| | Midpoint | Oct 24 settings | Before the clip | **Live (clip on)** | 1/spread⁴ + clip |
+|---|---|---|---|---|---|
+| All | 0.108 | 0.078 | 0.067 | **0.065** | 0.066 |
+| RKLB (1,991) | 0.096 | 0.076 | 0.064 | **0.058** | 0.061 |
+| SPCX (1,282) | 0.100 | 0.090 | 0.078 | **0.078** | 0.079 |
+| SPY (1,757) | 0.129 | 0.075 | 0.068 | **0.068** | 0.068 |
+| BA (182) | 0.095 | 0.031 | 0.018 | **0.018** | 0.017 |
+
+- **Days at or below the midpoint:** the live settings on 28 of 30, the Oct 24 settings on 18.
+- **Against the Oct 24 settings:** the live settings beat them on 29 of 30 days.
+- **Held legs' value error:** Oct 21/22/23 is $30 / $26 / $29 (midpoint $760 / $1,054 / $199).
+- **The days before Oct 21** carry partial chains (two expiries, 8 strikes), so their errors are
+  higher than on the full chains of Oct 21–22.
+
 **Daily collection, Oct 26 to Nov 5** (read-only; it never touches the app):
 
 1. **About 09:35 ET** (after Moomoo's roll), snapshot the previous trading day's OCC prices, beside
