@@ -1,7 +1,7 @@
 """Past days' OCC option prices from the Moomoo collector's archives, for tuning hedge/occ_marks.py on
 more days than the statements cover. Read-only (local files only).
 
-    .venv/bin/python ops/archive_prev_close.py [--archive data/moomoo] \\
+    .venv/bin/python ops/archive_prev_close.py [--archive data/moomoo] [--undated data/moomoo/raw.jsonl] \\
         [--statements data/calibration/statements] [--output data/calibration/archive-dataset.json]
 
 Every Moomoo quote of an option carries prev_close_price: the previous trading day's OCC price (it
@@ -10,15 +10,17 @@ each watched code's latest quote about every 5 s (data/moomoo/raw-YYYYMMDD.jsonl
 archived day D gives the day before's OCC price of every option the app watched that day. Only a
 quote pushed on D after Moomoo's morning roll counts ("push"); a quote from the collector's
 subscription snapshot has no time and may predate the roll, so it is kept apart ("snapshot") until
-the statements confirm it.
+the statements confirm it. An archive not named by day (raw.jsonl, the Oct 7-19 practice run) is
+first split by the New York day each line was received into --split-dir.
 
 The output has ops/mark_backtest.py's --dataset format: under each archived day D an "option_chain"
 whose prev_close prices are the previous weekday's truth, and under that previous weekday the
-16:00 books the same archive recorded (SPY-style options too: their OCC prices follow the 16:00 book). "check" compares the prices
-with every statement's held legs.
+16:00 books the same archive recorded (SPY-style options too: their OCC prices follow the 16:00
+book). "check" compares the prices with every statement's held legs.
 """
 
 import argparse
+import gzip
 import json
 import math
 import sys
@@ -29,7 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from hedge.config import NY  # noqa: E402
-from hedge.moomoo_archive import _snapshots, archive_path, last_books  # noqa: E402
+from hedge.moomoo_archive import RECEIVED, _lines, _snapshots, archive_path, last_books  # noqa: E402
 
 ROLLED = time(9, 31)  # Moomoo rolls options' prev_close by 09:25 (SPY's by 07:30)
 
@@ -55,6 +57,54 @@ def _price(value):
     except (TypeError, ValueError):
         return None
     return price if math.isfinite(price) and price > 0 else None
+
+
+def _received_day(line):
+    """The New York day an archive line was received; None if it does not say."""
+    start = line.find(RECEIVED, 0, 500)
+    if start >= 0:
+        end = line.find(b'"', start + len(RECEIVED), start + 60)
+        text = line[start + len(RECEIVED) : end].decode() if end > 0 else ""
+    else:
+        try:
+            text = json.loads(line).get("received_at", "")
+        except (ValueError, AttributeError):
+            return None
+    at = _pushed(text) if text else None
+    return at.date() if at else None
+
+
+def split_undated(paths, directory):
+    """Write every line of collector archives not named by day to directory/raw-YYYYMMDD.jsonl.gz,
+    by the New York day it was received (streamed: raw.jsonl is 1.2 GB). Returns the days written."""
+    directory = Path(directory)
+    directory.mkdir(parents=True, exist_ok=True)
+    handles = {}
+    try:
+        for path in paths:
+            for line in _lines(path):
+                day = _received_day(line)
+                if day is None:
+                    continue
+                if day not in handles:
+                    handles[day] = gzip.open(directory / f"raw-{day:%Y%m%d}.jsonl.gz", "wb")
+                handles[day].write(line.rstrip(b"\n") + b"\n")
+    finally:
+        for handle in handles.values():
+            handle.close()
+    return sorted(handles)
+
+
+def archives(directories):
+    """{day: archive path} of the day-named archives in `directories` (the first directory wins)."""
+    found = {}
+    for directory in directories:
+        for path in sorted(Path(directory).glob("raw-*.jsonl*")):
+            stamp = path.name[4:12]
+            if stamp.isdigit():
+                day = datetime.strptime(stamp, "%Y%m%d").date()
+                found.setdefault(day, archive_path(directory, day))
+    return found
 
 
 def day_prices(path, day):
@@ -102,17 +152,13 @@ def statement_marks(folder):
     return marks
 
 
-def build(archive_dir, statements):
-    days = sorted(
-        datetime.strptime(path.name[4:12], "%Y%m%d").date()
-        for path in Path(archive_dir).glob("raw-*.jsonl*")
-        if path.name[4:12].isdigit()
-    )
-    days = sorted(set(days))
+def build(archive_dirs, statements, include_snapshots=False):
+    paths = archives(archive_dirs)
+    days = sorted(paths)
     dataset, held = {}, statement_marks(statements)
     check = {"push": [0, 0], "snapshot": [0, 0], "misses": []}
     for day in days:
-        prices = day_prices(archive_path(archive_dir, day), day)
+        prices = day_prices(paths[day], day)
         truth_day = previous_weekday(day)
         options = [
             {"code": code, "prev_close": p["prev_close"], "kind": p["kind"], "pushed_at": p["at"]}
@@ -123,7 +169,7 @@ def build(archive_dir, statements):
         dataset.setdefault(str(day), {})["option_chain"] = [
             {
                 "source": f"Moomoo collector archive {day}: prev_close = {truth_day} OCC price",
-                "options": [o for o in options if o["kind"] == "push"],
+                "options": [o for o in options if include_snapshots or o["kind"] == "push"],
                 "snapshot_options": [o for o in options if o["kind"] == "snapshot"],
                 "official_closes": shares,
             }
@@ -137,11 +183,11 @@ def build(archive_dir, statements):
                 if not hit:
                     check["misses"].append([str(truth_day), code, price, got["prev_close"], got["kind"]])
         # The truth day's own 16:00 books, from its archive, for every code priced above.
-        codes = [o["code"] for o in options if o["kind"] == "push"]
+        codes = [o["code"] for o in options if include_snapshots or o["kind"] == "push"]
         if codes:
             close = datetime.combine(truth_day, time(16), NY)
             cutoffs = {code: close for code in [*codes, *{f"US.{_symbol(c)}" for c in codes}]}
-            books = last_books(archive_path(archive_dir, truth_day), cutoffs)
+            books = last_books(paths[truth_day], cutoffs) if truth_day in paths else {}
             archive = dataset.setdefault(str(truth_day), {}).setdefault("archive", {})
             for code, book in books.items():
                 archive.setdefault("16:00", {})[code] = {
@@ -164,10 +210,28 @@ def build(archive_dir, statements):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Past OCC option prices from the Moomoo archives")
     parser.add_argument("--archive", default=str(ROOT / "data/moomoo"))
+    parser.add_argument(
+        "--undated", nargs="*", help="archives not named by day (default: <archive>/raw.jsonl)"
+    )
+    parser.add_argument("--split-dir", help="where --undated is split by day (default: <archive>/split)")
+    parser.add_argument(
+        "--include-snapshots",
+        action="store_true",
+        help="count subscription-snapshot prices too (only once the check shows they equal the statements)",
+    )
     parser.add_argument("--statements", default=str(ROOT / "data/calibration/statements"))
     parser.add_argument("--output", default=str(ROOT / "data/calibration/archive-dataset.json"))
     args = parser.parse_args(argv)
-    result = build(args.archive, args.statements)
+    undated = args.undated
+    if undated is None:
+        undated = [path for path in [Path(args.archive) / "raw.jsonl"] if path.exists()]
+    directories = [args.archive]
+    if undated:
+        split_dir = args.split_dir or str(Path(args.archive) / "split")
+        days = split_undated(undated, split_dir)
+        print(f"split {len(undated)} undated archive(s) into {len(days)} days in {split_dir}", flush=True)
+        directories.append(split_dir)
+    result = build(directories, args.statements, args.include_snapshots)
     output = Path(args.output)
     output.parent.mkdir(parents=True, exist_ok=True)
     temporary = output.with_suffix(".tmp")

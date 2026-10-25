@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 from hedge.config import NY
-from ops.archive_prev_close import build
+from ops.archive_prev_close import build, split_undated
 from ops.mark_backtest import load_books, load_truth
 
 PUT, CALL, STALE, STOCK = "US.RKLB261120P55000", "US.RKLB261120C60000", "US.RKLB261120P40000", "US.RKLB"
@@ -78,7 +78,7 @@ def test_each_archived_day_gives_the_previous_days_prices_and_that_days_books(tm
         "mark": "6.55",
     }
     (statements / "2026-10-22.json").write_text(json.dumps({"date": "2026-10-22", "positions": [leg]}))
-    result = build(archive, statements)
+    result = build([archive], statements)
     chain = result["days"]["2026-10-23"]["option_chain"][0]
     assert [(o["code"], o["prev_close"]) for o in chain["options"]] == [(PUT, 6.55)]
     assert [o["code"] for o in chain["snapshot_options"]] == [CALL] and chain["official_closes"] == {
@@ -90,3 +90,24 @@ def test_each_archived_day_gives_the_previous_days_prices_and_that_days_books(tm
     assert truth["2026-10-22"][PUT]["mark"] == 6.55
     books, spots = load_books(result, conids, [])
     assert books["2026-10-22"][PUT] == (6.55, 7.40) and spots["2026-10-22"]["RKLB"] == pytest.approx(51.23)
+
+
+def test_an_archive_not_named_by_day_is_split_by_the_day_each_line_arrived(tmp_path):
+    undated = tmp_path / "raw.jsonl"
+    lines = [
+        (ny(15, 15, 59), {PUT: item(1.0, ny(15, 15, 59), (1.10, 1.20, ny(15, 15, 59)))}),
+        (ny(16, 10, 0), {PUT: item(1.15, ny(16, 10, 0))}),
+        (ny(16, 15, 59), {PUT: item(1.15, ny(16, 15, 59), (0.90, 1.00, ny(16, 15, 59)))}),
+    ]
+    undated.write_text(
+        "".join(
+            json.dumps({"received_at": at.astimezone(timezone.utc).isoformat(), "securities": securities})
+            + "\n"
+            for at, securities in lines
+        )
+    )
+    days = split_undated([undated], tmp_path / "split")
+    assert [f"{d:%m-%d}" for d in days] == ["10-15", "10-16"]
+    result = build([tmp_path / "split"], None)
+    assert result["days"]["2026-10-16"]["option_chain"][0]["options"][0]["prev_close"] == 1.15
+    assert result["days"]["2026-10-15"]["archive"]["16:00"][PUT]["bid"] == 1.10
