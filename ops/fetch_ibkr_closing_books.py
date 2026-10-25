@@ -25,6 +25,7 @@ import argparse
 import asyncio
 import json
 import re
+import signal
 import sys
 from datetime import date
 from pathlib import Path
@@ -241,6 +242,11 @@ def main(argv=None):
     parser.add_argument("--limit", type=int, help="fetch only this many (a quick check first)")
     parser.add_argument("--output", default=str(ROOT / "data/calibration/ibkr-books.json"))
     args = parser.parse_args(argv)
+    # A job started with & from a script inherits SIGINT ignored, so Python installs no handler, and
+    # SIGTERM ends a process without its finally: either way the 15:40 stop on a scored day failed or
+    # lost unsaved books. Both now stop the fetch after it saves what it has.
+    signal.signal(signal.SIGINT, signal.default_int_handler)
+    signal.signal(signal.SIGTERM, signal.default_int_handler)
     import yaml
     from ib_async import IB
     from ib_async.ib import StartupFetchNONE
