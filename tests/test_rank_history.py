@@ -47,7 +47,7 @@ class FakeOpenD:
                 2,
             )
         if (right, money) == (1, 0):
-            return 0, pd.DataFrame([row("US.SPY261120C800000", 1.0, 0.0, 0, self.answer_day)]), None, 2
+            return 0, pd.DataFrame([row("US.SPY261120C800000", 1.0, 0.0, "N/A", self.answer_day)]), None, 2
         if (right, money) == (2, 1):
             return (
                 0,

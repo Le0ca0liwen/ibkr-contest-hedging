@@ -123,7 +123,7 @@ def entry(row):
     return {
         "code": row["code"],
         "prev_close": None if previous is None else round(previous, 6),
-        "volume": row.get("volume"),
+        "volume": _number(row.get("volume")) or 0,  # an untraded contract's volume is "N/A"
     }
 
 
@@ -131,8 +131,9 @@ def build(ranked, checked_days=()):
     """The --dataset days from {day: {code: row}}; untraded contracts only on `checked_days`."""
     days = {}
     for day, rows in sorted(ranked.items()):
-        traded = [entry(r) for r in rows.values() if (r.get("volume") or 0) > 0]
-        untraded = [entry(r) for r in rows.values() if not (r.get("volume") or 0) > 0]
+        entries = [entry(r) for r in rows.values()]
+        traded = [o for o in entries if o["volume"] > 0]
+        untraded = [o for o in entries if not o["volume"] > 0]
         days[str(day)] = {
             "option_chain": [
                 {
@@ -157,7 +158,7 @@ def wanted(days, symbols, per_day, today):
                 match = CODE.match(o["code"])
                 if match and match[1] == symbol and f"20{match[2]}" >= f"{today:%Y%m%d}":
                     rows.append(o)
-            rows.sort(key=lambda o: -(o["volume"] or 0))
+            rows.sort(key=lambda o: -(_number(o["volume"]) or 0))
             found.setdefault(truth_day, []).extend(o["code"] for o in rows[:per_day])
     return found
 
