@@ -47,8 +47,21 @@ def code_of(symbol, expiry, right, strike):
     return f"US.{symbol}{expiry[2:]}{right}{round(float(strike) * 1000)}"
 
 
-def statement_wants(folder, ladder, step_of):
-    """{day: {codes}}: each statement's options and `ladder` strikes each side of each, calls and puts."""
+def listed_strikes(paths):
+    """{(symbol, YYYYMMDD expiry): sorted listed strikes} from chain files."""
+    listed = {}
+    for path in paths:
+        for o in json.loads(Path(path).read_text()).get("options", []):
+            parsed = parse(o["code"])
+            if parsed:
+                listed.setdefault((parsed[0], parsed[1]), set()).add(parsed[3])
+    return {key: sorted(strikes) for key, strikes in listed.items()}
+
+
+def statement_wants(folder, ladder, step_of, listed=None):
+    """{day: {codes}}: each statement's options and `ladder` strikes each side of each, calls and puts:
+    the expiry's listed strikes when a chain file lists them (RKLB Nov 20 lists every dollar from 48,
+    so a 2.5 step asked for strikes that do not exist), else steps of step_of(symbol, strike)."""
     wanted = {}
     for path in sorted(Path(folder).glob("*.json")) if folder else []:
         data = json.loads(path.read_text())
@@ -56,12 +69,18 @@ def statement_wants(folder, ladder, step_of):
             if p.get("asset") != "OPT":
                 continue
             symbol, expiry = p["symbol"].split()[0], p["expiry"].replace("-", "")
-            strike, step = float(p["strike"]), step_of(p["symbol"].split()[0], float(p["strike"]))
-            for k in range(-ladder, ladder + 1):
+            strike = float(p["strike"])
+            strikes = (listed or {}).get((symbol, expiry))
+            if strikes:
+                near = [k for k in strikes if k < strike][-ladder:] + [k for k in strikes if k > strike][
+                    :ladder
+                ]
+            else:
+                step = step_of(symbol, strike)
+                near = [strike + k * step for k in range(-ladder, ladder + 1) if k]
+            for k in [strike, *near]:
                 for right in "CP":
-                    wanted.setdefault(data["date"], set()).add(
-                        code_of(symbol, expiry, right, strike + k * step)
-                    )
+                    wanted.setdefault(data["date"], set()).add(code_of(symbol, expiry, right, k))
     return wanted
 
 
@@ -227,7 +246,7 @@ def main(argv=None):
     from hedge.broker import without_summary_resubscribe
 
     config = yaml.safe_load(Path(args.config).read_text())
-    legs = statement_wants(args.statements, args.ladder, strike_step)
+    legs = statement_wants(args.statements, args.ladder, strike_step, listed_strikes(args.chains))
     chains = chain_wants(args.chains, args.chain_days, args.moneyness, args.symbols)
     output = Path(args.output)
     rows = json.loads(output.read_text()) if output.exists() else []

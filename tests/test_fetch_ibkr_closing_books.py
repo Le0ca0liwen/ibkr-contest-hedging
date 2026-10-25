@@ -1,7 +1,15 @@
 import json
 from types import SimpleNamespace
 
-from ops.fetch_ibkr_closing_books import chain_wants, fetch, plan, statement_wants, strike_step
+from ops.fetch_ibkr_closing_books import (
+    chain_wants,
+    fetch,
+    listed_strikes,
+    parse,
+    plan,
+    statement_wants,
+    strike_step,
+)
 
 
 def test_statement_legs_come_with_their_chain_and_chains_with_every_day(tmp_path):
@@ -23,6 +31,21 @@ def test_statement_legs_come_with_their_chain_and_chains_with_every_day(tmp_path
     )
     assert chain_wants([chain], ["2026-10-22"], 0.3) == {"2026-10-22": ["US.SPY261120C770000"]}
     assert chain_wants([chain], ["2026-10-22"], 0.3, ["RKLB"]) == {"2026-10-22": []}
+
+
+def test_the_ladder_takes_the_listed_strikes_when_a_chain_file_lists_them(tmp_path):
+    """RKLB Nov 20 lists every dollar from 48: a 2.5 step asked for 52.5 and 57.5, which do not exist."""
+    leg = {"asset": "OPT", "symbol": "RKLB  261120P00055000", "expiry": "2026-11-20", "strike": "55"}
+    (tmp_path / "2026-10-21.json").write_text(json.dumps({"date": "2026-10-21", "positions": [leg]}))
+    chain = tmp_path / "chain.json"
+    options = [
+        {"code": f"US.RKLB261120{r}{k * 1000}"} for k in (45, 50, 53, 54, 55, 56, 57, 60) for r in "CP"
+    ]
+    chain.write_text(json.dumps({"options": options}))
+    listed = listed_strikes([chain])
+    assert listed[("RKLB", "20261120")] == [45, 50, 53, 54, 55, 56, 57, 60]
+    wanted = statement_wants(tmp_path, 2, strike_step, listed)["2026-10-21"]
+    assert {parse(c)[3] for c in wanted} == {53, 54, 55, 56, 57} and len(wanted) == 10
 
 
 def test_the_plan_puts_shares_and_statement_legs_first_and_skips_expired_and_fetched_ones():

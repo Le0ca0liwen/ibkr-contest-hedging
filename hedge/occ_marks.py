@@ -36,7 +36,7 @@ PARAMS = {
     # inv_spread2: a tight quote stays at its midpoint, a wide one moves toward the chain. Oct 23
     # (the one day with a full closing chain): $227 of option-value error on the six SPCX/RKLB legs,
     # against $526 for the midpoint, $367 for hedge/marks.py and $1,458 with inv_vega2.
-    "weight": "inv_spread2",  # inv_spread2, inv_spread, inv_vega2 (squared IV-space errors), inv_vega, unit
+    "weight": "inv_spread2",  # inv_spread4, inv_spread2, inv_spread, inv_vega2 (squared IV-space errors), inv_vega, unit
     # One scale for a strike's call and put weights ("joint"), so a tight quote outweighs a wide one
     # on the other side and keeps its midpoint; "side" (each side scaled by its own tightest quote)
     # let a tight call and a wide put split a parity gap almost evenly (BA: $0.039 a contract
@@ -181,6 +181,7 @@ def _weights(rows, kind, forward, t, rate):
                 "inv_vega2": 1 / vega**2,
                 "inv_vega": 1 / vega,
                 "unit": 1.0,
+                "inv_spread4": 1 / spread**4,
                 "inv_spread2": 1 / spread**2,
                 "inv_spread": 1 / spread,
             }[kind]

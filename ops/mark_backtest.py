@@ -37,6 +37,7 @@ from hedge.occ_marks import occ_marks, symbol_params  # noqa: E402
 
 CODE = re.compile(r"^US\.([A-Z.]+?)(\d{6})([CP])(\d+)$")
 GRID = {
+    "weight": ["inv_spread2", "inv_spread4"],
     "weight_norm": ["joint", "side"],
     "forward": ["fit", "atm", "interp"],
     "forward_late": ["atm", "spot"],
