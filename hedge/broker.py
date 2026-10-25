@@ -28,6 +28,19 @@ class BrokerAdapter(Protocol):
 
 # The closing-NAV side connection's client id: the app's own plus this (read-only, no orders).
 SIDE_CLIENT_OFFSET = 100
+
+
+def without_summary_resubscribe(ib):
+    """`ib` without ib_async's automatic account-summary subscription after every 1102 ("connectivity
+    restored"). IBKR allows two summary subscriptions at a time across all connections: after a
+    Mac wake each connection held one, and the closing-NAV request was refused (error 322,
+    "Maximum number of account summary requests exceeded", Oct 24). The app asks for the summary
+    itself, once, when it needs it."""
+    if hasattr(ib, "_onError"):  # test doubles have no such handler
+        ib.errorEvent -= ib._onError
+    return ib
+
+
 # TWS lost / regained its own link to IBKR's servers (internet down or back); the API socket to TWS
 # stays open meanwhile. 1101 means data subscriptions were lost and must be renewed.
 LINK_LOST_CODES = frozenset({1100, 2110})
@@ -45,7 +58,7 @@ def finite(value):
 class IBKRBroker:
     def __init__(self, manifest, event_queue: asyncio.Queue):
         self.manifest, self.events = manifest, event_queue
-        self.ib = IB()
+        self.ib = without_summary_resubscribe(IB())
         self.ib.RaiseRequestErrors = True
         self.ib.RequestTimeout = 15
         self.ib.TimezoneTWS = "America/New_York"
@@ -411,7 +424,7 @@ class IBKRBroker:
         return await self._side_summary_nav()
 
     async def _side_summary_nav(self):
-        side = IB()
+        side = without_summary_resubscribe(IB())
         try:
             await side.connectAsync(
                 self.manifest.gateway_host,

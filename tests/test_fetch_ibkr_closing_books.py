@@ -104,3 +104,25 @@ async def test_contracts_are_asked_in_parallel_within_the_concurrency():
     contracts = {code: code for _, code in todo}
     assert await fetch(SlowIB(), contracts, todo, 100.0, rows.append, no_wait, concurrency=5) == {}
     assert len(rows) == 20 and peak[0] == 5
+
+
+async def test_no_connection_resubscribes_the_account_summary_after_a_reconnect(monkeypatch):
+    """IBKR allows two account-summary subscriptions in all: ib_async re-subscribed one on every
+    connection at each 1102, and the closing-NAV request was refused (error 322, Oct 24)."""
+    import asyncio
+
+    from ib_async import IB
+
+    from hedge.broker import without_summary_resubscribe
+
+    calls = []
+
+    async def subscribe():
+        calls.append(1)
+
+    plain, kept = IB(), without_summary_resubscribe(IB())
+    for ib in (plain, kept):
+        monkeypatch.setattr(ib, "reqAccountSummaryAsync", subscribe)
+        ib.errorEvent.emit(-1, 1102, "Connectivity between IB and Trader Workstation has been restored", None)
+    await asyncio.sleep(0)
+    assert calls == [1]  # only the unmodified connection re-subscribed

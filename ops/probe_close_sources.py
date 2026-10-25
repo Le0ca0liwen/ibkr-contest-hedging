@@ -97,8 +97,14 @@ def probe_moomoo(args):
 
 
 def probe_ibkr(args):
+    import sys
+
     import yaml
     from ib_async import IB, Option
+    from ib_async.ib import StartupFetchNONE
+
+    sys.path.insert(0, str(ROOT))
+    from hedge.broker import without_summary_resubscribe
 
     config = yaml.safe_load(Path(args.config).read_text())
     host, port = config.get("gateway_host", "127.0.0.1"), int(config["gateway_port"])
@@ -110,9 +116,9 @@ def probe_ibkr(args):
         expiry, strike = "20" + ymd, int(strike) / 1000
         if expiry >= f"{args.day:%Y%m%d}":  # expired options have no IBKR history
             contracts.append((code, Option(symbol, expiry, strike, right, "SMART", currency="USD")))
-    ib, errors = IB(), []
+    ib, errors = without_summary_resubscribe(IB()), []
     ib.errorEvent += lambda req, code, message, contract: errors.append(f"{code}: {message}")
-    ib.connect(host, port, clientId=client, readonly=True, timeout=15)
+    ib.connect(host, port, clientId=client, readonly=True, timeout=15, fetchFields=StartupFetchNONE)
     result = {}
     try:
         end = f"{args.day:%Y%m%d} 16:00:30 US/Eastern"

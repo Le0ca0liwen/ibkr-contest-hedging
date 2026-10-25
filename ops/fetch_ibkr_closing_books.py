@@ -21,6 +21,7 @@ import argparse
 import asyncio
 import json
 import re
+import sys
 from datetime import date
 from pathlib import Path
 
@@ -206,6 +207,10 @@ def main(argv=None):
     args = parser.parse_args(argv)
     import yaml
     from ib_async import IB
+    from ib_async.ib import StartupFetchNONE
+
+    sys.path.insert(0, str(ROOT))
+    from hedge.broker import without_summary_resubscribe
 
     config = yaml.safe_load(Path(args.config).read_text())
     legs = statement_wants(args.statements, args.ladder, strike_step)
@@ -228,13 +233,14 @@ def main(argv=None):
         temporary.replace(output)
 
     async def run():
-        ib = IB()
+        ib = without_summary_resubscribe(IB())  # keeps IBKR's two summary slots for the app
         await ib.connectAsync(
             config.get("gateway_host", "127.0.0.1"),
             int(config["gateway_port"]),
             clientId=int(config.get("client_id", 1)) + CLIENT_OFFSET,
             readonly=True,
             timeout=15,
+            fetchFields=StartupFetchNONE,  # historical data only: no positions, orders or account
         )
         try:
             contracts = await qualify(ib, {code for _, code in todo}, statement_conids(args.statements))
