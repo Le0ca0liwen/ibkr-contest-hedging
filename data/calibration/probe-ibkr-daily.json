@@ -1,0 +1,132 @@
+{
+ "at": "2026-10-24T23:12:40.538809",
+ "bars": {
+  "US.RKLB261120P45000": {
+   "TRADES": [],
+   "MIDPOINT": [],
+   "BID": [],
+   "ASK": []
+  },
+  "US.RKLB261120P55000": {
+   "TRADES": [],
+   "MIDPOINT": [],
+   "BID": [],
+   "ASK": []
+  },
+  "US.SPCX261120C130000": {
+   "TRADES": [],
+   "MIDPOINT": [],
+   "BID": [],
+   "ASK": []
+  },
+  "US.SPCX261120C145000": {
+   "TRADES": [],
+   "MIDPOINT": [],
+   "BID": [],
+   "ASK": []
+  },
+  "US.SPCX261120C160000": {
+   "TRADES": [],
+   "MIDPOINT": [],
+   "BID": [],
+   "ASK": []
+  },
+  "US.SPCX261120P145000": {
+   "TRADES": [],
+   "MIDPOINT": [],
+   "BID": [],
+   "ASK": []
+  },
+  "US.SPY261120C770000": {
+   "TRADES": [],
+   "MIDPOINT": [],
+   "BID": [],
+   "ASK": []
+  },
+  "US.SPY261120P770000": {
+   "TRADES": [],
+   "MIDPOINT": [],
+   "BID": [],
+   "ASK": []
+  },
+  "US.SPY261127C770000": {
+   "TRADES": [],
+   "MIDPOINT": [],
+   "BID": [],
+   "ASK": []
+  },
+  "US.SPY261127P770000": {
+   "TRADES": [],
+   "MIDPOINT": [],
+   "BID": [],
+   "ASK": []
+  }
+ },
+ "matches": {
+  "TRADES": [
+   0,
+   0
+  ],
+  "MIDPOINT": [
+   0,
+   0
+  ],
+  "BID": [
+   0,
+   0
+  ],
+  "ASK": [
+   0,
+   0
+  ]
+ },
+ "errors": [
+  "2104: Market data farm connection is OK:usfarm.nj",
+  "2104: Market data farm connection is OK:usfarm",
+  "2104: Market data farm connection is OK:usopt",
+  "2106: HMDS data farm connection is OK:euhmds",
+  "2106: HMDS data farm connection is OK:fundfarm",
+  "2106: HMDS data farm connection is OK:ushmds",
+  "2158: Sec-def data farm connection is OK:secdefil",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'",
+  "162: Historical Market Data Service error message:No data of type EODChart is available for the exchange 'BEST' and the security type 'Option' and '1 m' and '1 day'"
+ ]
+}
