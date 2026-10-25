@@ -216,9 +216,53 @@ sign from day to day. Three rebuild changes did beat it:
   - The single-stock gains hold on every day.
   - The SPY gain rests on Oct 22 alone, since on the other days both rules clip to the same book edge.
 - **What no 16:00 input explains:** OCC's SPY forward moves by a whole-day shift of +0.25, about
-  −0.2 and about −0.3 on Oct 21, 22 and 23. `ops/probe_close_sources.py spy` pulls SPY's share
-  price from 15:55 to 16:20, to find the minute OCC takes it.
+  −0.2 and about −0.3 on Oct 21, 22 and 23. SPY's share price at no minute from 15:55 to 16:20
+  (`ops/probe_close_sources.py spy`), and not its official close, matches it.
 
 Most of the evidence is Oct 22. The Oct 23 chain (IBKR books overnight, OCC prices from Moomoo on
 Monday morning) is the out-of-sample check; from Oct 26 every chain snapshot also carries the
 previous day's price of every listed option.
+
+### More days of OCC prices (Oct 25)
+
+**Where past OCC prices exist:**
+
+- **IBKR:** the statements (held options only) are the only source. IBKR has no daily option
+  bars: `probe_close_sources.py ibkr-daily` got error 162 for every one.
+- **Moomoo:** every option quote carries the previous trading day's OCC price
+  (`prev_close_price`), and the collector archives each watched option's quote.
+  - `ops/archive_prev_close.py` turns those archives into a `mark_backtest.py --dataset`. It equals
+    the statements on 58 of 58 held legs.
+  - It skips weekend archives, whose quotes still carry Thursday's price.
+  - It takes a book as the 16:00 book only from 15:58 on: the collector sometimes stopped at
+    15:30–15:42.
+  - That adds OCC prices for Oct 6–22, about 14 options a day (mostly BA), with 16:00 books on
+    Oct 7, 8 and 22. Together with IBKR's books, the rebuild scores $0.047 a contract against
+    $0.111 for the midpoint on 1,301 contracts over 13 days, each day held out.
+
+**Daily collection, Oct 26 to Nov 5** (read-only; it never touches the app):
+
+1. **About 09:35 ET** (after Moomoo's roll), snapshot the previous trading day's OCC prices, beside
+   the usual SPY/RKLB/SPCX snapshot. Use the six Friday expiries from the coming Friday, plus Dec 18:
+
+   ```
+   .runtime/moomoo-env/bin/python ops/fetch_moomoo_chain.py --underlyings QQQ IWM --moneyness 0.03 \
+       --expiries 2026-10-30 2026-11-06 2026-11-13 2026-11-20 2026-11-27 2026-12-18 \
+       --output data/calibration/chain-prevclose-etf-YYYYMMDD.json
+   .runtime/moomoo-env/bin/python ops/fetch_moomoo_chain.py --underlyings ASTS IONQ HOOD PLTR \
+       --moneyness 0.2 --expiries ... --output data/calibration/chain-prevclose-mid-YYYYMMDD.json
+   ```
+
+   - QQQ and IWM close at 16:15 like SPY: they show whether SPY's whole-day offset is shared.
+   - The mid-caps quote wide like RKLB, where single-stock errors are largest.
+2. **After 20:10 ET** (after the scored close), fetch the previous day's 16:00 books of those codes:
+
+   ```
+   .venv/bin/python ops/fetch_ibkr_closing_books.py --chains data/calibration/chain-prevclose-etf-YYYYMMDD.json \
+       data/calibration/chain-prevclose-mid-YYYYMMDD.json --chain-days PREVIOUS-DAY --moneyness 0.5 \
+       --statements "" --client-offset 304 --concurrency 4 --timeout 90 --output data/calibration/ibkr-books-wide.json
+   ```
+
+   That is about 1,600–1,800 books a day, roughly 3 hours.
+3. **Backtest:** pass each snapshot as `--prev-close FILE=PREVIOUS-DAY`, and the books file as one
+   more `--chains` file.
