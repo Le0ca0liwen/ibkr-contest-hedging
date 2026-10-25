@@ -3,6 +3,7 @@
     .runtime/moomoo-env/bin/python ops/probe_close_sources.py moomoo [--start 2026-10-01 --end 2026-10-23]
     .venv/bin/python ops/probe_close_sources.py ibkr --config config/local.contest.yaml [--day 2026-10-22]
     .venv/bin/python ops/probe_close_sources.py spy --config config/local.contest.yaml [--days 2026-10-21 ...]
+    .venv/bin/python ops/probe_close_sources.py ibkr-daily --config config/local.contest.yaml
 
 moomoo: daily K-lines (quote-only) of the option codes already in this month's historical quota, so
 no quota is spent (--allow-new N spends at most N), with each bar's close and last_close next to the
@@ -14,6 +15,9 @@ held options around 16:00 on a past day: bars would mean IBKR can supply October
 spy: SPY's share price around the close on each --days day (one-minute BID, ASK and MIDPOINT bars
 15:55-16:20, one-second MIDPOINT bars 15:59:30-16:00:30): OCC's SPY prices imply a share price
 0.08-0.49 away from the 16:00 midpoint, and the minute it matches says when OCC's SPY input is taken.
+ibkr-daily: IBKR's daily bars (TRADES, MIDPOINT, BID, ASK) of every held option still listed, over the
+last month, each close next to that day's statement price: a series that equals it would give past
+OCC prices for every listed contract, not just held ones.
 Writes data/calibration/probe-<source>.json. Never trades.
 """
 
@@ -199,9 +203,77 @@ def probe_spy(args):
     return {"days": days, "errors": errors}
 
 
+def daily_matches(bars, prices):
+    """{what: (closes equal to the statement price to 1e-4, closes compared)} for
+    bars = {code: {what: [{"day", "close"}]}} and prices = {day: {code: statement price}}."""
+    found = {}
+    for code, kinds in bars.items():
+        for what, items in kinds.items():
+            equal, compared = found.get(what, (0, 0))
+            for bar in items:
+                price = prices.get(bar["day"], {}).get(code)
+                if price is not None and bar["close"] is not None:
+                    equal, compared = equal + (abs(bar["close"] - price) < 1e-4), compared + 1
+            found[what] = (equal, compared)
+    return found
+
+
+def probe_ibkr_daily(args):
+    import sys
+
+    import yaml
+    from ib_async import IB, Option
+    from ib_async.ib import StartupFetchNONE
+
+    sys.path.insert(0, str(ROOT))
+    from hedge.broker import without_summary_resubscribe
+
+    config = yaml.safe_load(Path(args.config).read_text())
+    prices = statement_prices()
+    today = f"{date.today():%Y%m%d}"
+    contracts = []
+    for code in sorted({code for day in prices.values() for code in day}):
+        symbol, ymd, right, strike = CODE.match(code).groups()
+        if "20" + ymd >= today:  # expired options have no IBKR history
+            contracts.append(
+                (code, Option(symbol, "20" + ymd, int(strike) / 1000, right, "SMART", currency="USD"))
+            )
+    ib, errors = without_summary_resubscribe(IB()), []
+    ib.errorEvent += lambda req, code, message, contract: errors.append(f"{code}: {message}")
+    ib.connect(
+        config.get("gateway_host", "127.0.0.1"),
+        int(config["gateway_port"]),
+        clientId=int(config.get("client_id", 1)) + CLIENT_OFFSET + 3,  # beside the books fetches
+        readonly=True,
+        timeout=15,
+        fetchFields=StartupFetchNONE,
+    )
+    bars = {}
+    try:
+        for code, contract in contracts[: args.limit]:
+            if not ib.qualifyContracts(contract):
+                continue
+            for what in ("TRADES", "MIDPOINT", "BID", "ASK"):
+                rows = ib.reqHistoricalData(contract, "", "1 M", "1 day", what, useRTH=True, formatDate=1)
+                bars.setdefault(code, {})[what] = [{"day": str(b.date)[:10], "close": b.close} for b in rows]
+                ib.sleep(1)
+    finally:
+        ib.disconnect()
+    found = daily_matches(bars, prices)
+    for what, (equal, compared) in found.items():
+        print(f"{what}: {equal} of {compared} daily closes equal the statement price")
+    for code, kinds in bars.items():
+        for what, items in kinds.items():
+            line = ", ".join(
+                f"{b['day'][5:]} {b['close']}/{prices.get(b['day'], {}).get(code)}" for b in items[-4:]
+            )
+            print(f"  {code} {what}: {line}")
+    return {"bars": bars, "matches": {w: list(v) for w, v in found.items()}, "errors": errors}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Read-only probe of option closing-data sources")
-    parser.add_argument("source", choices=["moomoo", "ibkr", "spy"])
+    parser.add_argument("source", choices=["moomoo", "ibkr", "spy", "ibkr-daily"])
     parser.add_argument("--start", type=date.fromisoformat, default=date(2026, 10, 1))
     parser.add_argument("--end", type=date.fromisoformat, default=date.today() - timedelta(days=1))
     parser.add_argument("--allow-new", type=int, default=0, help="new Moomoo quota codes to spend")
@@ -216,7 +288,8 @@ def main(argv=None):
         help="spy: days to probe",
     )
     args = parser.parse_args(argv)
-    found = {"moomoo": probe_moomoo, "ibkr": probe_ibkr, "spy": probe_spy}[args.source](args)
+    probes = {"moomoo": probe_moomoo, "ibkr": probe_ibkr, "spy": probe_spy, "ibkr-daily": probe_ibkr_daily}
+    found = probes[args.source](args)
     path = ROOT / f"data/calibration/probe-{args.source}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"at": datetime.now().isoformat(), **found}, default=str, indent=1) + "\n")
