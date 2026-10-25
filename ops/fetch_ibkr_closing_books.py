@@ -6,6 +6,10 @@ client id + 300), historical requests only; never trades.
         --chains data/calibration/chain-prevclose-20261023-2209.json --chain-days 2026-10-22 \\
         [--statements data/calibration/statements] [--moneyness 0.3]
 
+--close 16:15:00 asks for the minute ending then instead (SPY-style options trade until 16:15), into
+its own --output and with its own --client-offset beside a running fetch, to test whether OCC prices
+those classes from their later book; --symbols keeps only those underlyings.
+
 Contracts: every code of each chain file (ops/fetch_moomoo_chain.py) for each --chain-days day, and
 every option on each saved statement for its own day with its chain's strikes nearby (--ladder
 strikes each side), so a past day's held legs come with enough of their chain to rebuild them.
@@ -68,15 +72,17 @@ def strike_step(symbol, strike):
     return 1.0 if strike < 25 else 2.5 if strike < 200 else 5.0
 
 
-def chain_wants(paths, days, moneyness):
-    """{day: [codes]} of every chain file's codes within `moneyness` of its spot, for every day,
-    nearest the money first."""
+def chain_wants(paths, days, moneyness, symbols=None):
+    """{day: [codes]} of every chain file's codes within `moneyness` of its spot (of `symbols`
+    only, when given), for every day, nearest the money first."""
     distance = {}
     for path in paths:
         chain = json.loads(Path(path).read_text())
         spots = {s: (u or {}).get("spot") for s, u in (chain.get("underlyings") or {}).items()}
         for o in chain.get("options", []):
             spot = spots.get(o["underlying"])
+            if symbols and o["underlying"] not in symbols:
+                continue
             if spot and abs(o["strike"] / spot - 1) <= moneyness:
                 distance[o["code"]] = min(abs(o["strike"] / spot - 1), distance.get(o["code"], 1.0))
     codes = sorted(distance, key=lambda c: (distance[c], c))
@@ -107,13 +113,16 @@ def plan(first, then, done, today):
     return todo + later
 
 
-async def fetch(ib, contracts, todo, rate, write, sleep=asyncio.sleep, concurrency=8, timeout=10):
-    """Ask for each (day, code)'s 15:59 BID and ASK bars, `concurrency` contracts at a time and at
+async def fetch(
+    ib, contracts, todo, rate, write, sleep=asyncio.sleep, concurrency=8, timeout=10, close="16:00:00"
+):
+    """Ask for each (day, code)'s BID and ASK bars of the minute ending at `close` (ET; after 16:00
+    outside regular hours), `concurrency` contracts at a time and at
     most `rate` requests starting a second (IBKR answers each in about 2.5 s: one at a time made 12
     books a minute) and `timeout` s each (an expired contract may never answer); no ASK request
     after an empty BID. write({"day", "code", "bid", "ask"}) per success. Returns {key: reason} of
     failures."""
-    failures, gap = {}, 1.0 / rate
+    failures, gap, regular = {}, 1.0 / rate, close <= "16:00:00"
     slots, pace = asyncio.Semaphore(concurrency), asyncio.Lock()
 
     async def ask(contract, end, side, key):
@@ -121,7 +130,7 @@ async def fetch(ib, contracts, todo, rate, write, sleep=asyncio.sleep, concurren
             await sleep(gap)
         try:
             return await ib.reqHistoricalDataAsync(
-                contract, end, "60 S", "1 min", side, useRTH=True, formatDate=2, timeout=timeout
+                contract, end, "60 S", "1 min", side, useRTH=regular, formatDate=2, timeout=timeout
             )
         except Exception as exc:  # a timeout or a dropped request (Mac asleep): recorded, never fatal
             failures[key] = f"{side}: {type(exc).__name__}"
@@ -132,7 +141,7 @@ async def fetch(ib, contracts, todo, rate, write, sleep=asyncio.sleep, concurren
         if contract is None:
             failures[code] = "not qualified"
             return
-        key, end = f"{day} {code}", f"{day.replace('-', '')} 16:00:00 US/Eastern"
+        key, end = f"{day} {code}", f"{day.replace('-', '')} {close} US/Eastern"
         async with slots:
             sides = {}
             for side in ("BID", "ASK"):
@@ -199,6 +208,11 @@ def main(argv=None):
     parser.add_argument("--statements", default=str(ROOT / "data/calibration/statements"))
     parser.add_argument("--ladder", type=int, default=4, help="strikes each side of a statement leg")
     parser.add_argument("--moneyness", type=float, default=0.3)
+    parser.add_argument("--symbols", nargs="*", help="chain underlyings to keep (default: all)")
+    parser.add_argument("--close", default="16:00:00", help="ET end of the one-minute bars")
+    parser.add_argument(
+        "--client-offset", type=int, default=CLIENT_OFFSET, help="added to the app's client id"
+    )
     parser.add_argument("--rate", type=float, default=4.0, help="historical requests a second")
     parser.add_argument("--concurrency", type=int, default=8, help="contracts asked at once (IBKR: 50)")
     parser.add_argument("--timeout", type=float, default=10, help="seconds per request")
@@ -214,7 +228,7 @@ def main(argv=None):
 
     config = yaml.safe_load(Path(args.config).read_text())
     legs = statement_wants(args.statements, args.ladder, strike_step)
-    chains = chain_wants(args.chains, args.chain_days, args.moneyness)
+    chains = chain_wants(args.chains, args.chain_days, args.moneyness, args.symbols)
     output = Path(args.output)
     rows = json.loads(output.read_text()) if output.exists() else []
     done = {(r["day"], r["code"]) for r in rows}
@@ -237,7 +251,7 @@ def main(argv=None):
         await ib.connectAsync(
             config.get("gateway_host", "127.0.0.1"),
             int(config["gateway_port"]),
-            clientId=int(config.get("client_id", 1)) + CLIENT_OFFSET,
+            clientId=int(config.get("client_id", 1)) + args.client_offset,
             readonly=True,
             timeout=15,
             fetchFields=StartupFetchNONE,  # historical data only: no positions, orders or account
@@ -246,7 +260,14 @@ def main(argv=None):
             contracts = await qualify(ib, {code for _, code in todo}, statement_conids(args.statements))
             print(f"{len(contracts)} of {len({c for _, c in todo})} contracts qualified", flush=True)
             return await fetch(
-                ib, contracts, todo, args.rate, write, concurrency=args.concurrency, timeout=args.timeout
+                ib,
+                contracts,
+                todo,
+                args.rate,
+                write,
+                concurrency=args.concurrency,
+                timeout=args.timeout,
+                close=args.close,
             )
         finally:
             ib.disconnect()

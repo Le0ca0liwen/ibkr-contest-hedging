@@ -22,6 +22,7 @@ def test_statement_legs_come_with_their_chain_and_chains_with_every_day(tmp_path
         )
     )
     assert chain_wants([chain], ["2026-10-22"], 0.3) == {"2026-10-22": ["US.SPY261120C770000"]}
+    assert chain_wants([chain], ["2026-10-22"], 0.3, ["RKLB"]) == {"2026-10-22": []}
 
 
 def test_the_plan_puts_shares_and_statement_legs_first_and_skips_expired_and_fetched_ones():
@@ -64,6 +65,9 @@ async def test_each_book_is_the_1559_bid_and_ask_bar_closes_at_a_bounded_rate():
     assert (
         set(failures) == {"2026-10-22 US.X261120C1000", "US.Q"} and slept == [0.25] * 3
     )  # no ASK after an empty BID
+    calls.clear()
+    await fetch(FakeIB(), contracts, todo[:1], 4.0, rows.append, sleep, close="16:15:00")
+    assert calls[0] == ("rklb", "20261022 16:15:00 US/Eastern", "60 S", "1 min", "BID", False)  # after hours
 
 
 async def test_an_expired_option_is_tried_by_symbol_then_with_include_expired_then_by_conid():
