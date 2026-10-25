@@ -2,6 +2,7 @@
 
     .runtime/moomoo-env/bin/python ops/probe_close_sources.py moomoo [--start 2026-10-01 --end 2026-10-23]
     .venv/bin/python ops/probe_close_sources.py ibkr --config config/local.contest.yaml [--day 2026-10-22]
+    .venv/bin/python ops/probe_close_sources.py spy --config config/local.contest.yaml [--days 2026-10-21 ...]
 
 moomoo: daily K-lines (quote-only) of the option codes already in this month's historical quota, so
 no quota is spent (--allow-new N spends at most N), with each bar's close and last_close next to the
@@ -10,6 +11,9 @@ previous day's statement price would mean Moomoo's daily history carries the cle
 of every listed option on every day: the truth for tuning.
 ibkr: one read-only API connection (the app's client id + 300) asks for 1-second bid/ask bars of the
 held options around 16:00 on a past day: bars would mean IBKR can supply October's closing books.
+spy: SPY's share price around the close on each --days day (one-minute BID, ASK and MIDPOINT bars
+15:55-16:20, one-second MIDPOINT bars 15:59:30-16:00:30): OCC's SPY prices imply a share price
+0.08-0.49 away from the 16:00 midpoint, and the minute it matches says when OCC's SPY input is taken.
 Writes data/calibration/probe-<source>.json. Never trades.
 """
 
@@ -148,17 +152,71 @@ def probe_ibkr(args):
     return {"day": str(args.day), "options": result, "errors": errors}
 
 
+def probe_spy(args):
+    import sys
+
+    import yaml
+    from ib_async import IB, Stock
+    from ib_async.ib import StartupFetchNONE
+
+    sys.path.insert(0, str(ROOT))
+    from hedge.broker import without_summary_resubscribe
+
+    config = yaml.safe_load(Path(args.config).read_text())
+    ib, errors = without_summary_resubscribe(IB()), []
+    ib.errorEvent += lambda req, code, message, contract: errors.append(f"{code}: {message}")
+    client = int(config.get("client_id", 1)) + CLIENT_OFFSET + 1  # beside a running books fetch
+    ib.connect(
+        config.get("gateway_host", "127.0.0.1"),
+        int(config["gateway_port"]),
+        clientId=client,
+        readonly=True,
+        timeout=15,
+        fetchFields=StartupFetchNONE,
+    )
+    days = {}
+    try:
+        spy = Stock("SPY", "SMART", "USD")
+        ib.qualifyContracts(spy)
+        for day in args.days:
+            found = {}
+            for what, end, duration, size in (
+                ("BID", "16:20:00", "1500 S", "1 min"),
+                ("ASK", "16:20:00", "1500 S", "1 min"),
+                ("MIDPOINT", "16:20:00", "1500 S", "1 min"),
+                ("MIDPOINT", "16:00:30", "60 S", "1 secs"),
+            ):
+                bars = ib.reqHistoricalData(
+                    spy, f"{day:%Y%m%d} {end} US/Eastern", duration, size, what, useRTH=False, formatDate=2
+                )
+                key = f"{what} {size}"
+                found[key] = [{"at": str(b.date), "close": b.close} for b in bars]
+                print(day, key, len(bars), "bars", bars[-1].close if bars else errors[-1:])
+                ib.sleep(1)
+            days[str(day)] = found
+    finally:
+        ib.disconnect()
+    return {"days": days, "errors": errors}
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Read-only probe of option closing-data sources")
-    parser.add_argument("source", choices=["moomoo", "ibkr"])
+    parser.add_argument("source", choices=["moomoo", "ibkr", "spy"])
     parser.add_argument("--start", type=date.fromisoformat, default=date(2026, 10, 1))
     parser.add_argument("--end", type=date.fromisoformat, default=date.today() - timedelta(days=1))
     parser.add_argument("--allow-new", type=int, default=0, help="new Moomoo quota codes to spend")
     parser.add_argument("--config", default="config/local.contest.yaml")
     parser.add_argument("--day", type=date.fromisoformat, default=date(2026, 10, 22))
     parser.add_argument("--limit", type=int, default=4, help="IBKR: options to ask about")
+    parser.add_argument(
+        "--days",
+        nargs="*",
+        type=date.fromisoformat,
+        default=[date(2026, 10, 21), date(2026, 10, 22), date(2026, 10, 23)],
+        help="spy: days to probe",
+    )
     args = parser.parse_args(argv)
-    found = probe_moomoo(args) if args.source == "moomoo" else probe_ibkr(args)
+    found = {"moomoo": probe_moomoo, "ibkr": probe_ibkr, "spy": probe_spy}[args.source](args)
     path = ROOT / f"data/calibration/probe-{args.source}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps({"at": datetime.now().isoformat(), **found}, default=str, indent=1) + "\n")

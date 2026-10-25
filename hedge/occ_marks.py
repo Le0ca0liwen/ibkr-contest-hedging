@@ -37,15 +37,28 @@ PARAMS = {
     # (the one day with a full closing chain): $227 of option-value error on the six SPCX/RKLB legs,
     # against $526 for the midpoint, $367 for hedge/marks.py and $1,458 with inv_vega2.
     "weight": "inv_spread2",  # inv_spread2, inv_spread, inv_vega2 (squared IV-space errors), inv_vega, unit
+    # One scale for a strike's call and put weights ("joint"), so a tight quote outweighs a wide one
+    # on the other side and keeps its midpoint; "side" (each side scaled by its own tightest quote)
+    # let a tight call and a wide put split a parity gap almost evenly (BA: $0.039 a contract
+    # against $0.013 joint, RKLB $0.077 against $0.064).
+    "weight_norm": "joint",
     # The forward: "fit" (the least-squares fit chooses it), "median5"/"atm" (parity of the five
-    # nearest pairs / the nearest pair, fixed), "spot" (spot carried at the rate, fixed). IBKR's
-    # 16:00 books against the Oct 7-23 statements and Oct 22's 2,912 OCC prices (185 contracts
-    # with both): single stocks follow their at-the-money parity (RKLB Nov 20: every strike's OCC
-    # pair implies 51.58, the 50-strike midpoints 51.63, the five-strike median 51.40); SPY's OCC
-    # forward sits 0.2-0.3 below its quotes' parity, at the share price carried at about 3.9%.
-    # Mean |error|: $0.062 a contract, against $0.089 for the midpoint and $0.082 with "fit".
-    "forward": "atm",
-    "forward_late": "spot",  # for SPY-style ETF options (config.LATE_OPTION_SYMBOLS)
+    # nearest pairs / the nearest pair, fixed), "interp" (the parity forwards of the two pairs
+    # around spot, interpolated at spot), "spot" (spot carried at the rate, fixed). IBKR's 16:00
+    # books against the Oct 7-23 statements and Oct 22's 2,912 OCC prices (1,003 contracts with
+    # both): single stocks follow their at-the-money parity (RKLB Nov 20: every strike's OCC pair
+    # implies 51.58, the 50-strike midpoints 51.63, the five-strike median 51.40). Mean |error|
+    # $0.048 a contract with these settings, $0.063 with the nearest pair and spot carry for SPY,
+    # $0.115 for the midpoint (docs/STATEMENT_NAV.md, Oct 25).
+    "forward": "interp",
+    # SPY-style ETF options (config.LATE_OPTION_SYMBOLS): the at-the-money pair's parity on its
+    # American midpoints, kept through the de-Americanizing ("forward_space_late": "mid"). It
+    # follows the chain's dividends, where spot carried at the rate missed Dec 18 by $0.69. OCC's
+    # SPY forward still moves by a whole-day shift the 16:00 books do not show (+0.25, -0.15 to
+    # -0.22, -0.27 to -0.34 on Oct 21-23), so the fit stays clipped to the bid/ask.
+    "forward_late": "atm",
+    "forward_space": "eu",  # "eu": re-derive the forward from the de-Americanized midpoints; "mid": keep it
+    "forward_space_late": "mid",
     "rate": 0.039,  # the forward's carry (SOFR-like), not the contest's 3.44% scoring rate
     "min_days": 1,  # quotes expiring sooner are filtered out
     "steps": 201,  # Leisen-Reimer tree steps
@@ -135,11 +148,18 @@ class _Tree:
 
 
 def _forward(pairs, spot, t, rate, mode="fit", key="mid"):
-    """The expiry's forward: spot carried at `rate` ("spot"), the parity forward of the pair nearest
-    the money ("atm"), else the median parity forward of the five nearest (`key`: the quotes'
-    midpoints, or their de-Americanized ones)."""
+    """The expiry's forward: spot carried at `rate` ("spot"), the parity forwards of the two pairs
+    around spot interpolated at spot ("interp"; the nearest pair's outside the strikes), the parity
+    forward of the pair nearest the money ("atm"), else the median parity forward of the five
+    nearest (`key`: the quotes' midpoints, or their de-Americanized ones). `pairs` are by strike."""
     if mode == "spot" or not pairs:
         return spot * math.exp(rate * t)
+    if mode == "interp":
+        strikes = [p["strike"] for p in pairs]
+        if strikes[0] < spot < strikes[-1]:
+            values = [p["strike"] + math.exp(rate * t) * (p["C"][key] - p["P"][key]) for p in pairs]
+            return float(np.interp(spot, strikes, values))
+        mode = "atm"
     near = sorted(pairs, key=lambda p: abs(p["strike"] - spot))[: 1 if mode == "atm" else 5]
     values = [p["strike"] + math.exp(rate * t) * (p["C"][key] - p["P"][key]) for p in near]
     return float(np.median(values))
@@ -165,8 +185,7 @@ def _weights(rows, kind, forward, t, rate):
                 "inv_spread": 1 / spread,
             }[kind]
         )
-    scale = max(weights)
-    return np.array(weights) / scale
+    return np.array(weights)
 
 
 def _fit(pairs, forward, t, rate, params):
@@ -179,6 +198,11 @@ def _fit(pairs, forward, t, rate, params):
     rows_c, rows_p = [p["C"] for p in pairs], [p["P"] for p in pairs]
     wc = _weights(rows_c, params["weight"], forward, t, rate)
     wp = _weights(rows_p, params["weight"], forward, t, rate)
+    if params["weight_norm"] == "joint":
+        scale = max(wc.max(), wp.max())
+        wc, wp = wc / scale, wp / scale
+    else:
+        wc, wp = wc / wc.max(), wp / wp.max()
     mid_c = np.array([r["eu_mid"] for r in rows_c])
     mid_p = np.array([r["eu_mid"] for r in rows_p])
     low_c, high_c = np.array([r["eu_bid"] for r in rows_c]), np.array([r["eu_ask"] for r in rows_c])
@@ -292,7 +316,8 @@ def _smooth(pairs, spot, t, rate, days, params):
                 row["eep"] = premium
                 row["eu_mid"] = max(row["mid"] - premium, 1e-6)
                 row["eu_bid"], row["eu_ask"] = max(row["bid"] - premium, 0.0), max(row["ask"] - premium, 1e-6)
-        forward = _forward(pairs, spot, t, rate, params["forward"], "eu_mid")
+        key = "mid" if params["forward_space"] == "mid" else "eu_mid"
+        forward = _forward(pairs, spot, t, rate, params["forward"], key)
     calls, puts, fitted_forward = _fit(pairs, forward, t, rate, params)
     borrow = rate - math.log(fitted_forward / spot) / t
     tree = _Tree(spot, rate, borrow, days, params["steps"])
@@ -351,10 +376,11 @@ def chain_marks(chain, rate, params=None, workers=1):
 
 
 def symbol_params(symbol, params=None):
-    """PARAMS with `params` over them, and the ETF forward rule for SPY-style options."""
+    """PARAMS with `params` over them, and the ETF forward rules for SPY-style options."""
     chosen = {**PARAMS, **(params or {})}
     if symbol in LATE_OPTION_SYMBOLS:
         chosen["forward"] = chosen["forward_late"]
+        chosen["forward_space"] = chosen["forward_space_late"]
     return chosen
 
 

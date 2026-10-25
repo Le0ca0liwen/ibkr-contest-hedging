@@ -37,10 +37,10 @@ from hedge.occ_marks import occ_marks, symbol_params  # noqa: E402
 
 CODE = re.compile(r"^US\.([A-Z.]+?)(\d{6})([CP])(\d+)$")
 GRID = {
-    "weight": ["inv_spread2", "inv_spread"],
-    "forward": ["fit", "atm"],
-    "forward_late": ["fit", "atm", "spot"],
-    "rate": [0.034, 0.039],
+    "weight_norm": ["joint", "side"],
+    "forward": ["fit", "atm", "interp"],
+    "forward_late": ["atm", "spot"],
+    "forward_space_late": ["eu", "mid"],
 }
 SPREADS = ((0.05, "<= 0.05"), (0.20, "0.05-0.20"), (0.50, "0.20-0.50"), (float("inf"), "> 0.50"))
 
@@ -204,9 +204,9 @@ def estimate(day, symbol, expiries, books, spot, params):
     for row in chain:
         result[row["key"]]["mid"] = (row["bid"] + row["ask"]) / 2
         result[row["key"]]["spread"] = row["ask"] - row["bid"]
-    for code, m in smooth_marks(chain, spot, at, params["rate"]).items():
-        result[code]["local"] = m["mark"]
     occ = symbol_params(symbol, params)
+    for code, m in smooth_marks(chain, spot, at, occ["rate"]).items():
+        result[code]["local"] = m["mark"]
     for code, m in occ_marks(chain, spot, at, occ["rate"], occ).items():
         result[code]["occ"] = m["mark"]
     return dict(result)

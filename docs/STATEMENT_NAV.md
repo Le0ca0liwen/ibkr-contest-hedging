@@ -191,6 +191,34 @@ closes, the quotes standing at 16:00) against every statement leg from Oct 8 and
   every option at its least favorable 16:00 side (single SPY legs fell $75-150 outside).
 - In the statements the options are $199-1,054 *below* their 16:00 midpoints each day.
 
+### Tuned settings (Oct 25)
+
+2,192 IBKR books, 1,003 contracts with an OCC price. The model families tried were 267 rebuild
+settings, gradient boosting on the rebuild's residual, and a small transformer over the whole chain.
+Each was checked by a second, independent run. Neither learned model beat the rebuild once whole days
+were held out. Their apparent gains came from learning Oct 22's own SPY forward offset, which flips
+sign from day to day. Three rebuild changes did beat it:
+
+- **Joint weight scale.** One weight scale for a strike's call and put (`weight_norm: joint`), so a
+  tight quote keeps its midpoint against a wide one on the other side.
+- **Single-stock forward.** The parity forward interpolated at spot (`forward: interp`).
+- **SPY forward.** The at-the-money pair's parity on American midpoints (`forward_late: atm`,
+  `forward_space_late: mid`), in place of spot carried at 3.9%. It follows the chain's dividends.
+
+| | Midpoint | Smoothing | Old settings | **New settings** |
+|---|---|---|---|---|
+| Mean \|error\| per contract | $0.115 | $0.104 | $0.063 | **$0.048** |
+| SPY / SPCX / RKLB / BA | 0.126 / 0.036 / 0.141 / 0.009 | 0.117 / 0.026 / 0.095 / 0.021 | 0.070 / 0.014 / 0.067 / 0.039 | 0.054 / 0.011 / 0.049 / 0.013 |
+| Held legs' value error, Oct 21 / 22 / 23 | $760 / $1,054 / $199 | $917 / $363 / $195 | $892 / $27 / $95 | **$621 / $35 / $29** |
+
+- **Oct 21:** most of the remaining error is one leg, RKLB 261120P55, priced at its bid.
+- **What the gains rest on:**
+  - The single-stock gains hold on every day.
+  - The SPY gain rests on Oct 22 alone, since on the other days both rules clip to the same book edge.
+- **What no 16:00 input explains:** OCC's SPY forward moves by a whole-day shift of +0.25, about
+  −0.2 and about −0.3 on Oct 21, 22 and 23. `ops/probe_close_sources.py spy` pulls SPY's share
+  price from 15:55 to 16:20, to find the minute OCC takes it.
+
 Most of the evidence is Oct 22. The Oct 23 chain (IBKR books overnight, OCC prices from Moomoo on
 Monday morning) is the out-of-sample check; from Oct 26 every chain snapshot also carries the
 previous day's price of every listed option.
