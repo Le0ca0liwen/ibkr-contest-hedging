@@ -103,9 +103,10 @@ and model-style option marks, so it was $140.17 off the statement.
 - **Closing burner:** in the contest it works after the close, from 16:16 until the post-market
   cutoffs before 20:00, shares only.
   - **Gap:** predicted statement NAV minus target. It is uncertain only by the option prices.
-    With `post_close_basis: worst_case` (the default) the burner spends only `low` minus target,
-    the gap with every option at the least favorable side of its closing bid/ask. With `quantile`
-    it spends toward `spend_quantile` of the samples around the predicted prices.
+    With `post_close_basis: worst_case` (the code default) the burner spends only `low` minus
+    target, the gap with every option at the least favorable side of its closing bid/ask. With
+    `quantile` (the contest's setting from Oct 26) it spends toward `spend_quantile` of the samples
+    around the predicted prices.
   - **No just-in-time wait:** the gap no longer moves with the market.
   - **Cost per round trip:** exactly the spread paid plus commissions.
 - **Official close:** `api_close_official` is False. An API row is provisional and warns until the
