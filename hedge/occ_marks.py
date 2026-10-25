@@ -1,17 +1,23 @@
 """The Options Clearing Corporation's end-of-day option price, rebuilt: the price IBKR's statement
 uses for every listed option (IBKR FAQ 1199).
 
-OCC's published method (SR-OCC-2019-005, 84 FR 32816; SR-OCC-2020-016, 85 FR 85788; Cboe: "In all
-cases, OCC marks closing ... prices based on the 4:00 p.m. ET NBBO"), per underlying and expiry:
+OCC's published method (SR-OCC-2019-005, 84 FR 32816; SR-OCC-2020-016, 85 FR 85788; Cboe, 91 FR
+18013: "In all cases, ... OCC marks closing and/or settlement prices based on the 4:00 p.m. ...
+NBBO"), per underlying and expiry:
 1. filter out quotes with too little time left, one-sided strikes (a call without a put or the
    reverse), zero asks, crossed books and American asks below intrinsic value;
-2. estimate the forward (and with it the borrow) from near-the-money put-call parity;
-3. "de-Americanize" the quotes (Leisen-Reimer tree), then find the prices closest to the targets
-   (vega-weighted least squares) that stay inside each bid/ask, are monotone and convex in strike
-   and satisfy put-call parity, and "re-Americanize" them;
+2. fix the forward (and with it the borrow) from near-the-money put-call parity before the fit;
+   OCC adds a SOFR curve and a vendor's discrete dividends (84 FR 32818; 91 FR 37462);
+3. "de-Americanize" the quotes (Leisen-Reimer tree; OCC's has 51-501 steps by tenor), then find the
+   prices closest to the targets that stay inside each bid/ask, are monotone and convex in strike
+   and satisfy put-call parity (OCC's "first round" is vega-weighted least squares; under parity a
+   strike's call and put share one vega, so that splits a parity gap evenly, which the statements
+   contradict: the weights here are by spread), and "re-Americanize" them;
 4. price the filtered-out contracts from the fitted surface (linear in total variance).
-The parameters OCC keeps confidential (weights, targets, filter thresholds) are PARAMS, tuned on
-statement prices with ops/mark_backtest.py.
+The parameters OCC keeps confidential (weights, targets, filter thresholds, later rounds) are PARAMS,
+tuned on statement prices with ops/mark_backtest.py. SPY is the exception the books cannot explain:
+OCC's forward differs from its 16:00 (and 16:15) books by one amount per day (+0.22, -0.22, about
+-0.15 on Oct 21-23), so its prices sit outside the book on the side that amount implies.
 """
 
 from __future__ import annotations
