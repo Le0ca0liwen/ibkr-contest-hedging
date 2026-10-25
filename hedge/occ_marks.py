@@ -72,8 +72,9 @@ PARAMS = {
     "round": 4,  # decimals the statement prints
     # A quote priced from the surface (its strike has no counterpart) but with a valid book of its
     # own is kept inside that book: OCC's "final prices remain within the bid-ask spread" (82 FR
-    # 61062 fn 27). Off, a far-out call one-sided at 195 got $0.02 against OCC's $0.26 (bid 0.07).
-    "clip_surface": False,
+    # 61062 fn 27). Unclipped, a one-sided RKLB Dec 18 195C got $0.02 against OCC's $0.26 (bid 0.07).
+    # 3,877 contracts over 30 days: $0.0554 -> $0.0534 a contract, better on 18 days, never worse.
+    "clip_surface": True,
 }
 YEAR = 365.0  # calendar-day convention (SR-OCC-2024-016)
 

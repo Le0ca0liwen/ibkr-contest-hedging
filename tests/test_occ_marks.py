@@ -118,8 +118,8 @@ def test_a_one_sided_strike_can_be_kept_inside_its_own_book():
     true = prices["C95"][2]
     off = (round(true + 0.20, 2), round(true + 0.30, 2))  # the surface value sits below this book
     rows = [r for r in chain(prices, overrides={"C95": off}) if r["key"] != "P95"]
-    free = occ_marks(rows, SPOT, AT, RATE)["C95"]
-    kept = occ_marks(rows, SPOT, AT, RATE, {"clip_surface": True})["C95"]
+    free = occ_marks(rows, SPOT, AT, RATE, {"clip_surface": False})["C95"]
+    kept = occ_marks(rows, SPOT, AT, RATE)["C95"]
     assert free["mark"] < off[0] and kept["mark"] == off[0] and "surface" in kept["source"]
 
 
