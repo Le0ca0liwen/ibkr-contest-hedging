@@ -21,6 +21,7 @@ UNKNOWN_SETTLE = timedelta(minutes=2)
 class ExecutionManager:
     def __init__(self, manifest, store, broker, gate):
         self.manifest, self.store, self.broker, self.gate = manifest, store, broker, gate
+        self.surplus_weight = 1.0  # the closing loss the plan was optimized under (TradingService)
         self.lock = asyncio.Lock()
         self.paused = True
         self.pause_requested = False
@@ -95,10 +96,9 @@ class ExecutionManager:
             scenario_id=scenarios.identifier,
             config_hash=self.manifest.config_hash,
         )
-        evaluated = HedgeOptimizer(self.manifest).evaluate_target(
-            snapshot, quotes, scenarios, target, previous, estimate
-        )
-        exposure_only = HedgeOptimizer(self.manifest).evaluate_target(
+        optimizer = HedgeOptimizer(self.manifest, self.surplus_weight)
+        evaluated = optimizer.evaluate_target(snapshot, quotes, scenarios, target, previous, estimate)
+        exposure_only = optimizer.evaluate_target(
             snapshot, quotes, scenarios, target, previous, estimate, include_costs=False
         )
         return (

@@ -70,10 +70,22 @@ def _stress_projection(stress, idx, fixed):
     return matrix, offset
 
 
+def closing_loss(gap, surplus_weight, capacity):
+    """Per-scenario closing loss: |gap|, or with a live burner (surplus_weight < 1) a deficit in
+    full, a surplus up to `capacity` at surplus_weight and above it in full again. Never above |gap|.
+    Works on numpy arrays and on cvxpy expressions."""
+    if surplus_weight >= 1:
+        return cp.abs(gap) if isinstance(gap, cp.Expression) else np.abs(gap)
+    parts = (-gap, surplus_weight * gap, gap - (1 - surplus_weight) * capacity)
+    return cp.maximum(*parts) if isinstance(gap, cp.Expression) else np.maximum.reduce(parts)
+
+
 class HedgeOptimizer:
-    def __init__(self, manifest):
+    def __init__(self, manifest, surplus_weight=1.0):
         self.manifest = manifest
         self.baseline_nav = float(manifest.initial_nav)
+        # policy.surplus_weight while the post-close burner trades (TradingService sets it), else 1.
+        self.surplus_weight = surplus_weight
 
     def evaluate_target(
         self, snapshot, quotes, scenarios, target, previous_nav, nav_estimate, include_costs=True
@@ -148,7 +160,11 @@ class HedgeOptimizer:
         credit = not m.policy.statement_interest  # else the estimate already holds the day's interest
         carry = cash_carry(m, cash, borrow, scenarios.calendar_days, nav, with_credit=credit)
         gap = error + scenarios.changes @ vector + carry
-        closing = np.abs(gap - cost) if m.policy.burn_surplus else np.abs(gap) + cost
+        lam, capacity = self.surplus_weight, m.policy.burn_capacity
+        if m.policy.burn_surplus:
+            closing = closing_loss(gap - cost, lam, capacity)
+        else:
+            closing = closing_loss(gap, lam, capacity) + cost
         overnight = np.zeros_like(closing)
         if (term := self._overnight(scenarios, target_nav)) is not None:
             weight, days, offset = term
@@ -487,9 +503,10 @@ class HedgeOptimizer:
 
         def closing(gap, cost):
             # burn_surplus: costs inside the gap spend down a surplus; otherwise an additive penalty.
+            lam, capacity = self.surplus_weight, m.policy.burn_capacity
             if m.policy.burn_surplus:
-                return scenarios.weights @ cp.abs(gap - cost)
-            return scenarios.weights @ cp.abs(gap) + cost
+                return scenarios.weights @ closing_loss(gap - cost, lam, capacity)
+            return scenarios.weights @ closing_loss(gap, lam, capacity) + cost
 
         objective_score = closing(error + scenarios.changes @ total_h + carry, scored_costs)
         if strategy == "historical_l1":

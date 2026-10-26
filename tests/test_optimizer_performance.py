@@ -72,17 +72,19 @@ def small_problem(manifest, snapshot, quotes, cash, held, gap):
     return m, s, qs, sc, float(s.nav) + gap
 
 
+@pytest.mark.parametrize("lam,capacity", [(1.0, 0.0), (0.25, 15.0)])
 @pytest.mark.parametrize("statement", [False, True])
 @pytest.mark.parametrize("cash", [-1000, 10000, 100000])
 @pytest.mark.parametrize("held,gap", [(-2, -25), (2, 25)])
 def test_reduced_model_matches_enumerated_integer_cost_and_carry(
-    manifest, snapshot, quotes, cash, held, gap, statement
+    manifest, snapshot, quotes, cash, held, gap, statement, lam, capacity
 ):
     m, s, qs, sc, estimate = small_problem(manifest, snapshot, quotes, cash, held, gap)
     # policy.statement_interest: the estimate holds the day's statement interest, so the closing
-    # carry has no cash credit (borrow and debit interest stay).
-    m = m.model_copy(update={"policy": m.policy.model_copy(update={"statement_interest": statement})})
-    opt = HedgeOptimizer(m)
+    # carry has no cash credit (borrow and debit interest stay). lam < 1: the burner-aware loss.
+    policy = {"statement_interest": statement, "surplus_weight": lam, "burn_capacity": capacity}
+    m = m.model_copy(update={"policy": m.policy.model_copy(update=policy)})
+    opt = HedgeOptimizer(m, lam)
     target = opt.solve(s, qs, sc, s.nav, estimate)
     assert target.status == "OPTIMAL"
     scores = []
@@ -91,7 +93,9 @@ def test_reduced_model_matches_enumerated_integer_cost_and_carry(
         cash_after = cash - qs[10].mid * (h - held) - fee
         short = max(0, -h) * qs[10].spot
         carry = cash_carry(m, cash_after, short, sc.calendar_days, float(s.nav), with_credit=not statement)
-        scores.append(float(sc.weights @ np.abs(gap + sc.changes[:, 0] * h + carry - fee)))
+        g = gap + sc.changes[:, 0] * h + carry
+        loss = np.maximum.reduce([-(g - fee), lam * (g - fee), (g - fee) - (1 - lam) * capacity])
+        scores.append(float(sc.weights @ (np.abs(g - fee) if lam == 1 else loss)))
     assert target.expected_score <= min(scores) + 1 + 1e-5
     assert target.estimated_cost == pytest.approx(
         execution_cost(m, qs, [10], [target.quantities.get(10, 0) - held])

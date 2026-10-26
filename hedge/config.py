@@ -89,6 +89,26 @@ class TradingPolicy(Frozen):
     # imported statements to the closing NAV estimate, and the closing carry leaves out the cash
     # credit so it is not counted twice. False: a pro-rata cash credit up to the close only.
     statement_interest: bool = False
+    # Closing surplus weight while the post-close burner is in paper: a deficit counts in full, a
+    # surplus up to burn_capacity at this weight (the burner spends it down to a small margin),
+    # anything above burn_capacity in full again. 1 = the symmetric |gap|. Loss:
+    # max(-g, surplus_weight * g, g - (1 - surplus_weight) * burn_capacity).
+    surplus_weight: float = Field(default=1, ge=0, le=1)
+    burn_capacity: float = Field(default=0, ge=0)
+    # Short-dated hedge tier: for each underlying with mandated options, also screen this many
+    # strikes nearest the money of the shortest listed expiry at least short_dated_min_days away
+    # and before the mandated one. Gamma per contract grows ~1/sqrt(time), so these offset the
+    # mandated legs' gamma and decay with less gross notional than the neighbouring expiries. 0: off.
+    short_dated_candidates: int = Field(default=0, ge=0, le=8)
+    short_dated_min_days: int = Field(default=5, ge=1, le=60)
+
+    @model_validator(mode="after")
+    def surplus_needs_capacity(self):
+        if self.surplus_weight < 1 and not self.burn_capacity:
+            raise ValueError(
+                "policy.surplus_weight below 1 needs policy.burn_capacity (USD the burner can spend)"
+            )
+        return self
 
     @model_validator(mode="after")
     def interest_provenance(self):

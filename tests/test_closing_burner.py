@@ -1372,3 +1372,25 @@ async def test_a_resting_post_market_burn_leg_never_trips_the_working_order_chec
     await steps(service, 2)  # cancels the rest and sends the exit for the filled part
     exit_leg = next(r for r in service.store.intents(service.manifest.account) if r.get("leg") == "exit")
     assert exit_leg["signed_quantity"] == -part
+
+
+def test_the_burner_aware_closing_loss_needs_a_capacity(manifest):
+    from hedge.optimizer import closing_loss
+
+    with pytest.raises(ValidationError):
+        manifest.policy.model_validate({**manifest.policy.model_dump(), "surplus_weight": 0.25})
+    gaps = np.array([-300.0, 0.0, 200.0, 2500.0])
+    # A deficit in full; a surplus the burner can spend at a quarter; above capacity in full again.
+    assert closing_loss(gaps, 0.25, 2000).tolist() == [300.0, 0.0, 50.0, 1000.0]
+    assert closing_loss(gaps, 1.0, 0).tolist() == [300.0, 0.0, 200.0, 2500.0]
+    assert (closing_loss(gaps, 0.25, 2000) <= np.abs(gaps)).all()
+
+
+async def test_the_optimizer_uses_the_surplus_weight_only_while_the_burner_trades(burning, monkeypatch):
+    service, _ = await burning()
+    policy = service.manifest.policy.model_copy(update={"surplus_weight": 0.25, "burn_capacity": 2000})
+    service.manifest = service.manifest.model_copy(update={"policy": policy})
+    for mode, weight in (("paper", 0.25), ("shadow", 1.0), ("off", 1.0)):
+        monkeypatch.setattr(service.burner, "effective_mode", lambda mode=mode: mode)
+        assert service._sync_closing_loss() == weight
+        assert service.optimizer.surplus_weight == service.execution.surplus_weight == weight

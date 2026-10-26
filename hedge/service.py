@@ -1875,6 +1875,14 @@ class TradingService:
                     str(exc) or type(exc).__name__
                 )
 
+    def _sync_closing_loss(self):
+        """policy.surplus_weight only while the post-close burner actually trades: with it in shadow
+        or off a surplus stays on the books and counts in full."""
+        live = self.burner.effective_mode() == "paper"
+        weight = self.manifest.policy.surplus_weight if live else 1.0
+        self.optimizer.surplus_weight = self.execution.surplus_weight = weight
+        return weight
+
     def _closing_estimate(self, snapshot, quotes):
         """The NAV estimate the optimizer scores against the closing target: with
         policy.statement_interest, plus the interest the day's statement accrues beyond IBKR's live
@@ -2331,6 +2339,7 @@ class TradingService:
             )
             quote_coverage(quotes, scenarios.ids)
             estimate = self._closing_estimate(snap, quotes)
+            surplus_weight = self._sync_closing_loss()
             target = await asyncio.to_thread(
                 self.optimizer.solve,
                 snap,
@@ -2480,6 +2489,7 @@ class TradingService:
                 "recovery": recovery_selected,
                 "recovery_reference": baseline_quantities if recovery_selected else None,
                 "nav_gap": estimate - float(previous),
+                "surplus_weight": surplus_weight,
                 "closing_target": float(previous),
                 "optimization_scope": "CORRECTIVE_STOCK" if failed_primary else "FULL" if full else "STOCK",
                 "hold_distance": target.current_score,
@@ -2631,6 +2641,7 @@ class TradingService:
             self.health = "Quote coverage changed during execution planning; refreshing the hedge proposal"
             return
         estimate = self._closing_estimate(snapshot, quotes)
+        self._sync_closing_loss()
         target = self.optimizer.evaluate_target(
             snapshot, quotes, scenario_for_plan, target, previous, estimate
         )

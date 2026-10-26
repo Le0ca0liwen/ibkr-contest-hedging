@@ -1,10 +1,13 @@
+from .config import NY
+
+
 def screen_snapshot(manifest, quotes, snapshot):
     """Retain filled inventory AND working legs, including orders closing to zero."""
     retained = snapshot.quantities()
     for order in snapshot.orders:
         if order.signed_remaining:
             retained.setdefault(order.con_id, order.signed_remaining)
-    return screen_options(manifest, quotes, retained)
+    return screen_options(manifest, quotes, retained, snapshot.at.astimezone(NY).date())
 
 
 def neighbouring_expiries(expiries, primary):
@@ -28,8 +31,9 @@ def neighbouring_expiries(expiries, primary):
     return ordered
 
 
-def screen_options(manifest, quotes, actual):
-    """Screen by moneyness/expiry deterministically, preserving held hedges."""
+def screen_options(manifest, quotes, actual, today=None):
+    """Screen by moneyness/expiry deterministically, preserving held hedges. `today` dates the
+    short-dated tier (policy.short_dated_candidates); without it the tier is skipped."""
     chosen = {i for i in actual if actual[i]} | set(manifest.mandatory)
     approved = {i for i in manifest.allowlist if not manifest.prohibited_reason(manifest.contract_map[i])}
     chosen |= {i for i in approved if manifest.contract_map[i].kind == "STK"}
@@ -60,4 +64,13 @@ def screen_options(manifest, quotes, actual):
         # Without same-expiry candidates, the nearest two neighbours take that share.
         for expiry in neighbours[: 1 if same else 2]:
             chosen.update(c.con_id for c in nearest(expiry)[: 4 if same else 6])
+        tier = manifest.policy.short_dated_candidates
+        if tier and primary is not None and today is not None:
+            short = sorted(
+                c.expiry
+                for c in options
+                if c.expiry < primary and (c.expiry - today).days >= manifest.policy.short_dated_min_days
+            )
+            if short:
+                chosen.update(c.con_id for c in nearest(short[0])[:tier])
     return tuple(sorted(i for i in chosen if i in quotes))

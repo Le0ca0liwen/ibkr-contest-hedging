@@ -513,3 +513,36 @@ async def test_voo_and_ivv_are_added_as_tradable_hedges_with_a_borrow_allowance(
     assert updated.stock_borrow == {"VOO": 300, "IVV": 300}
     assert updated.stock_borrow_source == "IBKR paper: easy to borrow (operator)"
     assert updated.mandatory == m.mandatory and updated.config_hash != m.config_hash
+
+
+def test_the_short_dated_tier_screens_the_nearest_listed_expiry_at_least_n_days_out(manifest, quotes):
+    """Gamma per contract grows as expiry nears: a short-dated tier offsets the mandated legs'
+    gamma and decay with less gross notional than the neighbouring expiries (Oct 26)."""
+    from datetime import timedelta
+
+    base = manifest.contract_map[101]  # a mandated leg; 103-106 are same-expiry candidates
+    today = base.expiry - timedelta(days=30)
+    extra = [
+        base.model_copy(update={"con_id": 400 + n, "expiry": e, "strike": k})
+        for n, (e, k) in enumerate(
+            [
+                (today + timedelta(days=2), 195),  # under the 5-day minimum
+                (today + timedelta(days=6), 195),
+                (today + timedelta(days=6), 400),  # far from the money
+                (base.expiry - timedelta(days=7), 195),  # the nearest neighbour
+            ]
+        )
+    ]
+    m = manifest.model_copy(
+        update={
+            "contracts": (*manifest.contracts, *extra),
+            "allowlist": (*manifest.allowlist, *(c.con_id for c in extra)),
+        }
+    )
+    quotes = {**quotes, **{c.con_id: quotes[101].model_copy(update={"con_id": c.con_id}) for c in extra}}
+    plain = set(screen_options(m, quotes, {}, today))
+    assert 403 in plain and not {400, 401, 402} & plain  # same expiry + the nearest neighbour only
+    tiered = m.model_copy(update={"policy": m.policy.model_copy(update={"short_dated_candidates": 1})})
+    ids = set(screen_options(tiered, quotes, {}, today))
+    assert ids - plain == {401}  # the shortest expiry at least 5 days out, strike nearest the money
+    assert set(screen_options(tiered, quotes, {})) == plain  # undated: no tier
