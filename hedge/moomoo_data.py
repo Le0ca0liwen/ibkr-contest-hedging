@@ -81,13 +81,16 @@ class MoomooData:
         """Regular session for everything (SPY-style options until 16:15 ET, when they close and are
         marked); the contest pre/post-market sessions for shares too."""
         day = now.astimezone(NY).date()
-        end = (
-            self.manifest.option_close(day, contract.symbol)
-            if contract.kind == "OPT"
-            else self.manifest.session_close(day)
-        )
-        if self.manifest.is_session(day) and self.manifest.session_open(day) <= now < end:
-            return True
+        # The calendar raises for a non-session day's close (Moomoo's overnight books push from
+        # Sunday 20:00 ET): ask only on session days.
+        if self.manifest.is_session(day):
+            end = (
+                self.manifest.option_close(day, contract.symbol)
+                if contract.kind == "OPT"
+                else self.manifest.session_close(day)
+            )
+            if self.manifest.session_open(day) <= now < end:
+                return True
         return contract.kind == "STK" and self.manifest.extended_session(now) is not None
 
     def _extended_hours_option(self, contract, raw, stock_item, stock_at, spot, bid, ask, vendor_iv, now):

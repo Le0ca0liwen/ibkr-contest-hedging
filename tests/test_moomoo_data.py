@@ -334,6 +334,28 @@ def test_deep_itm_leg_at_model_floor_stays_live_with_carried_iv(tmp_path):
     assert quote is None or quote.data_type == "frozen"  # nothing to carry: never live
 
 
+def test_overnight_books_on_a_non_session_day_still_value_every_holding(tmp_path):
+    """Sun Oct 25, 20:23 ET: Moomoo's overnight session pushed live books, and asking the calendar
+    for Sunday's close raised NotSessionError, so every share fell out of the quotes and the app
+    waited on held conIds. Outside a session the books are frozen (valuation only), never live."""
+    from datetime import datetime
+
+    m = demo_manifest()
+    day = m.scoring_sessions[0] - timedelta(days=1)
+    while m.is_session(day):
+        day -= timedelta(days=1)
+    now = datetime.combine(day, datetime.min.time(), NY).replace(hour=20, minute=23)
+    raw = fixture(m, now)
+    raw.update(quote_server_connected=True, rights={"us_qot_right": "LV3", "us_option_qot_right": "LV1"})
+    for c in m.contracts:
+        raw["securities"][code_for(c)].update(book_push_at=now.isoformat(), book_push_count=2)
+    p = tmp_path / "quotes.json"
+    p.write_text(json.dumps(raw))
+    quotes = MoomooData(m, p).quotes(now)
+    assert set(quotes) == {c.con_id for c in m.contracts}
+    assert all(q.data_type == "frozen" for q in quotes.values())
+
+
 def test_operator_borrow_allowance_reaches_moomoo_stock_quotes(tmp_path):
     import pytest
 
