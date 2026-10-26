@@ -31,6 +31,25 @@ overnight term keeps its credit: tomorrow's statement holds tomorrow's interest.
 3.38% a year on cash above $10,000 in October, on the settled cash of two days earlier, against
 the scoring benchmark's 3.44% on the whole NAV: about $13 a weekday less than the target's growth.
 
+**Burner-aware closing loss and short-dated tier: tested, left off (Oct 26).**
+`policy.surplus_weight` (< 1, with `burn_capacity`) scores the close as
+`max(-g, w g, g - (1 - w) C)` while the post-close burner is in paper;
+`policy.short_dated_candidates` screens strikes of the shortest listed expiry at least
+`short_dated_min_days` out (options may not expire before the final holding session, so SPY's
+nearest is Nov 5/6). Replayed through the real service on the Oct 8-21 sessions (1-minute stock
+paths, fixed implied vols, IBKR-paper-like fills), each 16:00 miss scored with the shipped burner
+(spend to prediction - $50, error N(+28, 30), capacity $2,000), mean daily |miss|:
+
+| 10 sessions | With the burner | Without | Better than the symmetric loss |
+|---|---|---|---|
+| Symmetric `E|g|` (live) | **$456** | $1,009 | |
+| `surplus_weight` 0.25, capacity $2,000 | $557 | $1,118 | 3 of 10 |
+| The same + Nov 6 SPY tier | $490 | $1,061 | 1 of 10 |
+
+Weighting a surplus lightly made the optimizer favour long gamma (theta -$385 a day against
+-$354): upside it could burn, paid for by decay it could not. Both stay off. The burner itself
+more than halves the replayed miss.
+
 Each decision records `cost_treatment` and `burn_component = E|g| + c - E|g - c|`
 (between 0 and 2c; 2c means the whole cost was credited as surplus burn), plus
 `overnight_score` and the target's `components` (closing, overnight, scored_cost,
