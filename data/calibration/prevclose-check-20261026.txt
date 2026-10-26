@@ -1,0 +1,13 @@
+=== Mon Oct 26 09:35:40 EDT 2026
+US.RKLB261120P55000      prev_close 5.8989     statement 5.8989     MATCH
+US.SPCX261120C130000     prev_close 20.1577    statement 20.1577    MATCH
+US.SPCX261120P145000     prev_close 7.25       statement 7.25       MATCH
+US.SPCX261120C160000     prev_close 4.1        statement 4.1        MATCH
+US.SPY261120C770000      prev_close 8.64       statement 8.64       MATCH
+US.SPY261120P770000      prev_close 16.702     statement 16.702     MATCH
+US.RKLB261120P45000      prev_close 1.6        statement 1.6        MATCH
+US.SPCX261120C145000     prev_close 10.021     statement 10.021     MATCH
+US.SPY261127C770000      prev_close 9.995      statement 9.995      MATCH
+US.SPY261127P770000      prev_close 17.5263    statement 17.5263    MATCH
+MATCHED 10/10 (ret=0)
+2918 option quotes for SPCX, RKLB, SPY in data/calibration/chain-prevclose-20261026-0935.json
