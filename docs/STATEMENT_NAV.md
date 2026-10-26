@@ -269,6 +269,30 @@ nearest the money, calls and puts.
 - **The days before Oct 21** carry partial chains (two expiries, 8 strikes), so their errors are
   higher than on the full chains of Oct 21–22.
 
+**Oct 23 out of sample (Oct 26).** The live settings were tuned before Oct 23's prices were known
+(Moomoo's prev_close on Oct 26 gave them for 2,918 contracts; 2,126 have IBKR 16:00 books):
+
+| Oct 23, mean \|error\| per contract | Midpoint | Live rebuild |
+|---|---|---|
+| All (2,126) | 0.101 | **0.041** |
+| RKLB (190) | 0.150 | **0.022** |
+| SPCX (264) | 0.071 | **0.010** |
+| SPY (1,672) | 0.100 | **0.048** |
+
+The held legs' value error was $29 (midpoint $199).
+
+**SPY at 16:00 or 16:15, settled.** The same SPY contracts priced from IBKR's 16:15 books instead
+of the 16:00 ones. Mean |error| per contract, midpoint / rebuild:
+
+| | 16:00 books | 16:15 books |
+|---|---|---|
+| Oct 21 (175) | 0.128 / 0.173 | 0.063 / 0.137 |
+| Oct 22 (180) | 0.104 / 0.062 | 0.106 / 0.068 |
+| Oct 23 (180) | 0.080 / 0.040 | 0.411 / 0.340 |
+
+16:00 wins overall; Oct 23's 16:15 books were far off. SPY stays on its 4:00 p.m. book, as
+OCC's filings say.
+
 **Daily collection, Oct 26 to Nov 5** (read-only; it never touches the app):
 
 1. **About 09:35 ET** (after Moomoo's roll), snapshot the previous trading day's OCC prices, beside
