@@ -75,11 +75,15 @@ def statement_marks(manifest, day, captures, stock_closes, chains=None):
     payloads; `stock_closes` maps share conIds to their regular-session close. An option takes the
     closing book of the capture at its own close; its bid and ask bound the statement's mark. With a
     chain taken at that close (`chains`: phase -> option_chain record, its "occ" the stored
-    hedge/occ_marks.chain_marks) the mark is OCC's rebuilt price, else the local smoothed-IV price, else the
-    midpoint, each kept inside that bid/ask. "estimates" holds every one that was available, for the
-    nightly comparison with the statement."""
+    hedge/occ_marks.chain_marks, its "local" the smoothed marks when already computed) the mark is
+    OCC's rebuilt price, else the local smoothed-IV price, else the midpoint, each kept inside that
+    bid/ask. "estimates" holds every one that was available, for the nightly comparison with the
+    statement."""
     marks, missing = {}, []
-    smoothed = {phase: smoothed_chain_marks(manifest, chain) for phase, chain in (chains or {}).items()}
+    smoothed = {
+        phase: chain["local"] if "local" in (chain or {}) else smoothed_chain_marks(manifest, chain)
+        for phase, chain in (chains or {}).items()
+    }
     rebuilt = {phase: (chain or {}).get("occ") or {} for phase, chain in (chains or {}).items()}
     for c in manifest.contracts:
         if c.kind == "STK":

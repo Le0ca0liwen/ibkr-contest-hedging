@@ -41,6 +41,7 @@ from .statement import (
     StatementTracker,
     fill_fee,
     marks_fixed_at,
+    smoothed_chain_marks,
     statement_marks,
     statement_samples,
     statement_value,
@@ -181,6 +182,8 @@ class TradingService:
         self.power = PowerMonitor()
         self.power_risk = ("ok", "Power status unknown")
         self.occ_done = set()  # (session, phase) whose chain has its OCC rebuild stored or failed
+        self.close_records = {}  # (category, record id) -> stored close capture/chain/OCC record
+        self.local_marks = {}  # (session, phase) -> the chain's local smoothed-IV marks
         self.evening_marks_at = None
         self.closing_recorder = ClosingRecorder(
             manifest, self.ledger, self.broker, self.now, self.alert, demo, statement=self.statement_estimate
@@ -674,7 +677,14 @@ class TradingService:
         m = self.manifest
 
         def get(category, phase):
-            return self.store.get_record(digest((m.contest_id, str(day), phase))[:32], m.account, category)
+            identifier = digest((m.contest_id, str(day), phase))[:32]
+            if (category, identifier) not in self.close_records:
+                found = self.store.get_record(identifier, m.account, category)
+                if found is None:
+                    return None  # not stored yet: asked again next time
+                # Ids fixed per day and phase are insert-once (Store.record), so a found record is final.
+                self.close_records[(category, identifier)] = found
+            return self.close_records[(category, identifier)]
 
         captures = {phase: get("close_marks", phase) for phase in CLOSE_MARK_PHASES}
         chains = {}
@@ -682,7 +692,12 @@ class TradingService:
             chain = get("option_chain", f"{phase}_chain")
             if chain:
                 rebuilt = get("occ_marks", f"{phase}_occ")
-                chains[phase] = {**chain, "occ": (rebuilt or {}).get("marks") or {}}
+                # The local smoothed fit takes ~0.2-0.5 s on the event loop; the burner and the
+                # dashboard ask for the estimate every second or two from 16:16, so fit each chain once.
+                if (day, phase) not in self.local_marks:
+                    self.local_marks[(day, phase)] = smoothed_chain_marks(m, chain)
+                local = self.local_marks[(day, phase)]
+                chains[phase] = {**chain, "occ": (rebuilt or {}).get("marks") or {}, "local": local}
         return captures, chains
 
     async def _chain_loop(self):
@@ -1098,7 +1113,10 @@ class TradingService:
             }
             held = (self.last_snapshot.quantities() if self.last_snapshot else {}).items()
             options = {i for i, q in held if q and i in m.contract_map and m.contract_map[i].kind == "OPT"}
-            _, missing = statement_marks(m, day, captures, {})
+            # SPY's 16:15 book is the last resort (statement_marks prefers the 16:00 archive book), so
+            # an option holding only that capture still counts as missing its 16:00 book.
+            early = {k: v for k, v in captures.items() if k != "options_close"}
+            _, missing = statement_marks(m, day, early, {})
             missing = [i for i in missing if i in options]
             if not missing:
                 return

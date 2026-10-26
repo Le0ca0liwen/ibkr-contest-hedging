@@ -655,3 +655,112 @@ async def test_a_book_from_before_a_sleep_is_never_taken_as_the_closing_book(man
     await service._fallback_close_marks(day, now)
     assert not store.records("close_marks", manifest.account)
     assert not any("unavailable" in a["message"] for a in store.records("alert", manifest.account))
+
+
+async def test_an_option_with_only_its_1615_capture_still_takes_its_1600_archive_book(store, tmp_path):
+    """Review, Oct 25: asleep over 16:00 but awake by 16:13, the app has SPY's 16:15 capture only.
+    The statement prices SPY options at 16:00 (Oct 22's legs sat 10-18 cents from their 16:15
+    midpoints), so the archive's 16:00 book still has to be stored and preferred."""
+    import gzip
+    import json
+    from datetime import date
+
+    from hedge.config import Manifest
+    from hedge.models import digest
+    from hedge.service import TradingService
+
+    spy = Contract(con_id=10, symbol="SPY", kind="STK")
+    call = Contract(
+        con_id=201,
+        symbol="SPY",
+        kind="OPT",
+        multiplier=100,
+        expiry=date(2026, 11, 20),
+        strike=770,
+        right="C",
+        underlying_id=10,
+    )
+    m = Manifest(
+        name="t",
+        account="DU_TEST",
+        day_zero=date(2026, 10, 23),
+        scoring_sessions=(date(2026, 10, 26),),
+        valuation_convention="IBKR reported closing NAV",
+        report_source="r",
+        contracts=(spy, call),
+        mandatory={201: 25},
+        allowlist=(10,),
+        confirmed=True,
+    )
+    service = TradingService(m, store, demo=True)
+    day = m.scoring_sessions[0]
+    now = marks_fixed_at(m, day) + timedelta(minutes=4)
+    service.now = lambda: now
+    service.broker.positions = {201: 25}
+    service.broker.now = now
+    service.last_snapshot = service.broker.snapshot()
+    service.moomoo_data = SimpleNamespace(path=tmp_path / "latest.json")
+    store.record(
+        "close_marks",
+        m.account,
+        {
+            "contest": m.contest_id,
+            "date": str(day),
+            "phase": "options_close",
+            "quotes": {"201": {"bid": 10.40, "ask": 10.50, "data_type": "live"}},
+        },
+        digest((m.contest_id, str(day), "options_close"))[:32],
+    )
+    t = at(day, 15, 59) + timedelta(seconds=58)
+    stamp = f"{t:%Y-%m-%d %H:%M:%S}.000"
+    book = {
+        "order_book": {
+            "Bid": [[10.70, 5, 1, []]],
+            "Ask": [[10.80, 5, 1, []]],
+            "svr_recv_time_bid": stamp,
+            "svr_recv_time_ask": stamp,
+        },
+        "book_push_count": 3,
+    }
+    with gzip.open(tmp_path / f"raw-{day:%Y%m%d}.jsonl.gz", "wt") as archive:
+        archive.write(json.dumps({"received_at": t.isoformat(), "securities": {code_for(call): book}}) + "\n")
+    await service._fallback_close_marks(day, now)
+    assert {r["phase"] for r in store.records("close_marks", m.account)} == {"options_close", "archive_close"}
+    mark = service.statement_estimate()["marks"][call.label]
+    assert mark["source"] == "archive_close midpoint" and mark["mark"] == pytest.approx(10.75)
+    assert (mark["low"], mark["high"]) == (10.70, 10.80)
+
+
+async def test_each_stored_chain_is_smoothed_once_however_often_the_estimate_is_asked(
+    manifest, store, monkeypatch
+):
+    """Review, Oct 25: from 16:16 the burner (every second) and the dashboard (every 2 s) ask for
+    the predicted statement NAV; refitting both chains each time took 0.2-0.6 s on the event loop."""
+    from hedge import service as service_module
+    from hedge.models import digest
+    from hedge.service import TradingService
+
+    fits = []
+
+    def fit(manifest, chain):
+        fits.append(chain["phase"])
+        return {}
+
+    monkeypatch.setattr(service_module, "smoothed_chain_marks", fit)
+    service = TradingService(manifest, store, demo=True)
+    day = manifest.scoring_sessions[0]
+    ids = {
+        name: digest((manifest.contest_id, str(day), name))[:32]
+        for name in ("pre_close_chain", "pre_close_occ")
+    }
+    chain = {"contest": manifest.contest_id, "date": str(day), "phase": "pre_close", "options": []}
+    store.record("option_chain", manifest.account, chain, ids["pre_close_chain"])
+    for _ in range(3):
+        _, chains = service._close_inputs(day)
+    assert fits == ["pre_close"] and chains["pre_close"]["occ"] == {}
+    rebuilt = {"US.BA": {"mark": 1.0, "low": 0.9, "high": 1.1, "source": "OCC rebuild (9 strikes)"}}
+    store.record(
+        "occ_marks", manifest.account, {"phase": "pre_close", "marks": rebuilt}, ids["pre_close_occ"]
+    )
+    _, chains = service._close_inputs(day)  # a record stored later is still picked up
+    assert chains["pre_close"]["occ"] == rebuilt and fits == ["pre_close"]
