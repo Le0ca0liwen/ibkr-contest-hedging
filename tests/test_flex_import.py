@@ -3,6 +3,8 @@
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+import pytest
+
 from hedge.config import NY
 from hedge.flex import FlexError
 from hedge.flex_import import StatementImporter
@@ -141,8 +143,8 @@ async def test_nothing_runs_without_the_operators_flex_settings(manifest, store)
 
 
 async def test_the_statements_extra_interest_accrual_is_learned(manifest, store):
-    """IBKR's AccruedCash lags the statement: the gap at one statement is added to later predictions
-    (Fridays learn from Fridays, since a Friday statement may carry the weekend)."""
+    """IBKR's AccruedCash lags the statement: the gap at one statement, per calendar day, is added
+    to later predictions."""
     day = manifest.day_zero
     service, imp, _ = importer(manifest, store, [lambda d: report(manifest.account, d)])
     store.record("close_marks", manifest.account, {"date": str(day), "at": "x", "accrued_cash": "1520.00"})
@@ -150,8 +152,24 @@ async def test_the_statements_extra_interest_accrual_is_learned(manifest, store)
     assert store.records("flex_statement", manifest.account)[0]["accrual_gap"] == "81.06"
     later = manifest.scoring_sessions[0]
     interest = service._interest_adjustment(later)
-    assert interest["amount"] == 81.06 and str(day) in interest["source"]
+    per_day = 81.06 / service._accrual_days(day)
+    assert interest["amount"] == pytest.approx(per_day * service._accrual_days(later))
+    assert str(day) in interest["source"]
     assert service._interest_adjustment(day)["amount"] == 0.0  # never from its own or a later statement
+
+
+def test_a_monday_statement_accrues_the_weekends_interest(manifest, store):
+    """October's statements: each Monday's accrual step was three weekday steps (Oct 19: 208.80 =
+    3 x 69.60) and each Friday's one (Oct 23: 77.86). IBKR's AccruedCash took each step only
+    overnight (22:20 ET Oct 22, 23:17 ET Oct 23), so the evening prediction adds the whole step."""
+    from datetime import date
+
+    service = TradingService(manifest, store, demo=True)
+    for day, gap in (("2026-10-22", "87.33"), ("2026-10-23", "77.86")):
+        store.record("flex_statement", manifest.account, {"date": day, "accrual_gap": gap})
+    monday = service._interest_adjustment(date(2026, 10, 26))
+    assert monday["amount"] == pytest.approx(3 * 77.86) and "3 day" in monday["source"]
+    assert service._interest_adjustment(date(2026, 10, 23))["amount"] == pytest.approx(87.33)
 
 
 async def test_the_statements_own_prices_value_its_day_once_imported(manifest, store):

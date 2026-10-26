@@ -620,11 +620,11 @@ class TradingService:
         }
 
     def _interest_adjustment(self, day):
-        """Interest the statement accrues for `day` beyond IBKR's AccruedCash at that day's close
-        (the API figure stayed at 1,601.06 from Oct 22's statement through Oct 23 evening). Learned
-        from imported statements (hedge/flex_import.py: accrual_gap); a Friday statement may carry
-        the weekend, so Fridays learn from Fridays. 0 until a statement taught it."""
-        friday = day.weekday() == 4
+        """Interest the statement accrues for `day` beyond IBKR's AccruedCash that evening: IBKR
+        posts the day's accrual overnight (22:20 ET Oct 22, 23:17 ET Oct 23), after the burner stops.
+        Learned per calendar day from the latest imported statement (hedge/flex_import.py:
+        accrual_gap) and scaled by the calendar days since the previous session: every October
+        Monday statement carried three days (Oct 5, 12, 19), each Friday one. 0 until learned."""
         seen = sorted(
             (
                 r
@@ -638,14 +638,22 @@ class TradingService:
         cash = float(self.last_snapshot.cash) if self.last_snapshot and self.last_snapshot.cash else 1e6
         limit = 5 * abs(cash) * 0.05 / 360
         seen = [r for r in seen if 0 <= float(r["accrual_gap"]) <= limit]
-        same = [r for r in seen if (date.fromisoformat(r["date"]).weekday() == 4) == friday]
-        chosen = (same or seen or [None])[0]
-        if chosen is None:
+        if not seen:
             return {"amount": 0.0, "source": "not learned yet (no imported statement)"}
+        chosen = seen[0]
+        per_day = float(chosen["accrual_gap"]) / self._accrual_days(date.fromisoformat(chosen["date"]))
+        days = self._accrual_days(day)
         return {
-            "amount": float(chosen["accrual_gap"]),
-            "source": f"learned from the {chosen['date']} statement",
+            "amount": per_day * days,
+            "source": f"learned from the {chosen['date']} statement: ${per_day:,.2f} a day x {days} day(s)",
         }
+
+    def _accrual_days(self, day):
+        """Calendar days of interest a statement for `day` accrues: since the previous session."""
+        previous = day - timedelta(days=1)
+        while not self.manifest.is_session(previous) and (day - previous).days < 10:
+            previous -= timedelta(days=1)
+        return (day - previous).days
 
     async def _power_loop(self):
         """Every minute: is the Mac on battery or its lid closed? From 90 minutes before a scored

@@ -23,9 +23,12 @@ close was. Implementation: `hedge/statement.py`.
   - **Posting:** each day's interest is added to an Accrued Cash balance. Early in the next month
     IBKR reverses that balance and books the final interest to cash, which leaves NAV unchanged up
     to small recalculation differences. Expect this around Nov 2-4.
-  - **What the app sees:** IBKR's API AccruedCash stayed at 1,601.06 from the Oct 22 statement
-    through Oct 23 evening. The app learns the statement's extra accrual from each imported
-    statement, and learns Fridays separately, since a Friday statement may carry the weekend.
+  - **What the app sees:** IBKR's API AccruedCash takes each day's accrual only overnight
+    (22:20 ET Oct 22, 23:17 ET Oct 23), after the burner stops, so all evening it still shows the
+    previous statement's figure. The app learns the statement's extra accrual per calendar day from
+    the latest imported statement and scales it by the calendar days since the previous session.
+    Every October Monday statement carried three days (Oct 5: 278.85 = 3 x 92.95; Oct 12: 191.88;
+    Oct 19: 208.80 = 3 x 69.60) and each Friday one (Oct 23: 77.86), so Monday adds three days.
 - **Timing:** "The reporting window closes at ... 8:20PM EST for securities. Statements will be
   available around midnight (EST)" (IBKR Web API docs). The Account Management API that sentence
   comes from is for brokers and advisors and returns PDFs; individual accounts automate statements
