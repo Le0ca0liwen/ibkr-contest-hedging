@@ -88,8 +88,11 @@ burner:
   mode: paper                       # off | shadow | paper
   admissibility_source: "Instructor: deliberate expense through ordinary trades not disallowed (operator confirmed 2026-10-21)"
   symbols: [SPCX, RKLB]             # allowlisted stocks only (never SPY)
-  quantities: [1, 5, 10, 25, 50, 100, 200]
-  max_shares: 200
+  # Oct 26: IBKR paper's after-hours SPCX book sat at 147.70/147.75 ($12 a full 200-share cycle),
+  # ~40-70% of entries filled and 300 cycles took ~40 minutes: about $1,450-2,500 an evening.
+  # 400 shares and 600 cycles raise that to roughly $5,000-9,000.
+  quantities: [1, 5, 10, 25, 50, 100, 200, 400]
+  max_shares: 400
   option_burn: false                # 1..option_max_contracts round trips in non-mandated options
   option_max_contracts: 5
   option_max_spread: 0.20
@@ -111,7 +114,7 @@ burner:
   assumed_cycle_seconds: 20         # minimum; today's measured mean only lengthens it
   minimum_improvement: 0.25
   daily_expense_cap: null           # optional USD cap on realized burn per session
-  max_cycles_per_day: 300
+  max_cycles_per_day: 600
   max_exit_attempts: 4
   exit_collar_ticks: [0, 1, 2, 5]
   quote_age_seconds: 3

@@ -375,10 +375,15 @@ dashboard poll scan the whole history. No schema columns change. Instead:
   API capture rather than the statement NAV, the target can be off by dollars. Treat
   that as a `bias` input, calibrated from the `close_marks` pre-close records against
   the official statement gaps.
-- **Daily capacity is small.** With the defaults (200 shares, about 3 cycles a minute
-  between close-20 and close-4), expect roughly $200-900 a day: about $4-6 per RKLB
-  cycle at a 1-2 cent spread, and $8-18 per SPCX cycle at 3-8 cents. A larger surplus
-  needs larger `quantities`/`max_shares` (displayed size permitting) or remains.
+- **Daily capacity.** After the close (Oct 26, paper): IBKR's simulated after-hours SPCX book
+  sat at 147.70/147.75, so a full 200-share cycle cost $12 ($10 spread, $2 commissions). Entries
+  priced at Moomoo's ask filled only when it reached IBKR's 147.75 (11 of the first 27); RKLB
+  never filled. Cycles ran about 8 s apart, so `max_cycles_per_day` (misses count) binds long
+  before 19:56: 300 cycles x 40-70% x $12 is about $1,450-2,500 an evening. The contest config
+  uses 400 shares and 600 cycles (about $5,000-9,000). In the Oct 8-21 replay a $1,440 capacity
+  left a $559 mean daily miss, $3,600 left $296. The plan sizes each cycle with Moomoo's spread
+  (2 cents) while IBKR paper charges 5, so a full final cycle can overspend by about $6-12,
+  inside the $50 margin.
 - **Recovery accounting.** Burn round trips never count toward recovery inventory or
   recovery P&L.
 - **Burning is irreversible.** Remaining surplus after the entry cutoff is an accepted
