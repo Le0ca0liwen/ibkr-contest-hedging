@@ -72,10 +72,16 @@ def small_problem(manifest, snapshot, quotes, cash, held, gap):
     return m, s, qs, sc, float(s.nav) + gap
 
 
+@pytest.mark.parametrize("statement", [False, True])
 @pytest.mark.parametrize("cash", [-1000, 10000, 100000])
 @pytest.mark.parametrize("held,gap", [(-2, -25), (2, 25)])
-def test_reduced_model_matches_enumerated_integer_cost_and_carry(manifest, snapshot, quotes, cash, held, gap):
+def test_reduced_model_matches_enumerated_integer_cost_and_carry(
+    manifest, snapshot, quotes, cash, held, gap, statement
+):
     m, s, qs, sc, estimate = small_problem(manifest, snapshot, quotes, cash, held, gap)
+    # policy.statement_interest: the estimate holds the day's statement interest, so the closing
+    # carry has no cash credit (borrow and debit interest stay).
+    m = m.model_copy(update={"policy": m.policy.model_copy(update={"statement_interest": statement})})
     opt = HedgeOptimizer(m)
     target = opt.solve(s, qs, sc, s.nav, estimate)
     assert target.status == "OPTIMAL"
@@ -83,7 +89,8 @@ def test_reduced_model_matches_enumerated_integer_cost_and_carry(manifest, snaps
     for h in range(-2, 3):
         fee = execution_cost(m, qs, [10], [h - held])
         cash_after = cash - qs[10].mid * (h - held) - fee
-        carry = cash_carry(m, cash_after, max(0, -h) * qs[10].spot, sc.calendar_days, float(s.nav))
+        short = max(0, -h) * qs[10].spot
+        carry = cash_carry(m, cash_after, short, sc.calendar_days, float(s.nav), with_credit=not statement)
         scores.append(float(sc.weights @ np.abs(gap + sc.changes[:, 0] * h + carry - fee)))
     assert target.expected_score <= min(scores) + 1 + 1e-5
     assert target.estimated_cost == pytest.approx(

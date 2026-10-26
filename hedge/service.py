@@ -1875,6 +1875,16 @@ class TradingService:
                     str(exc) or type(exc).__name__
                 )
 
+    def _closing_estimate(self, snapshot, quotes):
+        """The NAV estimate the optimizer scores against the closing target: with
+        policy.statement_interest, plus the interest the day's statement accrues beyond IBKR's live
+        AccruedCash (the post-close statement estimate adds the same amount)."""
+        estimate = self._estimate_nav(snapshot, quotes)
+        day = self.manifest.active_session(self.now())
+        if self.manifest.policy.statement_interest and day in self.manifest.scoring_sessions:
+            estimate += self._interest_adjustment(day)["amount"]
+        return estimate
+
     def _estimate_nav(self, snapshot, quotes):
         try:
             return self.nav_tracker.estimate(snapshot, quotes, self.manifest.contract_map)
@@ -2320,7 +2330,7 @@ class TradingService:
                 or time.monotonic() - self.last_optimization["OPT"] >= self.manifest.policy.option_seconds
             )
             quote_coverage(quotes, scenarios.ids)
-            estimate = self._estimate_nav(snap, quotes)
+            estimate = self._closing_estimate(snap, quotes)
             target = await asyncio.to_thread(
                 self.optimizer.solve,
                 snap,
@@ -2620,7 +2630,7 @@ class TradingService:
             self.active_plan_started, self.force_optimize = False, True
             self.health = "Quote coverage changed during execution planning; refreshing the hedge proposal"
             return
-        estimate = self._estimate_nav(snapshot, quotes)
+        estimate = self._closing_estimate(snapshot, quotes)
         target = self.optimizer.evaluate_target(
             snapshot, quotes, scenario_for_plan, target, previous, estimate
         )

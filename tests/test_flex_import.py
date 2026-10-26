@@ -186,3 +186,23 @@ async def test_a_set_up_import_with_nothing_due_never_says_not_set_up(manifest, 
     imp.due = lambda now: []
     await imp.step(at(manifest.scoring_sessions[0], 10))
     assert imp.state()["configured"] and not imp.state()["status"].startswith("Not set up") and not calls
+
+
+def test_the_closing_estimate_holds_the_days_statement_interest_when_switched_on(manifest, store):
+    """Monday Oct 26: the app saw -$236 at 15:45 while the statement estimate at 16:20 was +$141,
+    $233.58 of it the weekend's interest that IBKR's AccruedCash takes only overnight."""
+    service = TradingService(manifest, store, demo=True)
+    day = manifest.scoring_sessions[0]
+    store.record("flex_statement", manifest.account, {"date": str(manifest.day_zero), "accrual_gap": "80.00"})
+    service.now = lambda: at(day, 11)
+    snap, quotes = service.broker.snapshot(), service.broker.quotes()
+    plain = service._estimate_nav(snap, quotes)
+    assert service._closing_estimate(snap, quotes) == plain  # off by default
+    on = manifest.model_copy(
+        update={"policy": manifest.policy.model_copy(update={"statement_interest": True})}
+    )
+    service.manifest = on
+    expected = service._interest_adjustment(day)["amount"]
+    assert expected > 0 and service._closing_estimate(snap, quotes) == pytest.approx(plain + expected)
+    service.now = lambda: at(manifest.day_zero, 11)  # unscored: nothing added
+    assert service._closing_estimate(snap, quotes) == pytest.approx(service._estimate_nav(snap, quotes))

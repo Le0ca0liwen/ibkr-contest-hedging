@@ -84,6 +84,11 @@ class TradingPolicy(Frozen):
     # Weight of the close -> next scored session's open + 15 min gap (decay and moves the app
     # cannot trade against overnight) relative to the closing gap; 0 disables the term.
     overnight_weight: float = Field(default=0.5, ge=0, le=2)
+    # The scored statement credits the day's whole interest accrual (three days on a Monday), which
+    # IBKR's live AccruedCash only takes overnight. True: the service adds the accrual learned from
+    # imported statements to the closing NAV estimate, and the closing carry leaves out the cash
+    # credit so it is not counted twice. False: a pro-rata cash credit up to the close only.
+    statement_interest: bool = False
 
     @model_validator(mode="after")
     def interest_provenance(self):

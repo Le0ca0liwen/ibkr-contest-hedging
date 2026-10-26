@@ -145,7 +145,9 @@ class HedgeOptimizer:
             for i, amount in zip(ids, vector, strict=True)
             if amount < 0 and m.contract_map[i].kind == "STK"
         )
-        gap = error + scenarios.changes @ vector + cash_carry(m, cash, borrow, scenarios.calendar_days, nav)
+        credit = not m.policy.statement_interest  # else the estimate already holds the day's interest
+        carry = cash_carry(m, cash, borrow, scenarios.calendar_days, nav, with_credit=credit)
+        gap = error + scenarios.changes @ vector + carry
         closing = np.abs(gap - cost) if m.policy.burn_surplus else np.abs(gap) + cost
         overnight = np.zeros_like(closing)
         if (term := self._overnight(scenarios, target_nav)) is not None:
@@ -472,12 +474,15 @@ class HedgeOptimizer:
             if m.policy.cash_rate
             else cp.Constant(0)
         )
+        credit_carry = m.policy.cash_rate * min(1, float(snapshot.nav) / 100000) * eligible_plus
         annual_carry = (
-            m.policy.cash_rate * min(1, float(snapshot.nav) / 100000) * eligible_plus
+            credit_carry
             - m.policy.financing_rate * cash_minus
             - m.policy.borrow_rate * (short_stock + frozen_short)
         )
-        carry = days / m.policy.cash_day_count * annual_carry
+        # policy.statement_interest: the closing estimate already holds the day's statement interest.
+        closing_carry = annual_carry - credit_carry if m.policy.statement_interest else annual_carry
+        carry = days / m.policy.cash_day_count * closing_carry
         scored_costs = 0 if unscored_setup else costs
 
         def closing(gap, cost):

@@ -19,6 +19,18 @@ plus modeled changes and carry) and `c` the scored execution cost (zero on Day 0
   operator spends a surplus only near the close, through the separate closing
   burner (docs/CLOSING_BURNER.md), not through all-day hedge costs.
 
+**The day's statement interest (`policy.statement_interest`).** The scored statement credits
+the day's whole interest accrual (three days on a Monday), but IBKR's live AccruedCash takes it
+only overnight (22:20 ET Oct 22, 23:17 ET Oct 23). A carry pro-rated to the close therefore left a
+false deficit of about $80 on a weekday: on Oct 26 the app saw -$236 at 15:45 while the
+statement estimate at 16:20 was +$141, $233.58 of it the weekend's interest. With the switch on,
+the service adds the accrual learned from imported statements to the estimate the optimizer
+scores (`TradingService._closing_estimate`), the same amount the post-close statement estimate
+adds. The closing carry then leaves out the cash credit; borrow and debit interest stay. The
+overnight term keeps its credit: tomorrow's statement holds tomorrow's interest. IBKR paid
+3.38% a year on cash above $10,000 in October, on the settled cash of two days earlier, against
+the scoring benchmark's 3.44% on the whole NAV: about $13 a weekday less than the target's growth.
+
 Each decision records `cost_treatment` and `burn_component = E|g| + c - E|g - c|`
 (between 0 and 2c; 2c means the whole cost was credited as surplus burn), plus
 `overnight_score` and the target's `components` (closing, overnight, scored_cost,

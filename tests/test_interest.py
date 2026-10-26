@@ -136,3 +136,25 @@ async def test_synthetic_accrual_increases_nav_not_cash_twice(manifest, now):
     assert broker.cash == Decimal("1000000")
     assert float(broker.accrued_cash) == pytest.approx(86.075)
     assert float(broker.nav) == pytest.approx(1000086.075)
+
+
+def test_with_the_statement_interest_in_the_estimate_the_closing_carry_has_no_cash_credit(
+    manifest, snapshot, quotes
+):
+    """policy.statement_interest: the service adds the day's statement interest to the closing
+    estimate (three days on a Monday), so the optimizer must not credit cash interest again."""
+    m = interest_manifest(manifest)
+    assert cash_carry(m, 1000000, 0, 1, 1000000, with_credit=False) == 0
+    assert cash_carry(m, 1000000, 100000, 1, 1000000, with_credit=False) == pytest.approx(
+        -100000 * 0.05 / 360
+    )
+    m = m.model_copy(
+        update={"allowlist": (), "policy": m.policy.model_copy(update={"statement_interest": True})}
+    )
+    s = snapshot.model_copy(update={"nav": Decimal("1000278.85"), "cash": Decimal("1000000")})
+    ids = tuple(sorted(m.contract_map))
+    sc = ScenarioSet(
+        ids, np.zeros((2, len(ids))), np.array([0.5, 0.5]), np.zeros((1, len(ids))), None, 1, "t", "t"
+    )
+    result = HedgeOptimizer(m).solve(s, quotes, sc, Decimal("1000278.85"))
+    assert result.current_score == pytest.approx(0) and result.expected_score == pytest.approx(0)
