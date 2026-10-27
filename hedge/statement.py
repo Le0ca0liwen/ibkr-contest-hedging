@@ -179,20 +179,24 @@ class StatementTracker:
 
     The base is a settled IBKR cash push (no fill SETTLE before it or since, so cash and positions
     agree) valued at the statement marks. Later fills roll it forward exactly: quantity x
-    (mark - price) - commission. A newer settled push re-bases it and records the difference."""
+    (mark - price) - commission. A newer settled push re-bases it and records the difference.
+    `changed_at` (NAVTracker.observe: when IBKR's cash or positions last changed) counts as a fill:
+    manual TWS fills reach `executions` 3-30 s late (Oct 27), and a push adopted before they arrive
+    can hold a fill whose later arrival is then rolled forward a second time."""
 
     def __init__(self, manifest):
         self.manifest = manifest
         self.day = self.base = self.base_at = None
         self.last_check = None
 
-    def estimate(self, day, snapshot, marks, executions, fees):
+    def estimate(self, day, snapshot, marks, executions, fees, changed_at=None):
         """The predicted statement NAV now, or None until a settled push arrived for `day`.
         KeyError(con_id) while a fill since the base has no mark."""
         contracts = self.manifest.contract_map
         if self.day != day:
             self.day, self.base, self.base_at, self.last_check = day, None, None, None
-        quiet = not any(e.at >= snapshot.account_at - SETTLE for e in executions)
+        since = snapshot.account_at - SETTLE
+        quiet = not any(e.at >= since for e in executions) and (changed_at is None or changed_at < since)
         if quiet and (self.base_at is None or snapshot.account_at > self.base_at):
             value = statement_value(
                 snapshot.cash, snapshot.accrued_cash, snapshot.quantities(), marks, contracts

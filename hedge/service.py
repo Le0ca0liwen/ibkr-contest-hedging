@@ -586,7 +586,12 @@ class TradingService:
             }
         try:
             value = self.statement.estimate(
-                day, snapshot, marks, list(self.nav_tracker.executions.values()), self.nav_tracker.fees
+                day,
+                snapshot,
+                marks,
+                list(self.nav_tracker.executions.values()),
+                self.nav_tracker.fees,
+                changed_at=self.nav_tracker.observe(snapshot),
             )
         except KeyError as exc:  # traded after the base without a closing mark (e.g. closes not fetched)
             con_id = exc.args[0] if exc.args else None

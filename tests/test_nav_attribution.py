@@ -94,6 +94,27 @@ def test_a_nav_push_right_after_a_fill_is_never_adopted(manifest, snapshot, quot
     assert tracker.last_check["difference"] == pytest.approx(1.0)
 
 
+def test_a_push_right_after_a_manual_fill_the_app_has_not_seen_is_never_adopted(
+    manifest, snapshot, quotes, now
+):
+    """Oct 27: manual TWS fills reached the app 3-30 s late; IBKR's cash moved at once."""
+    tracker = NAVTracker(manifest)
+    tracker.estimate(stream(snapshot, now, 1, 0.0), quotes, manifest.contract_map)
+    assert tracker.observe(stream(snapshot, now, 2, 0.0)) is None  # nothing changed
+    traded = snapshot.model_copy(update={"cash": snapshot.cash - Decimal("22")})
+    tracker.estimate(stream(traded, now, 101, -22.0), quotes, manifest.contract_map)
+    assert tracker.changed_at == now + timedelta(seconds=101) and tracker.active_since(
+        now + timedelta(seconds=90)
+    )
+    assert tracker.observe(stream(snapshot, now, 50, 0.0)) == now + timedelta(seconds=101)  # older: ignored
+    # IBKR's push 1.5 s after the fill is off by +916; no execution has arrived yet.
+    spiked = stream(traded, now, 103, -22.0, nav=1_000_894, pushed=102.5)
+    assert tracker.estimate(spiked, quotes, manifest.contract_map) == pytest.approx(1_000_000 - 22)
+    quiet = stream(traded, now, 130, -22.0, nav=999_978, pushed=125)
+    assert tracker.estimate(quiet, quotes, manifest.contract_map) == pytest.approx(999_978)
+    assert tracker.last_check["difference"] == pytest.approx(0.0)
+
+
 def test_a_daily_pnl_reset_keeps_the_estimate_continuous(manifest, snapshot, quotes, now):
     tracker = NAVTracker(manifest)
     tracker.estimate(stream(snapshot, now, 1, 2_400.0), quotes, manifest.contract_map)

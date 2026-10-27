@@ -213,6 +213,27 @@ class NAVTracker:
         self.option_refs = {}  # after hours: held options' model mid at the base
         self.source = "fill attribution"
         self.last_check = None  # latest settled push vs the stream's prediction
+        # When IBKR's cash or positions last changed (the snapshot that first showed it). Fills of
+        # orders placed outside the app (manual TWS trades) reach `executions` only through later
+        # execution downloads, 3-30 s after IBKR booked them (Oct 27), so a settled push also
+        # needs this to be quiet.
+        self.changed_at = None
+        self.account_seen = None  # (snapshot.at, cash, positions) of the newest snapshot seen
+
+    def observe(self, snapshot):
+        """Note a change in IBKR's cash or positions; returns when the last one was seen."""
+        seen = (snapshot.cash, tuple(sorted(snapshot.quantities().items())))
+        if self.account_seen is None or snapshot.at > self.account_seen[0]:
+            if self.account_seen is not None and seen != self.account_seen[1:]:
+                self.changed_at = snapshot.at
+            self.account_seen = (snapshot.at, *seen)
+        return self.changed_at
+
+    def active_since(self, at):
+        """A fill at or after `at`: a known execution, or a change in IBKR's cash or positions."""
+        return (self.changed_at is not None and self.changed_at >= at) or any(
+            e.at >= at for e in self.executions.values()
+        )
 
     def _phase(self, now):
         """Regular session, contest pre/post-market session or closed: a stream base never crosses
@@ -280,7 +301,7 @@ class NAVTracker:
             return None
         pnl, nav = float(snapshot.pnl_daily), float(snapshot.nav)
         realized = None if snapshot.pnl_realized is None else float(snapshot.pnl_realized)
-        quiet = not any(e.at >= snapshot.at - self.PNL_SETTLE for e in self.executions.values())
+        quiet = not self.active_since(snapshot.at - self.PNL_SETTLE)
         if self.pnl_anchor is not None and self.pnl_last is not None:
             # A P&L-day roll moves the daily P&L, not NAV: shift the base's P&L reading by it. A push
             # from before the roll is paired with the old day's P&L, so only later pushes are adopted.
@@ -312,9 +333,7 @@ class NAVTracker:
             at_push = pnl
         else:
             at_push = None
-        settled = at_push is not None and not any(
-            e.at >= snapshot.account_at - self.PNL_SETTLE for e in self.executions.values()
-        )
+        settled = at_push is not None and not self.active_since(snapshot.account_at - self.PNL_SETTLE)
         # Never step back to an older push (callers may hold snapshots of different ages).
         newer = self.pnl_base_at is None or snapshot.account_at >= self.pnl_base_at
         if key != self.pnl_key and settled and newer:
@@ -351,6 +370,7 @@ class NAVTracker:
         self.fees[exec_id] = float(amount)
 
     def estimate(self, snapshot, quotes, contracts):
+        self.observe(snapshot)
         streamed = self._pnl_estimate(snapshot, quotes, contracts)
         self.source = "IBKR P&L stream (1 s)" if streamed is not None else "fill attribution"
         if streamed is not None:

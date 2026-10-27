@@ -153,6 +153,52 @@ def test_after_the_close_only_our_trades_move_the_predicted_statement_nav(manife
     assert tracker.last_check["settled"] == pytest.approx(tracker.last_check["rolled"])
 
 
+def test_a_push_holding_manual_fills_the_app_has_not_seen_is_not_adopted(manifest, snapshot):
+    """Oct 27: manual TWS fills reached the app 3-30 s late. A push that IBKR stamped before the
+    sell but that already held it, adopted as quiet, counted the sell twice once it arrived."""
+    m = contest_manifest(manifest)
+    marks = {2: {"mark": 148.58, "low": 148.58, "high": 148.58, "source": "regular-session close"}}
+    day, t0 = manifest.scoring_sessions[0], snapshot.at
+
+    def push(seconds, cash):
+        return SimpleNamespace(
+            cash=Decimal(cash),
+            accrued_cash=Decimal("0"),
+            account_at=t0 + timedelta(seconds=seconds),
+            quantities=lambda: {2: 93},
+        )
+
+    def fill(exec_id, quantity, price, seconds):
+        return Execution(
+            exec_id=exec_id,
+            order_id=0,
+            account="A",
+            con_id=2,
+            signed_quantity=quantity,
+            price=Decimal(price),
+            at=t0 + timedelta(seconds=seconds),
+        )
+
+    base = 100_000 + 93 * 148.58
+    fills = [fill("b", 200, "149.15", 60), fill("s", -200, "149.05", 70)]
+    fees = {"b": 1.0, "s": 1.0}
+    after = push(69, "99978")  # stamped 1 s before the sell, read after it: both fills inside
+    seen = t0 + timedelta(seconds=75)  # when the app saw IBKR's cash change
+    for changed_at, expected in ((None, base - 22 + 93), (seen, base - 22)):
+        tracker = StatementTracker(m)
+        assert tracker.estimate(day, push(0, "100000"), marks, [], {}) == pytest.approx(base)
+        tracker.estimate(day, after, marks, [], {}, changed_at=changed_at)
+        # The executions arrive 5-30 s late: without the change the sell is counted twice (+$93).
+        assert tracker.estimate(day, after, marks, fills, fees, changed_at=changed_at) == pytest.approx(
+            expected
+        )
+    # 20 s after the change a push re-bases, and it agrees with the fills rolled forward.
+    settled = push(100, "99978")
+    assert tracker.estimate(day, settled, marks, fills, fees, changed_at=seen) == pytest.approx(base - 22)
+    assert tracker.base_at == settled.account_at
+    assert tracker.last_check["settled"] == pytest.approx(tracker.last_check["rolled"])
+
+
 def test_the_service_shows_the_predicted_statement_nav_after_the_closing_marks(manifest, store):
     from hedge.models import digest
     from hedge.service import TradingService
