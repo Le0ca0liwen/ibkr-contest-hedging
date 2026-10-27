@@ -67,8 +67,8 @@ EXIT_CONFIRMATIONS = 2
 EXIT_SPREAD_GRACE_SECONDS = 30
 EXIT_SPREAD_WAIT_SECONDS = 20  # a wide book that lasts longer is the market, not a glitch
 SCENARIO_AGE_SECONDS = 20
-# An extended-hours DAY leg's unfilled rest is cancelled this long after sending. IBKR paper filled
-# some burner legs 1.5-3.1 s after sending on Oct 27 (two after a 3 s cancel was already sent).
+# The default rest of an extended-hours DAY leg before it is cancelled (burner.entry_rest_seconds,
+# exit_rest_seconds). IBKR paper filled some burner legs 1.5-3.1 s after sending on Oct 27.
 DAY_LEG_SECONDS = 8
 NAV_STREAM = "IBKR P&L stream (1 s)"  # NAVTracker.source when rolled from a settled push
 DECISION_RECORD_SECONDS = 15
@@ -345,7 +345,7 @@ class ClosingBurner:
             if (
                 leg.get("time_in_force") == "DAY"
                 and leg["broker_order_id"] is not None
-                and resting >= DAY_LEG_SECONDS
+                and resting >= (p.entry_rest_seconds if leg["leg"] == "entry" else p.exit_rest_seconds)
                 and (requested is None or (now - requested).total_seconds() >= LEG_TIMEOUT_SECONDS)
             ):
                 # Extended hours: cancel what did not fill at once, exactly as an IOC would. A cancel

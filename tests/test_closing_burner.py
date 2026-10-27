@@ -1446,3 +1446,19 @@ def test_a_buy_back_steps_above_the_ask(manifest, store):
     assert float(service.execution.burn_limit(10, q, 1, 0)) == 149.03
     assert float(service.execution.burn_limit(10, q, 1, 5)) == 149.08
     assert float(service.execution.burn_limit(10, q, -1, 5)) == 148.95
+
+
+async def test_a_sell_first_entry_rests_for_its_configured_time(burning, monkeypatch):
+    service, clock = await burning(sell_first=True, held={10: 250}, entry_rest_seconds=60)
+    monkeypatch.setattr(service.execution, "burn_time_in_force", lambda con_id, now: "DAY")
+    await steps(service)
+    entry = next(r for r in service.store.intents(service.manifest.account) if r.get("leg") == "entry")
+    assert entry["signed_quantity"] < 0 and entry["time_in_force"] == "DAY"
+    clock.at += timedelta(seconds=DAY_LEG_SECONDS + 1)
+    refresh(service)
+    await steps(service)
+    assert "CANCEL" not in events(service)  # still resting: a sell-first entry holds nothing extra
+    clock.at += timedelta(seconds=60)
+    refresh(service)
+    await steps(service)
+    assert "CANCEL" in events(service)

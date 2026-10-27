@@ -213,6 +213,11 @@ class BurnerPolicy(Frozen):
     # hours (Oct 27) burner buys always filled once priced at or above its ask, while 5 of 35 sells
     # never did: a missed sell-first entry changes nothing, a missed buy-back only lowers the holding.
     sell_first: bool = False
+    # Extended-hours DAY legs rest this long before the burner cancels them. Paper filled resting
+    # manual sells after hours that the burner's few-second legs missed; a long rest is safe for a
+    # sell-first entry (nothing extra is held while it rests).
+    entry_rest_seconds: float = Field(default=8, ge=1, le=120)
+    exit_rest_seconds: float = Field(default=8, ge=1, le=120)
 
     @field_validator("symbols")
     @classmethod
