@@ -111,6 +111,7 @@ class ClosingBurner:
         # cycle and never raised: a forecast that drifts up on noise cannot ratchet spending up.
         self.budgets = {}
         self.quiet_seconds = QUIET_SECONDS
+        self.day_quiet_seconds = self.policy.day_quiet_seconds
         self.loaded = False
         self.burn_epoch = 0
         self._decision_key = None
@@ -173,6 +174,8 @@ class ClosingBurner:
                     f"Late fill on a closing burner leg after its cycle ended: {value.signed_quantity:+d} "
                     f"{label}. It is ordinary inventory now; check the position on Positions & risk",
                 )
+                if self.policy.stop_after_residuals:
+                    self._stop(f"a late fill ({value.signed_quantity:+d} {label}) on a finished cycle")
             if event in ("execution", "commission", "position") and self.cycle is not None:
                 self.wake()
         except Exception:
@@ -199,6 +202,17 @@ class ClosingBurner:
         )
         self.wake()
         return self.state()
+
+    def _stop(self, reason):
+        """Downgrade to shadow (persisted, like the operator's own switch) and say why, once."""
+        if self.effective_mode() != "paper":
+            return
+        self.set_mode("shadow")
+        self.service.alert(
+            "error",
+            f"Closing burner stopped itself after {reason}: now shadow. Check positions, then "
+            "re-enable it on the dashboard if it should continue",
+        )
 
     def event_off_now(self):
         """Approved event caution: burner off for today's session only (never raises)."""
@@ -380,7 +394,8 @@ class ClosingBurner:
             if done < abs(last["signed_quantity"]):
                 self._set("SETTLING", f"Confirming the {last['leg']} IOC's final fills")
                 self._event(c, "RECONCILE", intent_id=last["id"], reason="IOC ended short of its quantity")
-                await asyncio.sleep(self.quiet_seconds)
+                day_leg = last.get("time_in_force") == "DAY"
+                await asyncio.sleep(max(self.quiet_seconds, self.day_quiet_seconds if day_leg else 0))
                 try:
                     await s.reconcile()
                 except Exception:
@@ -614,6 +629,14 @@ class ClosingBurner:
                 f"({shown})",
                 key=("burner_residual", c["session"], c["cycle_id"]),
             )
+            if self.policy.stop_after_residuals:
+                residuals = sum(
+                    1
+                    for r in self.store.records("burn_cycle_result", self.account, 500)
+                    if r.get("session") == c["session"] and r.get("status") == "RESIDUAL"
+                )
+                if residuals >= self.policy.stop_after_residuals:
+                    self._stop(f"{residuals} RESIDUAL cycle(s) today")
         self.cycle, self.leg_ids, self.mismatch = None, set(), None
         self.reported.clear()
         self.reconcile_requested.clear()

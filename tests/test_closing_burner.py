@@ -92,7 +92,7 @@ async def burning(manifest, store):
         if rules:
             m = m.model_copy(update={"contest_rules": rules})
         service = TradingService(m, store, demo=True)
-        service.burner.quiet_seconds = 0
+        service.burner.quiet_seconds = service.burner.day_quiet_seconds = 0
         clock = Clock(at(m) if callable(at) else at or close_on(m.scoring_sessions[0]))
         service.now = clock
         store.clock = clock
@@ -1462,3 +1462,48 @@ async def test_a_sell_first_entry_rests_for_its_configured_time(burning, monkeyp
     refresh(service)
     await steps(service)
     assert "CANCEL" in events(service)
+
+
+async def test_a_residual_cycle_stops_the_burner_when_configured(burning):
+    """Oct 27: after a cycle was left holding stock the burner carried on and left four more."""
+    service, clock = await burning(stop_after_residuals=1)
+    service.broker.ioc_fill_caps = [50, 0, 0, 0, 0]
+    await steps(service, 8)
+    assert results(service)[0]["status"] == "RESIDUAL"
+    assert service.burner.override == "shadow" and service.burner.effective_mode() == "shadow"
+    alerts = [a["message"] for a in service.store.records("alert", service.manifest.account)]
+    assert any("stopped itself after 1 RESIDUAL" in m for m in alerts)
+    await steps(service)
+    assert len(results(service)) == 1  # no new cycle
+
+
+async def test_a_late_fill_on_a_finished_cycle_stops_the_burner_when_configured(burning):
+    """Oct 27: IBKR paper reported a sell Cancelled, then filled it 3.4 s later."""
+    service, clock = await burning(stop_after_residuals=1)
+    _premature_cancel(service.broker, which=1, release_after=2)
+    await steps(service, 3)
+    assert results(service)[0]["reason"] == "Entry IOC unfilled"
+    await service.broker.reconcile()
+    await settle(service)
+    assert service.burner.effective_mode() == "shadow"
+    alerts = [a["message"] for a in service.store.records("alert", service.manifest.account)]
+    assert any("stopped itself after a late fill" in m for m in alerts)
+
+
+async def test_a_short_day_leg_waits_the_extended_hours_quiet_before_its_final_download(burning, monkeypatch):
+    import hedge.burner_service as burner_module
+
+    service, clock = await burning()
+    monkeypatch.setattr(service.execution, "burn_time_in_force", lambda con_id, now: "DAY")
+    service.burner.day_quiet_seconds = 7
+    waited, real_sleep = [], asyncio.sleep
+
+    async def sleep(seconds):
+        waited.append(seconds)
+        await real_sleep(0)
+
+    monkeypatch.setattr(burner_module.asyncio, "sleep", sleep)
+    await steps(service)
+    clock.at += timedelta(seconds=DAY_LEG_SECONDS + 1)
+    await steps(service, 2)
+    assert 7 in waited and results(service)[0]["status"] == "CLOSED"

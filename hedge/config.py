@@ -218,6 +218,12 @@ class BurnerPolicy(Frozen):
     # sell-first entry (nothing extra is held while it rests).
     entry_rest_seconds: float = Field(default=8, ge=1, le=120)
     exit_rest_seconds: float = Field(default=8, ge=1, le=120)
+    # After an extended-hours DAY leg ends short, wait this long before downloading its final
+    # fills: IBKR paper filled order 4530 3.4 s after reporting it Cancelled (Oct 27).
+    day_quiet_seconds: float = Field(default=10, ge=0, le=60)
+    # N > 0: after N RESIDUAL cycles in a session, or any fill on a leg whose cycle already ended,
+    # the burner downgrades itself to shadow and alerts; the operator re-enables it. 0: never.
+    stop_after_residuals: int = Field(default=0, ge=0, le=100)
 
     @field_validator("symbols")
     @classmethod
