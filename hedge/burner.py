@@ -199,7 +199,11 @@ def candidates(manifest, scenarios, quotes, quantities, now, *, demo, options_op
             if size > min(q.ask_size, q.bid_size):
                 rejected[f"{symbol}:{size}"] = "Exceeds displayed size"
                 continue
-            result.append(_candidate(c, q, size, original, policy, manifest))
+            if policy.sell_first and size > original:
+                rejected[f"{symbol}:{size}"] = "Sell-first size above the holding"
+                continue
+            signed = -size if policy.sell_first else size
+            result.append(_candidate(c, q, signed, original, policy, manifest))
     if policy.option_burn and options_open:
         for identifier in manifest.allowlist:
             c = manifest.contract_map[identifier]
@@ -228,9 +232,9 @@ def _candidate(contract, quote, size, original, policy, manifest):
         con_id=contract.con_id,
         label=contract.label,
         kind=contract.kind,
-        quantity=size,
+        quantity=size,  # signed: negative for a sell-first stock cycle
         original=original,
-        expected_loss=round_trip_loss(contract, quote, size, manifest.policy),
+        expected_loss=round_trip_loss(contract, quote, abs(size), manifest.policy),
         bid=quote.bid,
         ask=quote.ask,
         bid_size=quote.bid_size,

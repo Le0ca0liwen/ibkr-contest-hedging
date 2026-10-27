@@ -539,11 +539,12 @@ class ExecutionManager:
                 }
 
     def burn_limit(self, con_id, quote, signed, collar_ticks=0):
-        """Marketable IOC limit: buy at the ask (tick ceiling), sell at the bid less collar ticks."""
+        """Marketable IOC limit: buy at the ask plus collar ticks (tick ceiling), sell at the bid
+        less collar ticks."""
         reference = quote.ask if signed > 0 else quote.bid
         tick = self.broker.price_tick(con_id, reference) if hasattr(self.broker, "price_tick") else 0.01
         if signed > 0:
-            return rounded_price(quote.ask, tick, -1)
+            return rounded_price(Decimal(str(quote.ask)) + collar_ticks * Decimal(str(tick)), tick, -1)
         # Decimal arithmetic: a float bid - k*tick can land just below a tick and floor one too far.
         return rounded_price(Decimal(str(quote.bid)) - collar_ticks * Decimal(str(tick)), tick, 1)
 
@@ -618,6 +619,8 @@ class ExecutionManager:
                 return {"submitted": False, "reason": "Nonpositive burn limit"}
             if price_cap is not None and signed > 0 and float(limit) > float(price_cap) + 1e-9:
                 return {"submitted": False, "reason": "Ask moved above the planned burn limit"}
+            if price_cap is not None and signed < 0 and float(limit) < float(price_cap) - 1e-9:
+                return {"submitted": False, "reason": "Bid moved below the planned burn limit"}
             actual = snapshot.quantities()
             after = {**actual, con_id: actual.get(con_id, 0) + signed}
             current = self.gate.engine.evaluate(snapshot, quotes, scenarios, actual)

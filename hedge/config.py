@@ -209,6 +209,10 @@ class BurnerPolicy(Frozen):
     max_exit_attempts: int = Field(default=4, ge=1, le=20)
     exit_collar_ticks: tuple[int, ...] = (0, 1, 2, 5)
     quote_age_seconds: float = Field(default=3, gt=0, le=60)
+    # Stock cycles sell held shares first and buy them back (never below zero). On IBKR paper after
+    # hours (Oct 27) burner buys always filled once priced at or above its ask, while 5 of 35 sells
+    # never did: a missed sell-first entry changes nothing, a missed buy-back only lowers the holding.
+    sell_first: bool = False
 
     @field_validator("symbols")
     @classmethod

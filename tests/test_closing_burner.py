@@ -25,6 +25,7 @@ from hedge.burner import (
     weighted_median,
     weighted_quantile,
 )
+from hedge.burner_service import DAY_LEG_SECONDS
 from hedge.config import NY, BurnerPolicy, Manifest, TradingPolicy
 from hedge.demo import demo_manifest, demo_quotes
 from hedge.execution import ExecutionManager
@@ -86,7 +87,7 @@ def close_on(day, hour=15, minute=50, second=0):
 async def burning(manifest, store):
     tasks = []
 
-    async def start(at=None, surplus=60, app="paper", rules=None, **burner):
+    async def start(at=None, surplus=60, app="paper", rules=None, held=None, **burner):
         m = with_burner(manifest, **burner)
         if rules:
             m = m.model_copy(update={"contest_rules": rules})
@@ -96,6 +97,7 @@ async def burning(manifest, store):
         service.now = clock
         store.clock = clock
         await service.broker.connect()
+        service.broker.positions.update(held or {})
         refresh(service)
         nav = service.broker.snapshot().nav
         service.ledger.import_close(m.day_zero, nav - Decimal(str(surplus)), "fixture", m.account)
@@ -1086,7 +1088,7 @@ async def test_a_day_leg_is_cancelled_after_a_moment_and_the_cycle_completes(bur
     await settle(service)
     await steps(service)
     assert "CANCEL" not in events(service)  # not yet: the rest may still fill
-    clock.at += timedelta(seconds=4)
+    clock.at += timedelta(seconds=DAY_LEG_SECONDS + 1)
     refresh(service)
     await steps(service, 2)  # cancels the rest, confirms the 120 filled, sends the exit
     exit_leg = next(r for r in service.store.intents(service.manifest.account) if r.get("leg") == "exit")
@@ -1104,7 +1106,7 @@ async def test_an_unfilled_day_leg_is_cancelled_and_the_cycle_closes(burning, mo
     service, clock = await burning()
     monkeypatch.setattr(service.execution, "burn_time_in_force", lambda con_id, now: "DAY")
     await steps(service)
-    clock.at += timedelta(seconds=4)
+    clock.at += timedelta(seconds=DAY_LEG_SECONDS + 1)
     await steps(service, 2)
     result = results(service)[0]
     assert result["status"] == "CLOSED" and result["entry_filled"] == 0
@@ -1126,7 +1128,7 @@ async def test_a_failed_or_unanswered_day_leg_cancel_is_sent_again(burning, monk
         await real_cancel(order_id)
 
     monkeypatch.setattr(service.execution, "cancel_order", flaky)
-    clock.at += timedelta(seconds=4)
+    clock.at += timedelta(seconds=DAY_LEG_SECONDS + 1)
     await steps(service)  # fails
     await steps(service)  # sent again at once, but lost
     assert len(calls) == 2 and service.execution.burn_open()
@@ -1367,7 +1369,7 @@ async def test_a_resting_post_market_burn_leg_never_trips_the_working_order_chec
     assert service.last_snapshot.orders
     await service._check_working_orders()
     assert service.mode == "PAPER" and not service.execution.paused, service.health
-    clock.at += timedelta(seconds=4)
+    clock.at += timedelta(seconds=DAY_LEG_SECONDS + 1)
     refresh(service)
     await steps(service, 2)  # cancels the rest and sends the exit for the filled part
     exit_leg = next(r for r in service.store.intents(service.manifest.account) if r.get("leg") == "exit")
@@ -1394,3 +1396,53 @@ async def test_the_optimizer_uses_the_surplus_weight_only_while_the_burner_trade
         monkeypatch.setattr(service.burner, "effective_mode", lambda mode=mode: mode)
         assert service._sync_closing_loss() == weight
         assert service.optimizer.surplus_weight == service.execution.surplus_weight == weight
+
+
+async def test_a_sell_first_cycle_sells_held_shares_then_buys_them_back(burning):
+    """Oct 27, IBKR paper after hours: burner buys filled once priced at the ask, 5 of 35 sells
+    never did. Selling held shares first makes a missed leg harmless (nothing sold, or a lower
+    holding), never extra stock carried overnight."""
+    service, clock = await burning(sell_first=True, held={10: 250})
+    service.broker.ioc_fill_caps = [120]  # the sell entry fills 120
+    await steps(service)
+    cycle = service.burner.cycle
+    assert cycle["quantity"] < 0 and -cycle["quantity"] <= 250 and cycle["original_quantity"] == 250
+    entry = next(r for r in service.store.intents(service.manifest.account) if r.get("leg") == "entry")
+    assert entry["signed_quantity"] == cycle["quantity"]
+    await steps(service)
+    exit_leg = next(r for r in service.store.intents(service.manifest.account) if r.get("leg") == "exit")
+    assert exit_leg["signed_quantity"] == 120  # buys back what the sell actually filled
+    await steps(service)
+    result = results(service)[0]
+    assert result["status"] == "CLOSED" and result["reason"] == "Round trip complete"
+    assert (result["entry_filled"], result["exit_filled"], result["residual"]) == (120, 120, 0)
+    # Sold 120 at the 194.99 bid, bought them back at the 195.01 ask: the same $4.40 as buy-first.
+    assert result["realized_loss"] == pytest.approx(4.40)
+    assert result["entry_vwap"] == pytest.approx(194.99) and result["exit_vwap"] == pytest.approx(195.01)
+    assert service.broker.snapshot().quantities()[10] == 250 and not service.execution.burn_open()
+
+
+async def test_sell_first_never_sells_more_than_the_holding(burning):
+    service, clock = await burning(sell_first=True, held={10: 30})
+    await steps(service)
+    decision = service.store.records("burn_decision", service.manifest.account)[0]
+    rejected = decision.get("rejected") or {}
+    assert all(
+        reason == "Sell-first size above the holding"
+        for k, reason in rejected.items()
+        if k.endswith((":50", ":100", ":200"))
+    )
+    cycle = service.burner.cycle
+    assert cycle is None or -cycle["quantity"] <= 30
+
+
+def test_a_buy_back_steps_above_the_ask(manifest, store):
+    from hedge.service import TradingService
+
+    service = TradingService(manifest, store, demo=True)
+    q = demo_quotes(manifest, close_on(manifest.scoring_sessions[0]))[10].model_copy(
+        update={"bid": 149.00, "ask": 149.03}
+    )
+    assert float(service.execution.burn_limit(10, q, 1, 0)) == 149.03
+    assert float(service.execution.burn_limit(10, q, 1, 5)) == 149.08
+    assert float(service.execution.burn_limit(10, q, -1, 5)) == 148.95

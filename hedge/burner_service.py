@@ -67,7 +67,9 @@ EXIT_CONFIRMATIONS = 2
 EXIT_SPREAD_GRACE_SECONDS = 30
 EXIT_SPREAD_WAIT_SECONDS = 20  # a wide book that lasts longer is the market, not a glitch
 SCENARIO_AGE_SECONDS = 20
-DAY_LEG_SECONDS = 3  # an extended-hours DAY leg's unfilled rest is cancelled this long after sending
+# An extended-hours DAY leg's unfilled rest is cancelled this long after sending. IBKR paper filled
+# some burner legs 1.5-3.1 s after sending on Oct 27 (two after a 3 s cancel was already sent).
+DAY_LEG_SECONDS = 8
 NAV_STREAM = "IBKR P&L stream (1 s)"  # NAVTracker.source when rolled from a settled push
 DECISION_RECORD_SECONDS = 15
 MODES = ("off", "shadow", "paper")
@@ -441,8 +443,8 @@ class ClosingBurner:
             )
             self._finalize("CLOSED", reason, legs, fills, now)
             return
-        if net < 0:
-            self._finalize("RESIDUAL", "Exit sold more than the confirmed increment", legs, fills, now)
+        if net * (1 if c.get("quantity", 1) > 0 else -1) < 0:  # past the pre-cycle holding
+            self._finalize("RESIDUAL", "Exit traded more than the confirmed increment", legs, fills, now)
             return
         attempts = sum(1 for leg in legs if leg["leg"] == "exit" and leg["broker_order_id"] is not None)
         if attempts >= p.max_exit_attempts:
@@ -944,7 +946,7 @@ class ClosingBurner:
         s, p = self.service, self.policy
         cycle_id = uuid4().hex
         quote = quotes[chosen.con_id]
-        price_cap = s.execution.burn_limit(chosen.con_id, quote, 1)
+        price_cap = s.execution.burn_limit(chosen.con_id, quote, 1 if chosen.quantity > 0 else -1)
         deadline = w["option_exit_deadline"] if chosen.kind == "OPT" else w["stock_exit_deadline"]
         entry_cutoff = w["option_entry_cutoff"] if chosen.kind == "OPT" else w["stock_entry_cutoff"]
         record = {
