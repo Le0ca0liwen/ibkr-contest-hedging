@@ -1,0 +1,5276 @@
+{
+ "window_et": "2026-10-27 17:06-17:23 (sell_first, d22124f)",
+ "note": "read-only extract from the app database; quotes are Moomoo at send; times UTC; order 4530 (cycle 6b5aca) filled -50 after IBKR reported Cancelled, cycle closed unfilled; cycle 75f316 left -1. SPCX 93 -> 42 net. Burner set to shadow 21:21:16Z",
+ "summary": {
+  "legs": 76,
+  "entries": 48,
+  "exits": 28,
+  "entries_filled": 14,
+  "exits_filled": 12,
+  "late_fills": [
+   [
+    4530,
+    "entry",
+    "SPCX",
+    [
+     {
+      "qty": -50,
+      "price": 149.19,
+      "exec_at": "2026-10-27T21:18:35.251680Z",
+      "recorded_at": "2026-10-27T21:18:35.254545+00:00",
+      "exec_id": "00025b49.6ae24830.01.01"
+     }
+    ]
+   ]
+  ],
+  "entry_fills_better_than_limit": [],
+  "exit_fill_prices": [
+   [
+    4464,
+    "SPCX",
+    1,
+    149.33,
+    149.25,
+    149.31,
+    [
+     [
+      1,
+      149.32
+     ]
+    ]
+   ],
+   [
+    4469,
+    "SPCX",
+    1,
+    149.33,
+    149.25,
+    149.31,
+    [
+     [
+      1,
+      149.32
+     ]
+    ]
+   ],
+   [
+    4493,
+    "SPCX",
+    2,
+    149.36,
+    149.27,
+    149.31,
+    [
+     [
+      1,
+      149.29
+     ]
+    ]
+   ],
+   [
+    4506,
+    "SPCX",
+    2,
+    149.34,
+    149.21,
+    149.29,
+    [
+     [
+      50,
+      149.29
+     ]
+    ]
+   ],
+   [
+    4517,
+    "SPCX",
+    0,
+    149.25,
+    149.22,
+    149.25,
+    [
+     [
+      1,
+      149.23
+     ]
+    ]
+   ],
+   [
+    4526,
+    "SPCX",
+    0,
+    149.2,
+    149.19,
+    149.2,
+    [
+     [
+      50,
+      149.2
+     ]
+    ]
+   ],
+   [
+    4528,
+    "SPCX",
+    0,
+    149.2,
+    149.19,
+    149.2,
+    [
+     [
+      50,
+      149.2
+     ]
+    ]
+   ],
+   [
+    4539,
+    "SPCX",
+    0,
+    149.23,
+    149.2,
+    149.23,
+    [
+     [
+      25,
+      149.23
+     ]
+    ]
+   ],
+   [
+    4541,
+    "SPCX",
+    0,
+    149.25,
+    149.2,
+    149.25,
+    [
+     [
+      25,
+      149.23
+     ]
+    ]
+   ],
+   [
+    4548,
+    "SPCX",
+    1,
+    149.21,
+    149.17,
+    149.19,
+    [
+     [
+      10,
+      149.2
+     ]
+    ]
+   ],
+   [
+    4553,
+    "SPCX",
+    1,
+    149.21,
+    149.17,
+    149.19,
+    [
+     [
+      25,
+      149.2
+     ]
+    ]
+   ],
+   [
+    4565,
+    "SPCX",
+    3,
+    149.27,
+    149.16,
+    149.17,
+    [
+     [
+      25,
+      149.18
+     ]
+    ]
+   ]
+  ],
+  "error_codes": {
+   "202": 49,
+   "10148": 3
+  },
+  "exit_refused": 4
+ },
+ "exit_refusals": [
+  {
+   "cycle": "b5d1aee215f04102bd477afc372564d2",
+   "at": "2026-10-27T21:13:08.448294+00:00",
+   "attempt": 0,
+   "reason": "Burn leg risk: Stale/future quote: 890493863",
+   "latest_rkln_observed_at_in_any_plan": null,
+   "age_lower_bound_s": null
+  },
+  {
+   "cycle": "b5d1aee215f04102bd477afc372564d2",
+   "at": "2026-10-27T21:13:35.322746+00:00",
+   "attempt": 2,
+   "reason": "Burn leg risk: Stale/future quote: 890493863",
+   "latest_rkln_observed_at_in_any_plan": null,
+   "age_lower_bound_s": null
+  },
+  {
+   "cycle": "b5d1aee215f04102bd477afc372564d2",
+   "at": "2026-10-27T21:14:07.563285+00:00",
+   "attempt": 2,
+   "reason": "Stale/future burn quote",
+   "latest_rkln_observed_at_in_any_plan": null,
+   "age_lower_bound_s": null
+  },
+  {
+   "cycle": "b5d1aee215f04102bd477afc372564d2",
+   "at": "2026-10-27T21:14:51.016252+00:00",
+   "attempt": 2,
+   "reason": "Burn leg risk: Stale/future quote: 890493863",
+   "latest_rkln_observed_at_in_any_plan": null,
+   "age_lower_bound_s": null
+  }
+ ],
+ "legs": [
+  {
+   "cycle": "1d572c05ce4947a18b3ef66d4b613087",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.19,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.19,
+   "moomoo_ask": 149.29,
+   "bid_size": 11,
+   "ask_size": 218,
+   "quote_observed_at": "2026-10-27T17:06:12.038000-04:00",
+   "planned_at": "2026-10-27T21:06:16.649852+00:00",
+   "order_id": 4397,
+   "transitions": [
+    [
+     "2026-10-27 21:06:16.655729+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:06:16.805728+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:06:17.955037+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:06:24.759312+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:06:24.841532+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:06:17.943728+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:06:17.971538+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:06:24.773278+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:06:24.833651+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:06:24.767898+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:06:24.843798+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "945419c67f2246838c8e8add9921e420",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.29,
+   "bid_size": 20,
+   "ask_size": 228,
+   "quote_observed_at": "2026-10-27T17:06:26.608000-04:00",
+   "planned_at": "2026-10-27T21:06:27.536862+00:00",
+   "order_id": 4401,
+   "transitions": [
+    [
+     "2026-10-27 21:06:27.542586+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:06:27.569302+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:06:27.641492+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:06:35.775237+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:06:36.377832+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:06:27.634542+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:06:27.649872+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:06:35.767891+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:06:36.370816+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:06:35.763729+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:06:36.381020+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "810e53aa7b7a479d83cf22cf96f2afa2",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.29,
+   "bid_size": 77,
+   "ask_size": 221,
+   "quote_observed_at": "2026-10-27T17:06:37.676000-04:00",
+   "planned_at": "2026-10-27T21:06:38.991297+00:00",
+   "order_id": 4403,
+   "transitions": [
+    [
+     "2026-10-27 21:06:38.995271+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:06:39.016742+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:06:39.157960+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:06:47.519684+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:06:47.684348+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:06:39.153973+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:06:39.159836+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:06:47.510132+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:06:47.664793+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:06:47.489738+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:06:47.689591+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "76df5ddec65e4bde8cfc44d9b83c8b95",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.28,
+   "bid_size": 77,
+   "ask_size": 19,
+   "quote_observed_at": "2026-10-27T17:06:48.350000-04:00",
+   "planned_at": "2026-10-27T21:06:50.454134+00:00",
+   "order_id": 4405,
+   "transitions": [
+    [
+     "2026-10-27 21:06:50.462410+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:06:50.489536+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:06:51.197559+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:06:59.517139+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:06:59.752672+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:06:51.194771+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:06:51.199826+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:06:59.509779+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:06:59.729993+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:06:59.505860+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:06:59.759959+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "050665cd9d4d483bb5532a96d4acae3b",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.27,
+   "bid_size": 57,
+   "ask_size": 8,
+   "quote_observed_at": "2026-10-27T17:07:01.403000-04:00",
+   "planned_at": "2026-10-27T21:07:02.688595+00:00",
+   "order_id": 4407,
+   "transitions": [
+    [
+     "2026-10-27 21:07:02.693338+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:07:02.720015+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:07:02.786470+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:07:11.267106+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:07:12.412345+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:07:02.781940+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:07:02.795167+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:07:11.263464+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:07:12.408657+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:07:11.261608+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:07:12.414336+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "9de93b5b847740f39f9ca3e5ecf38aec",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.27,
+   "bid_size": 57,
+   "ask_size": 7,
+   "quote_observed_at": "2026-10-27T17:07:15.107000-04:00",
+   "planned_at": "2026-10-27T21:07:16.279896+00:00",
+   "order_id": 4409,
+   "transitions": [
+    [
+     "2026-10-27 21:07:16.284713+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:07:16.308651+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:07:16.930074+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:07:24.364039+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:07:25.226885+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:07:16.922922+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:07:16.932714+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:07:24.355702+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:07:25.222675+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:07:24.349525+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:07:25.228916+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "988135286a334ba4b6a936867859a040",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.27,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.27,
+   "moomoo_ask": 149.29,
+   "bid_size": 2063,
+   "ask_size": 343,
+   "quote_observed_at": "2026-10-27T17:07:25.304000-04:00",
+   "planned_at": "2026-10-27T21:07:28.751280+00:00",
+   "order_id": 4412,
+   "transitions": [
+    [
+     "2026-10-27 21:07:28.755488+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:07:28.909817+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:07:29.578487+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:07:37.718259+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:07:37.825716+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:07:29.573398+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:07:29.586766+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:07:37.709511+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:07:37.812203+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:07:37.702149+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:07:37.830193+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "a4ac5ec4a1aa476198df96af50e747eb",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.21,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.21,
+   "moomoo_ask": 149.28,
+   "bid_size": 14,
+   "ask_size": 201,
+   "quote_observed_at": "2026-10-27T17:07:37.987000-04:00",
+   "planned_at": "2026-10-27T21:07:40.703482+00:00",
+   "order_id": 4414,
+   "transitions": [
+    [
+     "2026-10-27 21:07:40.707228+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:07:40.726090+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:07:40.845878+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:07:48.957229+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:07:49.037727+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:07:40.837964+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:07:40.853250+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:07:48.949538+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:07:49.029744+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:07:48.945342+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:07:49.041304+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "b6d7bca9d2004003a5597f9987583a49",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.21,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.21,
+   "moomoo_ask": 149.28,
+   "bid_size": 14,
+   "ask_size": 201,
+   "quote_observed_at": "2026-10-27T17:07:51.042000-04:00",
+   "planned_at": "2026-10-27T21:07:52.114706+00:00",
+   "order_id": 4416,
+   "transitions": [
+    [
+     "2026-10-27 21:07:52.119564+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:07:52.152044+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:07:52.236773+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:08:00.339440+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:08:00.404224+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:07:52.227268+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:07:52.245859+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:00.329814+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:00.387824+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:08:00.325257+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:08:00.407254+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "b3e8090e2eac4c4998a49dceff1c7ac6",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.27,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.27,
+   "moomoo_ask": 149.28,
+   "bid_size": 2060,
+   "ask_size": 1,
+   "quote_observed_at": "2026-10-27T17:08:01.750000-04:00",
+   "planned_at": "2026-10-27T21:08:03.350180+00:00",
+   "order_id": 4418,
+   "transitions": [
+    [
+     "2026-10-27 21:08:03.353323+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:08:03.370897+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:08:03.439449+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:08:11.550437+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:08:11.657502+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:08:03.434970+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:03.445423+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:11.545603+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:11.643582+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:08:11.542556+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:08:11.662639+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "2c260521c6b24b24ab7d6846156a5639",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.28,
+   "bid_size": 118,
+   "ask_size": 74,
+   "quote_observed_at": "2026-10-27T17:08:13.215000-04:00",
+   "planned_at": "2026-10-27T21:08:14.763983+00:00",
+   "order_id": 4421,
+   "transitions": [
+    [
+     "2026-10-27 21:08:14.766792+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:08:14.782410+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:08:14.839546+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:08:23.082468+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:08:23.284232+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:08:14.835865+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:14.845679+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:23.075335+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:23.279002+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:08:23.071294+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:08:23.286363+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "04dab9f0d6f34c79ac39e186707644f9",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.27,
+   "bid_size": 118,
+   "ask_size": 3,
+   "quote_observed_at": "2026-10-27T17:08:22.475000-04:00",
+   "planned_at": "2026-10-27T21:08:26.100632+00:00",
+   "order_id": 4423,
+   "transitions": [
+    [
+     "2026-10-27 21:08:26.103762+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:08:26.127337+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:08:26.252849+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:08:34.364780+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:08:34.434208+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:08:26.247530+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:26.261377+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:34.359928+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:34.417567+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:08:34.355838+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:08:34.443894+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "c4c2eacaab1346c8a69e45d3dcb0d31b",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.26,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.26,
+   "moomoo_ask": 149.27,
+   "bid_size": 22,
+   "ask_size": 3,
+   "quote_observed_at": "2026-10-27T17:08:36.573000-04:00",
+   "planned_at": "2026-10-27T21:08:37.375721+00:00",
+   "order_id": 4426,
+   "transitions": [
+    [
+     "2026-10-27 21:08:37.379135+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:08:38.056984+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:08:39.277537+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:08:46.370497+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:08:46.880113+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:08:39.272984+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:39.280649+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:46.362019+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:46.865079+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:08:46.357046+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:08:46.885315+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "eebe5b0982a44d6d985ba6f563b74434",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.28,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.28,
+   "moomoo_ask": 149.29,
+   "bid_size": 1837,
+   "ask_size": 325,
+   "quote_observed_at": "2026-10-27T17:08:47.251000-04:00",
+   "planned_at": "2026-10-27T21:08:49.524305+00:00",
+   "order_id": 4428,
+   "transitions": [
+    [
+     "2026-10-27 21:08:49.528468+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:08:49.554343+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:08:49.612274+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:08:57.710103+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:08:57.890266+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:08:49.607602+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:49.619282+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:57.703941+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:08:57.862899+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:08:57.701454+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:08:57.899873+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "dd80a7cf2af147d38e19ea02ecca88be",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.29,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.29,
+   "moomoo_ask": 149.31,
+   "bid_size": 1365,
+   "ask_size": 4,
+   "quote_observed_at": "2026-10-27T17:08:57.736000-04:00",
+   "planned_at": "2026-10-27T21:09:00.839285+00:00",
+   "order_id": 4431,
+   "transitions": [
+    [
+     "2026-10-27 21:09:00.842459+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:09:00.859105+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:09:01.605123+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:09:09.761545+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:09:09.930677+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:09:01.594116+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:01.617435+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:09.752180+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:09.915001+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:09:09.745038+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:09:09.934782+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "fffb33c9cec243d2b98de3810c32cb28",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.28,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.28,
+   "moomoo_ask": 149.29,
+   "bid_size": 10,
+   "ask_size": 3,
+   "quote_observed_at": "2026-10-27T17:09:09.875000-04:00",
+   "planned_at": "2026-10-27T21:09:13.115162+00:00",
+   "order_id": 4433,
+   "transitions": [
+    [
+     "2026-10-27 21:09:13.119994+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:09:13.154837+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:09:13.668075+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:09:21.812817+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:09:22.581789+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:09:13.657572+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:13.684780+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:21.805994+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:22.558536+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:09:21.801503+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:09:22.592306+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "a91ae4f86b6d4c24a1e520917e78fbf2",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.28,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.28,
+   "moomoo_ask": 149.29,
+   "bid_size": 37,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:09:21.325000-04:00",
+   "planned_at": "2026-10-27T21:09:25.419340+00:00",
+   "order_id": 4435,
+   "transitions": [
+    [
+     "2026-10-27 21:09:25.422229+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:09:25.442057+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:09:25.779814+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:09:33.913451+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:09:34.069052+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:09:25.770096+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:25.785873+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:33.906450+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:34.046020+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:09:33.901651+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:09:34.072610+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "75f31681c426452e95d85b7d19436592",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.27,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.27,
+   "moomoo_ask": 149.31,
+   "bid_size": 48,
+   "ask_size": 3,
+   "quote_observed_at": "2026-10-27T17:09:36.031000-04:00",
+   "planned_at": "2026-10-27T21:09:37.142818+00:00",
+   "order_id": 4437,
+   "transitions": [
+    [
+     "2026-10-27 21:09:37.147091+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:09:37.172480+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:09:37.534053+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:09:37.570304+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:09:37.526661+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:37.573750+00:00",
+     "Filled",
+     1.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": -1,
+     "price": 149.27,
+     "exec_at": "2026-10-27T21:09:37.536905Z",
+     "recorded_at": "2026-10-27T21:09:37.554189+00:00",
+     "exec_id": "00025b49.6ae247fb.01.01"
+    }
+   ],
+   "filled_qty": -1,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "75f31681c426452e95d85b7d19436592",
+   "leg": "exit",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.31,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.27,
+   "moomoo_ask": 149.31,
+   "bid_size": 48,
+   "ask_size": 3,
+   "quote_observed_at": "2026-10-27T17:09:36.031000-04:00",
+   "planned_at": "2026-10-27T21:09:37.612313+00:00",
+   "order_id": 4438,
+   "transitions": [
+    [
+     "2026-10-27 21:09:37.615006+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:09:37.636987+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:09:37.795476+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:09:45.918493+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:09:45.996758+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:09:37.791787+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:37.798594+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:45.910295+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:45.981928+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:09:45.906451+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:09:46.002913+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "75f31681c426452e95d85b7d19436592",
+   "leg": "exit",
+   "attempt": 1,
+   "label": "SPCX",
+   "limit": 149.33,
+   "collar_ticks": 2,
+   "moomoo_bid": 149.28,
+   "moomoo_ask": 149.31,
+   "bid_size": 189,
+   "ask_size": 28,
+   "quote_observed_at": "2026-10-27T17:09:44.842000-04:00",
+   "planned_at": "2026-10-27T21:09:49.529013+00:00",
+   "order_id": 4441,
+   "transitions": [
+    [
+     "2026-10-27 21:09:49.530476+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:09:49.543513+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:09:53.978335+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:09:57.565622+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:09:57.715145+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:09:53.972144+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:54.004829+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:57.572654+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:09:57.706636+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:09:57.568312+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:09:57.717916+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    },
+    {
+     "at": "2026-10-27T21:09:57.770389+00:00",
+     "code": 10148,
+     "message": "OrderId 4441 that needs to be cancelled cannot be cancelled, state: Cancelled."
+    }
+   ]
+  },
+  {
+   "cycle": "75f31681c426452e95d85b7d19436592",
+   "leg": "exit",
+   "attempt": 2,
+   "label": "SPCX",
+   "limit": 149.36,
+   "collar_ticks": 5,
+   "moomoo_bid": 149.3,
+   "moomoo_ask": 149.31,
+   "bid_size": 5,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:09:56.996000-04:00",
+   "planned_at": "2026-10-27T21:10:01.449575+00:00",
+   "order_id": 4445,
+   "transitions": [
+    [
+     "2026-10-27 21:10:01.450931+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:10:01.465059+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:10:01.664735+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:10:04.081320+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:10:04.626741+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:10:01.657230+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:10:01.675737+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:10:04.087735+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:10:04.625247+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:10:04.085289+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:10:04.627638+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "75f31681c426452e95d85b7d19436592",
+   "leg": "exit",
+   "attempt": 3,
+   "label": "SPCX",
+   "limit": 149.41,
+   "collar_ticks": 10,
+   "moomoo_bid": 149.28,
+   "moomoo_ask": 149.31,
+   "bid_size": 209,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:10:05.956000-04:00",
+   "planned_at": "2026-10-27T21:10:08.001404+00:00",
+   "order_id": 4449,
+   "transitions": [
+    [
+     "2026-10-27 21:10:08.002989+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:10:08.017890+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:10:08.163731+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:10:16.595469+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:10:16.656755+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:10:08.160010+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:10:16.589245+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:10:16.639428+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:10:16.567556+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:10:16.661490+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "75f31681c426452e95d85b7d19436592",
+   "leg": "exit",
+   "attempt": 4,
+   "label": "SPCX",
+   "limit": 149.56,
+   "collar_ticks": 25,
+   "moomoo_bid": 149.28,
+   "moomoo_ask": 149.31,
+   "bid_size": 209,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:10:19.020000-04:00",
+   "planned_at": "2026-10-27T21:10:20.074800+00:00",
+   "order_id": 4452,
+   "transitions": [
+    [
+     "2026-10-27 21:10:20.076145+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:10:20.089379+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:10:21.316511+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:10:28.453211+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:10:28.628982+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:10:21.312779+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:10:21.319031+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:10:28.442932+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:10:28.606638+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:10:28.433291+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:10:28.635557+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "3f71fe1dc0c14d60b25acaf3d7526d5d",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.26,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.26,
+   "moomoo_ask": 149.31,
+   "bid_size": 12,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:10:38.492000-04:00",
+   "planned_at": "2026-10-27T21:10:40.636484+00:00",
+   "order_id": 4456,
+   "transitions": [
+    [
+     "2026-10-27 21:10:40.640587+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:10:40.870135+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:10:40.935745+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:10:49.386982+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:10:49.582921+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:10:40.929736+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:10:40.945850+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:10:49.384175+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:10:49.557018+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:10:49.381721+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:10:49.586463+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "efb968d84af64399823f39638243f3a9",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.26,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.26,
+   "moomoo_ask": 149.31,
+   "bid_size": 12,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:10:50.746000-04:00",
+   "planned_at": "2026-10-27T21:10:52.305944+00:00",
+   "order_id": 4458,
+   "transitions": [
+    [
+     "2026-10-27 21:10:52.313108+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:10:52.341773+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:10:52.400526+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:11:00.572970+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:11:01.147818+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:10:52.395192+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:10:52.408592+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:00.562819+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:01.126356+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:11:00.558640+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:11:01.152345+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "3da238b83b3f475588f8852cb60b1b8d",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.31,
+   "bid_size": 149,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:11:00.040000-04:00",
+   "planned_at": "2026-10-27T21:11:03.767702+00:00",
+   "order_id": 4460,
+   "transitions": [
+    [
+     "2026-10-27 21:11:03.773366+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:11:03.802016+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:11:03.861671+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:11:03.898928+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:11:03.855830+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:03.901478+00:00",
+     "Filled",
+     1.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": -1,
+     "price": 149.25,
+     "exec_at": "2026-10-27T21:11:03.885084Z",
+     "recorded_at": "2026-10-27T21:11:03.886836+00:00",
+     "exec_id": "00025b49.6ae247ff.01.01"
+    }
+   ],
+   "filled_qty": -1,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "3da238b83b3f475588f8852cb60b1b8d",
+   "leg": "exit",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.31,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.31,
+   "bid_size": 149,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:11:00.040000-04:00",
+   "planned_at": "2026-10-27T21:11:03.934718+00:00",
+   "order_id": 4461,
+   "transitions": [
+    [
+     "2026-10-27 21:11:03.937524+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:11:03.961407+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:11:04.016257+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:11:12.224155+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:11:12.837755+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:11:04.012531+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:04.021287+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:12.218958+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:12.813276+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:11:12.215843+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:11:12.840539+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "3da238b83b3f475588f8852cb60b1b8d",
+   "leg": "exit",
+   "attempt": 1,
+   "label": "SPCX",
+   "limit": 149.33,
+   "collar_ticks": 2,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.31,
+   "bid_size": 154,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:11:15.091000-04:00",
+   "planned_at": "2026-10-27T21:11:16.348667+00:00",
+   "order_id": 4464,
+   "transitions": [
+    [
+     "2026-10-27 21:11:16.350049+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:11:16.363413+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:11:16.675564+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:11:16.705375+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:11:16.666071+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:16.709582+00:00",
+     "Filled",
+     1.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": 1,
+     "price": 149.32,
+     "exec_at": "2026-10-27T21:11:16Z",
+     "recorded_at": "2026-10-27T21:11:35.849664+00:00",
+     "exec_id": "00025b49.6ae24800.01.01"
+    }
+   ],
+   "filled_qty": 1,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "61fe568f35b140c4afbf90c2cbfdf502",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.3,
+   "bid_size": 154,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:11:20.856000-04:00",
+   "planned_at": "2026-10-27T21:11:25.113322+00:00",
+   "order_id": 4465,
+   "transitions": [
+    [
+     "2026-10-27 21:11:25.117506+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:11:25.143164+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:11:25.384010+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:11:25.397808+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:11:25.380712+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:25.399917+00:00",
+     "Filled",
+     1.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": -1,
+     "price": 149.25,
+     "exec_at": "2026-10-27T21:11:25Z",
+     "recorded_at": "2026-10-27T21:11:35.850270+00:00",
+     "exec_id": "00025b49.6ae24802.01.01"
+    }
+   ],
+   "filled_qty": -1,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "61fe568f35b140c4afbf90c2cbfdf502",
+   "leg": "exit",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.3,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.3,
+   "bid_size": 154,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:11:20.856000-04:00",
+   "planned_at": "2026-10-27T21:11:25.427888+00:00",
+   "order_id": 4466,
+   "transitions": [
+    [
+     "2026-10-27 21:11:25.431444+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:11:25.449651+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:11:25.499540+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:11:33.607841+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:11:34.162851+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:11:25.495988+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:25.509757+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:33.600896+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:34.160170+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:11:33.597005+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:11:34.164500+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "61fe568f35b140c4afbf90c2cbfdf502",
+   "leg": "exit",
+   "attempt": 1,
+   "label": "SPCX",
+   "limit": 149.33,
+   "collar_ticks": 2,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.31,
+   "bid_size": 48,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:11:35.746000-04:00",
+   "planned_at": "2026-10-27T21:11:37.716418+00:00",
+   "order_id": 4469,
+   "transitions": [
+    [
+     "2026-10-27 21:11:37.718169+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:11:37.731377+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:11:38.882210+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:11:38.925851+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:11:38.874068+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:38.938319+00:00",
+     "Filled",
+     1.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": 1,
+     "price": 149.32,
+     "exec_at": "2026-10-27T21:11:37Z",
+     "recorded_at": "2026-10-27T21:11:58.211786+00:00",
+     "exec_id": "00025b49.6ae24806.01.01"
+    }
+   ],
+   "filled_qty": 1,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "bac7d2af93b946aba500192009811157",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.31,
+   "bid_size": 43,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:11:45.506000-04:00",
+   "planned_at": "2026-10-27T21:11:47.513682+00:00",
+   "order_id": 4471,
+   "transitions": [
+    [
+     "2026-10-27 21:11:47.516544+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:11:47.769009+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:11:47.851764+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:11:55.972296+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:11:56.168464+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:11:47.840611+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:47.867282+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:55.965128+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:56.150082+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:11:55.960603+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:11:56.172407+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "b7313f11e2084041a12ea170bcdf30ba",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.26,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.26,
+   "moomoo_ask": 149.31,
+   "bid_size": 5,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:11:56.273000-04:00",
+   "planned_at": "2026-10-27T21:11:59.312627+00:00",
+   "order_id": 4473,
+   "transitions": [
+    [
+     "2026-10-27 21:11:59.318101+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:11:59.345316+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:11:59.488316+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:12:07.743382+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:12:07.818701+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:11:59.483915+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:11:59.490109+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:12:07.734347+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:12:07.799093+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:12:07.730978+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:12:07.824087+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "ef1c7c095d9c442c91d53b1e2c407900",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.26,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.26,
+   "moomoo_ask": 149.31,
+   "bid_size": 4,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:12:11.871000-04:00",
+   "planned_at": "2026-10-27T21:12:13.844805+00:00",
+   "order_id": 4475,
+   "transitions": [
+    [
+     "2026-10-27 21:12:13.849472+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:12:13.874859+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:12:14.630037+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:12:22.762416+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:12:23.684286+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:12:14.622727+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:12:14.644991+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:12:22.753717+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:12:23.658173+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:12:22.746735+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:12:23.693736+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "5b98e8631c124868a4ba4378c6059c42",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.26,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.26,
+   "moomoo_ask": 149.31,
+   "bid_size": 4,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:12:25.697000-04:00",
+   "planned_at": "2026-10-27T21:12:26.685770+00:00",
+   "order_id": 4477,
+   "transitions": [
+    [
+     "2026-10-27 21:12:26.689922+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:12:26.714569+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:12:26.796407+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:12:34.920873+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:12:35.045835+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:12:26.790112+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:12:26.803160+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:12:34.912708+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:12:35.018287+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:12:34.907644+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:12:35.050086+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "19fea2cb679b4d4584eb8cb02923bb47",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.26,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.26,
+   "moomoo_ask": 149.31,
+   "bid_size": 3,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:12:35.220000-04:00",
+   "planned_at": "2026-10-27T21:12:38.211925+00:00",
+   "order_id": 4480,
+   "transitions": [
+    [
+     "2026-10-27 21:12:38.214055+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:12:38.229640+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:12:39.468321+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:12:46.779042+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:12:47.111714+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:12:39.464330+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:12:39.471356+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:12:46.771170+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:12:47.094415+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:12:46.767798+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:12:47.118791+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "c8d11006d3974ec09427b868bf160a31",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.29,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.29,
+   "moomoo_ask": 149.31,
+   "bid_size": 2,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:12:45.537000-04:00",
+   "planned_at": "2026-10-27T21:12:49.815094+00:00",
+   "order_id": null,
+   "transitions": [
+    [
+     "2026-10-27 21:12:49.818792+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:12:50.585047+00:00",
+     "REJECTED"
+    ]
+   ],
+   "ibkr_status": [],
+   "cancel_sent_at": null,
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "235d210f131b4c9dbb0c55e84664cc5e",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.29,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.29,
+   "moomoo_ask": 149.31,
+   "bid_size": 1,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:12:54.472000-04:00",
+   "planned_at": "2026-10-27T21:12:54.761545+00:00",
+   "order_id": 4483,
+   "transitions": [
+    [
+     "2026-10-27 21:12:54.764246+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:12:54.783004+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:12:54.975462+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:13:03.084931+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:13:03.984090+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:12:54.970567+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:12:54.983420+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:13:03.081304+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:13:03.966638+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:13:03.077919+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:13:03.992131+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "b5d1aee215f04102bd477afc372564d2",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.26,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.26,
+   "moomoo_ask": 149.31,
+   "bid_size": 162,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:13:03.057000-04:00",
+   "planned_at": "2026-10-27T21:13:07.169028+00:00",
+   "order_id": 4485,
+   "transitions": [
+    [
+     "2026-10-27 21:13:07.173767+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:13:07.192564+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:13:08.294206+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:13:08.351592+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:13:08.281243+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:13:08.355327+00:00",
+     "Filled",
+     1.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": -1,
+     "price": 149.26,
+     "exec_at": "2026-10-27T21:13:07Z",
+     "recorded_at": "2026-10-27T21:13:22.790927+00:00",
+     "exec_id": "00025b49.6ae24808.01.01"
+    }
+   ],
+   "filled_qty": -1,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "b5d1aee215f04102bd477afc372564d2",
+   "leg": "exit",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.31,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.26,
+   "moomoo_ask": 149.31,
+   "bid_size": 162,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:13:05.806000-04:00",
+   "planned_at": "2026-10-27T21:13:10.549687+00:00",
+   "order_id": 4486,
+   "transitions": [
+    [
+     "2026-10-27 21:13:10.553258+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:13:10.579256+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:13:10.660921+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:13:18.912815+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:13:19.037333+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:13:10.656092+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:13:10.686947+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:13:18.905858+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:13:19.024530+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:13:18.900817+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:13:19.041953+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "b5d1aee215f04102bd477afc372564d2",
+   "leg": "exit",
+   "attempt": 1,
+   "label": "SPCX",
+   "limit": 149.28,
+   "collar_ticks": 2,
+   "moomoo_bid": 149.26,
+   "moomoo_ask": 149.26,
+   "bid_size": 94,
+   "ask_size": 211,
+   "quote_observed_at": "2026-10-27T17:13:21.078000-04:00",
+   "planned_at": "2026-10-27T21:13:22.808711+00:00",
+   "order_id": 4489,
+   "transitions": [
+    [
+     "2026-10-27 21:13:22.810068+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:13:22.825039+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:13:22.886789+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:13:31.124103+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:13:31.181964+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:13:22.884614+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:13:22.891031+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:13:31.118533+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:13:31.169845+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:13:31.116397+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:13:31.184846+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "b5d1aee215f04102bd477afc372564d2",
+   "leg": "exit",
+   "attempt": 2,
+   "label": "SPCX",
+   "limit": 149.36,
+   "collar_ticks": 5,
+   "moomoo_bid": 149.27,
+   "moomoo_ask": 149.31,
+   "bid_size": 31,
+   "ask_size": 2,
+   "quote_observed_at": "2026-10-27T17:14:50.718000-04:00",
+   "planned_at": "2026-10-27T21:14:55.206518+00:00",
+   "order_id": 4493,
+   "transitions": [
+    [
+     "2026-10-27 21:14:55.210915+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:14:55.238470+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:14:56.148908+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:14:56.180854+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:14:56.142763+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:14:56.183710+00:00",
+     "Filled",
+     1.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": 1,
+     "price": 149.29,
+     "exec_at": "2026-10-27T21:14:56.161189Z",
+     "recorded_at": "2026-10-27T21:14:56.173029+00:00",
+     "exec_id": "00025b49.6ae2480e.01.01"
+    }
+   ],
+   "filled_qty": 1,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "3365fc4d74694d519a688a0450963b4a",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.29,
+   "bid_size": 80,
+   "ask_size": 70,
+   "quote_observed_at": "2026-10-27T17:15:03.698000-04:00",
+   "planned_at": "2026-10-27T21:15:04.547719+00:00",
+   "order_id": 4495,
+   "transitions": [
+    [
+     "2026-10-27 21:15:04.551281+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:15:05.561117+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:15:05.687458+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:15:13.798389+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:15:14.666130+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:15:05.682405+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:05.696812+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:13.793184+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:14.658880+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:15:13.790467+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:15:14.669702+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "406a36d7ef604cb7b3f57ebf8719a8f0",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.25,
+   "moomoo_ask": 149.29,
+   "bid_size": 80,
+   "ask_size": 70,
+   "quote_observed_at": "2026-10-27T17:15:14.013000-04:00",
+   "planned_at": "2026-10-27T21:15:17.551962+00:00",
+   "order_id": 4497,
+   "transitions": [
+    [
+     "2026-10-27 21:15:17.556803+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:15:17.581646+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:15:17.643180+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:15:25.755034+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:15:25.866675+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:15:17.639514+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:17.648303+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:25.750586+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:25.852889+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:15:25.746612+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:15:25.871182+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "3bc09eea4fdb4753889a4fc34aa202be",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.21,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.21,
+   "moomoo_ask": 149.23,
+   "bid_size": 102,
+   "ask_size": 1368,
+   "quote_observed_at": "2026-10-27T17:15:27.139000-04:00",
+   "planned_at": "2026-10-27T21:15:28.816335+00:00",
+   "order_id": 4499,
+   "transitions": [
+    [
+     "2026-10-27 21:15:28.820437+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:15:28.841920+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:15:28.894505+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:15:29.028014+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:15:28.890830+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:29.031864+00:00",
+     "Filled",
+     50.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": -50,
+     "price": 149.21,
+     "exec_at": "2026-10-27T21:15:28Z",
+     "recorded_at": "2026-10-27T21:15:39.705937+00:00",
+     "exec_id": "00025b49.6ae24822.01.01"
+    }
+   ],
+   "filled_qty": -50,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "3bc09eea4fdb4753889a4fc34aa202be",
+   "leg": "exit",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.23,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.21,
+   "moomoo_ask": 149.23,
+   "bid_size": 102,
+   "ask_size": 1368,
+   "quote_observed_at": "2026-10-27T17:15:27.139000-04:00",
+   "planned_at": "2026-10-27T21:15:29.078213+00:00",
+   "order_id": 4500,
+   "transitions": [
+    [
+     "2026-10-27 21:15:29.081047+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:15:29.101657+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:15:29.152355+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:15:37.289978+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:15:37.956017+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:15:29.148376+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:29.159425+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:37.284686+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:37.949386+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:15:37.279440+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:15:37.959538+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "3bc09eea4fdb4753889a4fc34aa202be",
+   "leg": "exit",
+   "attempt": 1,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 2,
+   "moomoo_bid": 149.21,
+   "moomoo_ask": 149.23,
+   "bid_size": 80,
+   "ask_size": 1368,
+   "quote_observed_at": "2026-10-27T17:15:37.551000-04:00",
+   "planned_at": "2026-10-27T21:15:41.514567+00:00",
+   "order_id": 4503,
+   "transitions": [
+    [
+     "2026-10-27 21:15:41.515775+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:15:41.529032+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:15:41.706087+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:15:49.847650+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:15:50.584889+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:15:41.700486+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:41.720165+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:49.844378+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:50.576150+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:15:49.842428+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:15:50.588481+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "3bc09eea4fdb4753889a4fc34aa202be",
+   "leg": "exit",
+   "attempt": 2,
+   "label": "SPCX",
+   "limit": 149.34,
+   "collar_ticks": 5,
+   "moomoo_bid": 149.21,
+   "moomoo_ask": 149.29,
+   "bid_size": 80,
+   "ask_size": 120,
+   "quote_observed_at": "2026-10-27T17:15:53.351000-04:00",
+   "planned_at": "2026-10-27T21:15:53.872257+00:00",
+   "order_id": 4506,
+   "transitions": [
+    [
+     "2026-10-27 21:15:53.874305+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:15:53.890133+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:15:54.778561+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:15:56.281059+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:15:54.770088+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:54.789762+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:15:56.284851+00:00",
+     "Filled",
+     50.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": 50,
+     "price": 149.29,
+     "exec_at": "2026-10-27T21:15:56.263282Z",
+     "recorded_at": "2026-10-27T21:15:56.271914+00:00",
+     "exec_id": "00025b49.6ae24826.01.01"
+    }
+   ],
+   "filled_qty": 50,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "514ba14c8ab04129bf6f8872549a726c",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.21,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.21,
+   "moomoo_ask": 149.26,
+   "bid_size": 80,
+   "ask_size": 50,
+   "quote_observed_at": "2026-10-27T17:16:00.623000-04:00",
+   "planned_at": "2026-10-27T21:16:04.666169+00:00",
+   "order_id": 4508,
+   "transitions": [
+    [
+     "2026-10-27 21:16:04.669766+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:16:04.825463+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:16:04.958573+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:16:13.174661+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:16:14.261130+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:16:04.951567+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:16:04.969388+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:16:13.169795+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:16:14.241633+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:16:13.166218+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:16:14.265386+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "de223be431d34c1b863ea4087c0ac2e5",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.21,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.21,
+   "moomoo_ask": 149.22,
+   "bid_size": 10,
+   "ask_size": 37,
+   "quote_observed_at": "2026-10-27T17:16:35.448000-04:00",
+   "planned_at": "2026-10-27T21:16:36.142881+00:00",
+   "order_id": 4512,
+   "transitions": [
+    [
+     "2026-10-27 21:16:36.146945+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:16:36.171787+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:16:37.230449+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:16:44.470346+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:16:45.108459+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:16:37.225126+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:16:37.236619+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:16:44.464035+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:16:45.097875+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:16:44.460265+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:16:45.113099+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "53684c80df454c078b9e99fbc9ba20c7",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.22,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.22,
+   "moomoo_ask": 149.25,
+   "bid_size": 22,
+   "ask_size": 3,
+   "quote_observed_at": "2026-10-27T17:16:46.121000-04:00",
+   "planned_at": "2026-10-27T21:16:47.899624+00:00",
+   "order_id": 4514,
+   "transitions": [
+    [
+     "2026-10-27 21:16:47.903499+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:16:47.937244+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:16:48.251277+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:16:56.495873+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:16:56.728143+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:16:48.240345+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:16:48.263859+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:16:56.490358+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:16:56.719739+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:16:56.486338+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:16:56.732052+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "433a91342ad6435799787af0d338f43b",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.22,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.22,
+   "moomoo_ask": 149.25,
+   "bid_size": 62,
+   "ask_size": 3,
+   "quote_observed_at": "2026-10-27T17:16:57.258000-04:00",
+   "planned_at": "2026-10-27T21:16:59.445197+00:00",
+   "order_id": 4516,
+   "transitions": [
+    [
+     "2026-10-27 21:16:59.448990+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:16:59.585685+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:17:01.639213+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:17:01.677518+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:17:01.630214+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:17:01.651787+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:17:01.681247+00:00",
+     "Filled",
+     1.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": -1,
+     "price": 149.22,
+     "exec_at": "2026-10-27T21:17:01.666208Z",
+     "recorded_at": "2026-10-27T21:17:01.670558+00:00",
+     "exec_id": "00025b49.6ae24828.01.01"
+    }
+   ],
+   "filled_qty": -1,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "433a91342ad6435799787af0d338f43b",
+   "leg": "exit",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.22,
+   "moomoo_ask": 149.25,
+   "bid_size": 620,
+   "ask_size": 3,
+   "quote_observed_at": "2026-10-27T17:16:59.730000-04:00",
+   "planned_at": "2026-10-27T21:17:01.731407+00:00",
+   "order_id": 4517,
+   "transitions": [
+    [
+     "2026-10-27 21:17:01.734566+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:17:01.755105+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:17:01.837058+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:17:01.857148+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:17:01.832726+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:17:01.867153+00:00",
+     "Filled",
+     1.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": 1,
+     "price": 149.23,
+     "exec_at": "2026-10-27T21:17:01.847834Z",
+     "recorded_at": "2026-10-27T21:17:01.848613+00:00",
+     "exec_id": "00025b49.6ae24829.01.01"
+    }
+   ],
+   "filled_qty": 1,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "3c94cb81f3e74a1fa0fc7ed26bfdcb4d",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.22,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.22,
+   "moomoo_ask": 149.25,
+   "bid_size": 71,
+   "ask_size": 3,
+   "quote_observed_at": "2026-10-27T17:17:08.351000-04:00",
+   "planned_at": "2026-10-27T21:17:10.245590+00:00",
+   "order_id": 4519,
+   "transitions": [
+    [
+     "2026-10-27 21:17:10.249007+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:17:10.792847+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:17:10.948760+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:17:18.925749+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:17:19.000810+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:17:10.944848+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:17:10.953316+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:17:18.931712+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:17:18.986831+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:17:18.929172+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:17:19.002222+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    },
+    {
+     "at": "2026-10-27T21:17:19.131239+00:00",
+     "code": 10148,
+     "message": "OrderId 4519 that needs to be cancelled cannot be cancelled, state: Cancelled."
+    }
+   ]
+  },
+  {
+   "cycle": "47acb7a0620d4f2ca827d1dc825b548e",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.2,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.2,
+   "moomoo_ask": 149.24,
+   "bid_size": 71,
+   "ask_size": 18,
+   "quote_observed_at": "2026-10-27T17:17:36.801000-04:00",
+   "planned_at": "2026-10-27T21:17:37.638885+00:00",
+   "order_id": 4523,
+   "transitions": [
+    [
+     "2026-10-27 21:17:37.641570+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:17:37.657922+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:17:37.789914+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:17:45.899617+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:17:45.973394+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:17:37.785267+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:17:37.797325+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:17:45.893172+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:17:45.950089+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:17:45.888832+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:17:45.987634+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "a06836e0d8bf4196b296cc6cd6a0d62f",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.19,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.19,
+   "moomoo_ask": 149.2,
+   "bid_size": 153,
+   "ask_size": 225,
+   "quote_observed_at": "2026-10-27T17:17:49.501000-04:00",
+   "planned_at": "2026-10-27T21:17:51.933003+00:00",
+   "order_id": 4525,
+   "transitions": [
+    [
+     "2026-10-27 21:17:51.938594+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:17:51.965022+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:17:53.278193+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:17:53.298678+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:17:53.250090+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:17:53.300211+00:00",
+     "Filled",
+     50.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": -50,
+     "price": 149.19,
+     "exec_at": "2026-10-27T21:17:52Z",
+     "recorded_at": "2026-10-27T21:18:23.135805+00:00",
+     "exec_id": "00025b49.6ae2482c.01.01"
+    }
+   ],
+   "filled_qty": -50,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "a06836e0d8bf4196b296cc6cd6a0d62f",
+   "leg": "exit",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.2,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.19,
+   "moomoo_ask": 149.2,
+   "bid_size": 153,
+   "ask_size": 224,
+   "quote_observed_at": "2026-10-27T17:17:51.526000-04:00",
+   "planned_at": "2026-10-27T21:17:53.328935+00:00",
+   "order_id": 4526,
+   "transitions": [
+    [
+     "2026-10-27 21:17:53.333511+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:17:53.352091+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:17:53.426907+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:17:53.439256+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:17:53.423637+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:17:53.441078+00:00",
+     "Filled",
+     50.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": 50,
+     "price": 149.2,
+     "exec_at": "2026-10-27T21:17:53Z",
+     "recorded_at": "2026-10-27T21:18:23.136461+00:00",
+     "exec_id": "00025b49.6ae2482d.01.01"
+    }
+   ],
+   "filled_qty": 50,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "3709a885bcec4f439ede1039b1d78ec6",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.19,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.19,
+   "moomoo_ask": 149.2,
+   "bid_size": 160,
+   "ask_size": 234,
+   "quote_observed_at": "2026-10-27T17:17:59.999000-04:00",
+   "planned_at": "2026-10-27T21:18:02.126332+00:00",
+   "order_id": 4527,
+   "transitions": [
+    [
+     "2026-10-27 21:18:02.130618+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:18:02.155398+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:18:02.492579+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:18:02.530343+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:18:02.486053+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:18:02.532708+00:00",
+     "Filled",
+     50.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": -50,
+     "price": 149.19,
+     "exec_at": "2026-10-27T21:18:02Z",
+     "recorded_at": "2026-10-27T21:18:23.137086+00:00",
+     "exec_id": "00025b49.6ae2482e.01.01"
+    }
+   ],
+   "filled_qty": -50,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "3709a885bcec4f439ede1039b1d78ec6",
+   "leg": "exit",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.2,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.19,
+   "moomoo_ask": 149.2,
+   "bid_size": 160,
+   "ask_size": 234,
+   "quote_observed_at": "2026-10-27T17:17:59.999000-04:00",
+   "planned_at": "2026-10-27T21:18:02.569730+00:00",
+   "order_id": 4528,
+   "transitions": [
+    [
+     "2026-10-27 21:18:02.575162+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:18:02.596291+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:18:02.691573+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:18:02.710970+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:18:02.682487+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:18:02.712758+00:00",
+     "Filled",
+     50.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": 50,
+     "price": 149.2,
+     "exec_at": "2026-10-27T21:18:02.701078Z",
+     "recorded_at": "2026-10-27T21:18:02.705651+00:00",
+     "exec_id": "00025b49.6ae2482f.01.01"
+    }
+   ],
+   "filled_qty": 50,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "6b5aca63059c42129f369c89f9344ae3",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.19,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.19,
+   "moomoo_ask": 149.2,
+   "bid_size": 160,
+   "ask_size": 235,
+   "quote_observed_at": "2026-10-27T17:18:10.486000-04:00",
+   "planned_at": "2026-10-27T21:18:12.118704+00:00",
+   "order_id": 4530,
+   "transitions": [
+    [
+     "2026-10-27 21:18:12.123647+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:18:12.426144+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:18:20.197152+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:18:21.233523+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:18:31.870266+00:00",
+     "CANCELLED"
+    ],
+    [
+     "2026-10-27 21:18:35.287287+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:18:20.189832+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:18:21.222730+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:18:31.865722+00:00",
+     "Cancelled",
+     0.0
+    ],
+    [
+     "2026-10-27T21:18:32.926576+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:18:35.299683+00:00",
+     "Filled",
+     50.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:18:21.217867+00:00",
+   "fills": [
+    {
+     "qty": -50,
+     "price": 149.19,
+     "exec_at": "2026-10-27T21:18:35.251680Z",
+     "recorded_at": "2026-10-27T21:18:35.254545+00:00",
+     "exec_id": "00025b49.6ae24830.01.01"
+    }
+   ],
+   "filled_qty": -50,
+   "late_fills": [
+    {
+     "qty": -50,
+     "price": 149.19,
+     "exec_at": "2026-10-27T21:18:35.251680Z",
+     "recorded_at": "2026-10-27T21:18:35.254545+00:00",
+     "exec_id": "00025b49.6ae24830.01.01"
+    }
+   ],
+   "errors": [
+    {
+     "at": "2026-10-27T21:18:31.880469+00:00",
+     "code": 10148,
+     "message": "OrderId 4530 that needs to be cancelled cannot be cancelled, state: PendingCancel."
+    }
+   ]
+  },
+  {
+   "cycle": "13ea716d8d4c470bb26d87cf449bd2d0",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.2,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.2,
+   "moomoo_ask": 149.23,
+   "bid_size": 163,
+   "ask_size": 38,
+   "quote_observed_at": "2026-10-27T17:19:55.326000-04:00",
+   "planned_at": "2026-10-27T21:19:56.744670+00:00",
+   "order_id": 4538,
+   "transitions": [
+    [
+     "2026-10-27 21:19:56.749800+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:19:56.960946+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:19:57.031230+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:19:57.061768+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:19:57.027128+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:19:57.065062+00:00",
+     "Filled",
+     25.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": -25,
+     "price": 149.2,
+     "exec_at": "2026-10-27T21:19:57.046114Z",
+     "recorded_at": "2026-10-27T21:19:57.047068+00:00",
+     "exec_id": "00025b49.6ae24833.01.01"
+    }
+   ],
+   "filled_qty": -25,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "13ea716d8d4c470bb26d87cf449bd2d0",
+   "leg": "exit",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.23,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.2,
+   "moomoo_ask": 149.23,
+   "bid_size": 163,
+   "ask_size": 38,
+   "quote_observed_at": "2026-10-27T17:19:55.326000-04:00",
+   "planned_at": "2026-10-27T21:19:57.095179+00:00",
+   "order_id": 4539,
+   "transitions": [
+    [
+     "2026-10-27 21:19:57.097632+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:19:57.116902+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:19:57.167715+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:19:57.183860+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:19:57.163950+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:19:57.185510+00:00",
+     "Filled",
+     25.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": 25,
+     "price": 149.23,
+     "exec_at": "2026-10-27T21:19:57.178773Z",
+     "recorded_at": "2026-10-27T21:19:57.179610+00:00",
+     "exec_id": "00025b49.6ae24834.01.01"
+    }
+   ],
+   "filled_qty": 25,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "994de01efc0641efb7ea021c6bdff20a",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.2,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.2,
+   "moomoo_ask": 149.25,
+   "bid_size": 163,
+   "ask_size": 545,
+   "quote_observed_at": "2026-10-27T17:20:04.552000-04:00",
+   "planned_at": "2026-10-27T21:20:05.505605+00:00",
+   "order_id": 4540,
+   "transitions": [
+    [
+     "2026-10-27 21:20:05.510124+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:20:05.531300+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:20:05.859800+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:20:05.892423+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:20:05.853843+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:05.894884+00:00",
+     "Filled",
+     25.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": -25,
+     "price": 149.2,
+     "exec_at": "2026-10-27T21:20:05.861995Z",
+     "recorded_at": "2026-10-27T21:20:05.882899+00:00",
+     "exec_id": "00025b49.6ae24835.01.01"
+    }
+   ],
+   "filled_qty": -25,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "994de01efc0641efb7ea021c6bdff20a",
+   "leg": "exit",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.25,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.2,
+   "moomoo_ask": 149.25,
+   "bid_size": 163,
+   "ask_size": 545,
+   "quote_observed_at": "2026-10-27T17:20:04.552000-04:00",
+   "planned_at": "2026-10-27T21:20:05.968222+00:00",
+   "order_id": 4541,
+   "transitions": [
+    [
+     "2026-10-27 21:20:05.975313+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:20:06.000594+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:20:06.054135+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:20:06.071894+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:20:06.049520+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:06.081754+00:00",
+     "Filled",
+     25.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": 25,
+     "price": 149.23,
+     "exec_at": "2026-10-27T21:20:06.065329Z",
+     "recorded_at": "2026-10-27T21:20:06.066182+00:00",
+     "exec_id": "00025b49.6ae24836.01.01"
+    }
+   ],
+   "filled_qty": 25,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "e54207a409384906a3b2a16ed39d43c9",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.19,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.19,
+   "moomoo_ask": 149.2,
+   "bid_size": 16,
+   "ask_size": 599,
+   "quote_observed_at": "2026-10-27T17:20:13.103000-04:00",
+   "planned_at": "2026-10-27T21:20:14.368117+00:00",
+   "order_id": 4542,
+   "transitions": [
+    [
+     "2026-10-27 21:20:14.372803+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:20:14.414513+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:20:14.485261+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:20:22.593537+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:20:22.697499+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:20:14.481802+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:14.491016+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:22.587794+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:22.674167+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:20:22.579382+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:20:22.704766+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "e2299a5f7db14141894b0362be76d6f3",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.17,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.17,
+   "moomoo_ask": 149.18,
+   "bid_size": 389,
+   "ask_size": 18,
+   "quote_observed_at": "2026-10-27T17:20:22.569000-04:00",
+   "planned_at": "2026-10-27T21:20:25.442593+00:00",
+   "order_id": 4544,
+   "transitions": [
+    [
+     "2026-10-27 21:20:25.447857+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:20:25.468920+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:20:25.542534+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:20:25.567721+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:20:25.532557+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:25.617772+00:00",
+     "Filled",
+     10.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": -10,
+     "price": 149.17,
+     "exec_at": "2026-10-27T21:20:25Z",
+     "recorded_at": "2026-10-27T21:20:35.983708+00:00",
+     "exec_id": "00025b49.6ae24837.01.01"
+    }
+   ],
+   "filled_qty": -10,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "e2299a5f7db14141894b0362be76d6f3",
+   "leg": "exit",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.18,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.17,
+   "moomoo_ask": 149.18,
+   "bid_size": 389,
+   "ask_size": 18,
+   "quote_observed_at": "2026-10-27T17:20:22.569000-04:00",
+   "planned_at": "2026-10-27T21:20:25.591641+00:00",
+   "order_id": 4545,
+   "transitions": [
+    [
+     "2026-10-27 21:20:25.594313+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:20:25.611277+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:20:25.660909+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:20:33.765490+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:20:33.819063+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:20:25.657992+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:25.670402+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:33.761988+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:33.810518+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:20:33.759273+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:20:33.822086+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "e2299a5f7db14141894b0362be76d6f3",
+   "leg": "exit",
+   "attempt": 1,
+   "label": "SPCX",
+   "limit": 149.21,
+   "collar_ticks": 2,
+   "moomoo_bid": 149.17,
+   "moomoo_ask": 149.19,
+   "bid_size": 390,
+   "ask_size": 91,
+   "quote_observed_at": "2026-10-27T17:20:37.361000-04:00",
+   "planned_at": "2026-10-27T21:20:37.864496+00:00",
+   "order_id": 4548,
+   "transitions": [
+    [
+     "2026-10-27 21:20:37.866070+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:20:37.879802+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:20:37.939084+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:20:40.565290+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:20:37.936654+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:37.947958+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:40.569214+00:00",
+     "Filled",
+     10.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": 10,
+     "price": 149.2,
+     "exec_at": "2026-10-27T21:20:40.553525Z",
+     "recorded_at": "2026-10-27T21:20:40.556477+00:00",
+     "exec_id": "00025b49.6ae24838.01.01"
+    }
+   ],
+   "filled_qty": 10,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "fd84f105cdad43da99799b6774617d30",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.17,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.17,
+   "moomoo_ask": 149.19,
+   "bid_size": 272,
+   "ask_size": 78,
+   "quote_observed_at": "2026-10-27T17:20:48.243000-04:00",
+   "planned_at": "2026-10-27T21:20:48.944888+00:00",
+   "order_id": 4549,
+   "transitions": [
+    [
+     "2026-10-27 21:20:48.949236+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:20:48.973228+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:20:49.028595+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:20:49.068206+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:20:49.024056+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:49.070920+00:00",
+     "Filled",
+     25.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": -25,
+     "price": 149.17,
+     "exec_at": "2026-10-27T21:20:49.044636Z",
+     "recorded_at": "2026-10-27T21:20:49.060012+00:00",
+     "exec_id": "00025b49.6ae24839.01.01"
+    }
+   ],
+   "filled_qty": -25,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "fd84f105cdad43da99799b6774617d30",
+   "leg": "exit",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.19,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.17,
+   "moomoo_ask": 149.19,
+   "bid_size": 272,
+   "ask_size": 78,
+   "quote_observed_at": "2026-10-27T17:20:48.243000-04:00",
+   "planned_at": "2026-10-27T21:20:49.100153+00:00",
+   "order_id": 4550,
+   "transitions": [
+    [
+     "2026-10-27 21:20:49.104139+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:20:49.125470+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:20:49.173465+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:20:57.398344+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:20:57.617408+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:20:49.168862+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:49.181463+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:57.395597+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:20:57.525240+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:20:57.393736+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:20:57.618787+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "fd84f105cdad43da99799b6774617d30",
+   "leg": "exit",
+   "attempt": 1,
+   "label": "SPCX",
+   "limit": 149.21,
+   "collar_ticks": 2,
+   "moomoo_bid": 149.17,
+   "moomoo_ask": 149.19,
+   "bid_size": 254,
+   "ask_size": 78,
+   "quote_observed_at": "2026-10-27T17:20:58.773000-04:00",
+   "planned_at": "2026-10-27T21:21:01.016751+00:00",
+   "order_id": 4553,
+   "transitions": [
+    [
+     "2026-10-27 21:21:01.018204+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:21:01.032202+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:21:01.091930+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:21:03.125977+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:21:01.089809+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:01.102674+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:03.127875+00:00",
+     "Filled",
+     25.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": 25,
+     "price": 149.2,
+     "exec_at": "2026-10-27T21:21:03Z",
+     "recorded_at": "2026-10-27T21:21:22.704490+00:00",
+     "exec_id": "00025b49.6ae2483a.01.01"
+    }
+   ],
+   "filled_qty": 25,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "7d89db02348d4e30a48da7ae30ed44e4",
+   "leg": "entry",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.17,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.17,
+   "moomoo_ask": 149.18,
+   "bid_size": 238,
+   "ask_size": 26,
+   "quote_observed_at": "2026-10-27T17:21:10.892000-04:00",
+   "planned_at": "2026-10-27T21:21:11.607938+00:00",
+   "order_id": 4555,
+   "transitions": [
+    [
+     "2026-10-27 21:21:11.611541+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:21:11.735391+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:21:11.794019+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:21:11.813982+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:21:11.789373+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:11.816124+00:00",
+     "Filled",
+     25.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": -25,
+     "price": 149.17,
+     "exec_at": "2026-10-27T21:21:11Z",
+     "recorded_at": "2026-10-27T21:21:22.705076+00:00",
+     "exec_id": "00025b49.6ae2483b.01.01"
+    }
+   ],
+   "filled_qty": -25,
+   "late_fills": [],
+   "errors": []
+  },
+  {
+   "cycle": "7d89db02348d4e30a48da7ae30ed44e4",
+   "leg": "exit",
+   "attempt": 0,
+   "label": "SPCX",
+   "limit": 149.18,
+   "collar_ticks": 0,
+   "moomoo_bid": 149.17,
+   "moomoo_ask": 149.18,
+   "bid_size": 238,
+   "ask_size": 26,
+   "quote_observed_at": "2026-10-27T17:21:10.892000-04:00",
+   "planned_at": "2026-10-27T21:21:11.841269+00:00",
+   "order_id": 4556,
+   "transitions": [
+    [
+     "2026-10-27 21:21:11.844784+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:21:11.863378+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:21:11.953730+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:21:20.830964+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:21:20.914577+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:21:11.950005+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:11.962386+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:20.822757+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:20.910146+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:21:20.817666+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:21:20.918870+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "7d89db02348d4e30a48da7ae30ed44e4",
+   "leg": "exit",
+   "attempt": 1,
+   "label": "SPCX",
+   "limit": 149.2,
+   "collar_ticks": 2,
+   "moomoo_bid": 149.17,
+   "moomoo_ask": 149.18,
+   "bid_size": 238,
+   "ask_size": 28,
+   "quote_observed_at": "2026-10-27T17:21:23.459000-04:00",
+   "planned_at": "2026-10-27T21:21:24.456457+00:00",
+   "order_id": 4559,
+   "transitions": [
+    [
+     "2026-10-27 21:21:24.458167+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:21:24.472239+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:21:24.549118+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:21:32.842838+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:21:32.951385+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:21:24.546916+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:24.556017+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:32.836995+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:32.941015+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:21:32.833620+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:21:32.955407+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "7d89db02348d4e30a48da7ae30ed44e4",
+   "leg": "exit",
+   "attempt": 2,
+   "label": "SPCX",
+   "limit": 149.23,
+   "collar_ticks": 5,
+   "moomoo_bid": 149.16,
+   "moomoo_ask": 149.18,
+   "bid_size": 74,
+   "ask_size": 328,
+   "quote_observed_at": "2026-10-27T17:21:33.241000-04:00",
+   "planned_at": "2026-10-27T21:21:36.651835+00:00",
+   "order_id": 4562,
+   "transitions": [
+    [
+     "2026-10-27 21:21:36.653610+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:21:36.668082+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:21:36.716490+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:21:44.960276+00:00",
+     "CANCEL_PENDING"
+    ],
+    [
+     "2026-10-27 21:21:45.032188+00:00",
+     "CANCELLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:21:36.714766+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:36.728620+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:44.953486+00:00",
+     "PendingCancel",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:45.015602+00:00",
+     "Cancelled",
+     0.0
+    ]
+   ],
+   "cancel_sent_at": "2026-10-27T21:21:44.948359+00:00",
+   "fills": [],
+   "filled_qty": 0,
+   "late_fills": [],
+   "errors": [
+    {
+     "at": "2026-10-27T21:21:45.036428+00:00",
+     "code": 202,
+     "message": "Order Canceled - reason:"
+    }
+   ]
+  },
+  {
+   "cycle": "7d89db02348d4e30a48da7ae30ed44e4",
+   "leg": "exit",
+   "attempt": 3,
+   "label": "SPCX",
+   "limit": 149.27,
+   "collar_ticks": 10,
+   "moomoo_bid": 149.16,
+   "moomoo_ask": 149.17,
+   "bid_size": 93,
+   "ask_size": 25,
+   "quote_observed_at": "2026-10-27T17:21:45.582000-04:00",
+   "planned_at": "2026-10-27T21:21:48.939315+00:00",
+   "order_id": 4565,
+   "transitions": [
+    [
+     "2026-10-27 21:21:48.940903+00:00",
+     "VALIDATED"
+    ],
+    [
+     "2026-10-27 21:21:48.955359+00:00",
+     "SUBMITTING"
+    ],
+    [
+     "2026-10-27 21:21:49.028152+00:00",
+     "ACKNOWLEDGED"
+    ],
+    [
+     "2026-10-27 21:21:55.083292+00:00",
+     "FILLED"
+    ]
+   ],
+   "ibkr_status": [
+    [
+     "2026-10-27T21:21:49.025646+00:00",
+     "PreSubmitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:49.033616+00:00",
+     "Submitted",
+     0.0
+    ],
+    [
+     "2026-10-27T21:21:55.086920+00:00",
+     "Filled",
+     25.0
+    ]
+   ],
+   "cancel_sent_at": null,
+   "fills": [
+    {
+     "qty": 25,
+     "price": 149.18,
+     "exec_at": "2026-10-27T21:21:55Z",
+     "recorded_at": "2026-10-27T21:22:54.803291+00:00",
+     "exec_id": "00025b49.6ae24841.01.01"
+    }
+   ],
+   "filled_qty": 25,
+   "late_fills": [],
+   "errors": []
+  }
+ ],
+ "ibkr_market_data": "not subscribed (10168), see burn-legs-20261027.json"
+}
