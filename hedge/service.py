@@ -43,6 +43,7 @@ from .statement import (
     marks_fixed_at,
     smoothed_chain_marks,
     statement_marks,
+    statement_parts,
     statement_samples,
     statement_value,
 )
@@ -609,13 +610,20 @@ class TradingService:
                 "reason": "Waiting for a settled IBKR cash update",
                 "value": None,
             }
+        parts = statement_parts(snapshot.cash, snapshot.accrued_cash, held, marks, contracts)
+        # The tracker's value less this snapshot valued directly: fills since IBKR's last settled
+        # cash push (0 once settled).
+        parts["unsettled"] = value - sum(parts[k] for k in ("cash", "accrued", "stocks", "options"))
+        parts["account_at"] = snapshot.account_at.isoformat()
         interest = self._interest_adjustment(day)
+        parts["interest"] = interest["amount"]
         value += interest["amount"]
         mid = statement_value(0, 0, held, marks, contracts)
         return {
             **result,
             "status": "ok",
             "value": value,
+            "parts": parts,
             "interest": interest,
             "low": value + statement_value(0, 0, held, marks, contracts, "low") - mid,
             "high": value + statement_value(0, 0, held, marks, contracts, "high") - mid,

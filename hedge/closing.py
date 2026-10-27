@@ -433,10 +433,26 @@ class ClosingRecorder:
                     "phase": phase,
                     "source": source,
                 }
+                # A predicted statement NAV keeps its parts (cash, accrued, shares, options, each
+                # leg's mark and estimates, interest), for comparison with the imported statement.
+                prediction = (
+                    {
+                        k: estimate[k]
+                        for k in ("value", "parts", "interest", "low", "high", "base_at", "check")
+                        if k in estimate
+                    }
+                    if predicted
+                    else None
+                )
                 self.ledger.store.record(
                     "closing_capture",
                     self.manifest.account,
-                    {**self.last, "contest": self.manifest.contest_id, "status": "RECORDED"},
+                    {
+                        **self.last,
+                        "contest": self.manifest.contest_id,
+                        "status": "RECORDED",
+                        **({"prediction": prediction} if prediction else {}),
+                    },
                 )
                 self.status = f"{label} recorded for {day}"
             except (ConnectionError, TimeoutError, ValueError, KeyError, TypeError) as exc:

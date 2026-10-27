@@ -146,6 +146,28 @@ def statement_value(cash, accrued, quantities, marks, contracts, field="mark"):
     return total
 
 
+def statement_parts(cash, accrued, quantities, marks, contracts):
+    """The statement's parts at these marks, for comparison with the imported statement: cash,
+    accrued interest, shares, options, and each held leg with its mark, closing bid/ask, source and
+    every estimate (midpoint, local, OCC rebuild). Holdings without a mark are left out."""
+    parts = {"cash": float(cash), "accrued": float(accrued or 0), "stocks": 0.0, "options": 0.0, "legs": {}}
+    for con_id, quantity in sorted(quantities.items()):
+        if not quantity or con_id not in marks:
+            continue
+        c, m = contracts[con_id], marks[con_id]
+        value = quantity * c.multiplier * m["mark"]
+        parts["options" if c.kind == "OPT" else "stocks"] += value
+        parts["legs"][c.label] = {
+            "con_id": con_id,
+            "quantity": quantity,
+            "multiplier": c.multiplier,
+            "value": value,
+            **{k: m[k] for k in ("mark", "low", "high", "source")},
+            **({"estimates": m["estimates"]} if m.get("estimates") else {}),
+        }
+    return parts
+
+
 def statement_samples(value, quantities, marks, contracts, n=64, seed=7):
     """`n` equally likely statement NAVs around `value`: each option's statement price drawn as its
     mark plus a uniform deviation the width of its closing book, kept inside that bid/ask (shares

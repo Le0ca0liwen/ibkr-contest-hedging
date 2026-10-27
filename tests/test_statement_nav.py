@@ -230,6 +230,11 @@ def test_the_service_shows_the_predicted_statement_nav_after_the_closing_marks(m
     assert estimate["status"] == "ok" and estimate["value"] == pytest.approx(expected)
     assert estimate["low"] == estimate["high"] == pytest.approx(expected)
     assert np.allclose(estimate["samples"], expected)
+    parts = estimate["parts"]  # kept with the 20:05 capture for the statement comparison
+    assert parts["stocks"] == pytest.approx(200 * 194.50) and parts["options"] == 0
+    assert parts["legs"][stock.label]["mark"] == 194.50 and parts["unsettled"] == pytest.approx(0)
+    total = sum(parts[k] for k in ("cash", "accrued", "stocks", "options", "unsettled", "interest"))
+    assert total == pytest.approx(estimate["value"])
     state = service.state()
     assert state["nav_feed"] == "predicted statement NAV (closing marks)"
     assert state["nav_estimate"] == pytest.approx(expected) and state["statement_estimate"]["status"] == "ok"

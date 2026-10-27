@@ -698,7 +698,14 @@ async def test_contest_end_of_day_records_the_predicted_statement_nav(store, man
 
     def statement(now):
         estimates.append(now)
-        return {"status": "ok", "value": 983374.2149}
+        parts = {"cash": 872744.5, "accrued": 1601.06, "stocks": 74591.65, "options": 34437.0, "legs": {}}
+        return {
+            "status": "ok",
+            "value": 983374.2149,
+            "parts": parts,
+            "interest": {"amount": 0.0},
+            "samples": [1],
+        }
 
     recorder = ClosingRecorder(
         contest, ledger, broker, lambda: clock[0], lambda *x: alerts.append(x), statement=statement
@@ -713,6 +720,14 @@ async def test_contest_end_of_day_records_the_predicted_statement_nav(store, man
     source = ledger.latest_report()["source"]
     assert source.startswith("IBKR API end-of-day observation (predicted statement NAV after the 20:00 ET")
     assert ledger.close_records()[day]["provenance"] == "api"
+    # The prediction's parts are kept for the comparison with the imported statement.
+    captured = [
+        r for r in store.records("closing_capture", contest.account) if r.get("phase") == "end_of_day"
+    ]
+    assert (
+        captured[0]["prediction"]["parts"]["options"] == 34437.0
+        and "samples" not in captured[0]["prediction"]
+    )
 
 
 async def test_contest_end_of_day_waits_for_the_predicted_statement_nav(store, manifest):
