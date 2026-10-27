@@ -1507,3 +1507,68 @@ async def test_a_short_day_leg_waits_the_extended_hours_quiet_before_its_final_d
     clock.at += timedelta(seconds=DAY_LEG_SECONDS + 1)
     await steps(service, 2)
     assert 7 in waited and results(service)[0]["status"] == "CLOSED"
+
+
+def test_a_paper_book_wider_than_the_feed_sets_the_planned_spread(now):
+    """Oct 27: IBKR paper filled IVV at 773.31/774.40 while Moomoo showed 773.17/773.29."""
+    ivv = Contract(con_id=20, symbol="IVV", kind="STK")
+    quote = Quote(
+        con_id=20,
+        bid=773.17,
+        ask=773.29,
+        spot=773.23,
+        bid_size=5,
+        ask_size=5,
+        observed_at=now,
+        data_type="live",
+    )
+    policy = TradingPolicy()
+    fees = stock_commission(policy, 20, 773.29) + stock_commission(policy, 20, 773.17)
+    assert round_trip_loss(ivv, quote, 20, policy) == pytest.approx(20 * 0.12 + fees)
+    assert round_trip_loss(ivv, quote, 20, policy, 1.09) == pytest.approx(20 * 1.09 + fees)
+    with pytest.raises(ValidationError):
+        BurnerPolicy(cross={"IVV": -1})
+    assert BurnerPolicy(cross={" ivv ": 1.25}).cross == {"IVV": 1.25}
+
+
+async def test_a_paper_book_outside_the_feed_is_crossed_and_planned_at_its_real_spread(burning):
+    service, clock = await burning(cross={"ba": 1.25}, fill_spread={"BA": 1.09}, jit_headroom=0)
+    quote = service.last_quotes[10]
+    await steps(service)
+    cycle = service.burner.cycle
+    # Planned at the paper book's spread, not the feed's few cents (200 shares at the feed's).
+    assert cycle["quantity"] < 200 and cycle["expected_loss"] >= cycle["quantity"] * 1.09
+    entry = next(r for r in service.store.intents(service.manifest.account) if r.get("leg") == "entry")
+    assert float(entry["limit_price"]) == pytest.approx(quote.ask + 1.25)
+
+
+async def test_the_displayed_size_check_can_be_turned_off_for_paper_books(burning):
+    from hedge.burner import candidates
+
+    service, clock = await burning()
+    small = service.last_quotes[10].model_copy(update={"bid_size": 5, "ask_size": 5})
+    quotes = {**service.last_quotes, 10: small}
+    for check, sizes in ((True, {1, 5}), (False, {1, 5, 10, 25, 50, 100, 200})):
+        m = with_burner(service.manifest, check_displayed_size=check)
+        found, _ = candidates(
+            m,
+            service.last_scenarios,
+            quotes,
+            service.last_snapshot.quantities(),
+            clock.at,
+            demo=True,
+            options_open=False,
+        )
+        assert {c.quantity for c in found if c.con_id == 10} == sizes
+
+
+async def test_burner_legs_use_the_burners_quote_age_at_the_risk_gate(burning):
+    """Oct 27: Moomoo's after-hours quotes ran 2-6 s old and the 5 s limit refused 17 burner exits."""
+    service, clock = await burning(quote_age_seconds=30)
+    snap = service.broker.snapshot()
+    aged = demo_quotes(service.manifest, clock.at - timedelta(seconds=10))
+    after = {**snap.quantities(), 10: snap.quantities().get(10, 0) + 5}
+    hedger = service.gate.validate(snap, aged, service.last_scenarios, after, clock.at)
+    burner = service.gate.validate(snap, aged, service.last_scenarios, after, clock.at, post_market=True)
+    assert "Stale/future quote: 10" in hedger.reasons
+    assert "Stale/future quote: 10" not in burner.reasons

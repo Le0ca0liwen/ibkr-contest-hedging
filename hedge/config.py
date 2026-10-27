@@ -224,6 +224,16 @@ class BurnerPolicy(Frozen):
     # N > 0: after N RESIDUAL cycles in a session, or any fill on a leg whose cycle already ended,
     # the burner downgrades itself to shadow and alerts; the operator re-enables it. 0: never.
     stop_after_residuals: int = Field(default=0, ge=0, le=100)
+    # IBKR paper fills extended-hours stock orders at its own book, which can sit outside the data
+    # feed's: on Oct 27 after hours every IVV buy filled at 774.40 and every sell at 773.31, whatever
+    # the size or limit, while Moomoo showed about 773.2/773.3. Per symbol, `cross` places burner
+    # limits this many dollars beyond the feed's touch so they reach that book (the fill still comes
+    # at the book's price), and `fill_spread` is the round-trip spread per share a cycle is planned
+    # at when wider than the feed's, so a cycle is sized at what it really costs.
+    cross: dict[str, float] = {}
+    fill_spread: dict[str, float] = {}
+    # Skip a stock cycle larger than the feed's displayed size (paper fills any size at its book).
+    check_displayed_size: bool = True
 
     @field_validator("symbols")
     @classmethod
@@ -231,6 +241,14 @@ class BurnerPolicy(Frozen):
         result = tuple(s.strip().upper() for s in value)
         if "" in result or len(set(result)) != len(result):
             raise ValueError("Burner symbols must be distinct and nonempty")
+        return result
+
+    @field_validator("cross", "fill_spread")
+    @classmethod
+    def per_symbol_dollars(cls, value):
+        result = {str(s).strip().upper(): float(v) for s, v in value.items()}
+        if any(not 0 <= v <= 25 for v in result.values()):
+            raise ValueError("Burner cross and fill_spread are 0-25 dollars per share")
         return result
 
     @model_validator(mode="after")

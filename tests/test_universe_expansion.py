@@ -351,6 +351,7 @@ async def test_prepare_contest_qualifies_signed_legs_from_final_strikes(tmp_path
     ]
     assert m.market_data_provider == "moomoo" and not m.confirmed
     assert set(m.allowlist) == {10, 20}  # SPY shares stay quote-only under the open universe
+    assert m.burner.symbols == () and m.burner.mode == "off"  # IVV is defined later, by expand-universe
 
 
 def test_neighbouring_expiries_alternate_sides():

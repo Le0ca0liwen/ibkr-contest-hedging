@@ -69,9 +69,10 @@ def option_commission(policy, quantity):
     return max(policy.minimum_commission, policy.commission_option * quantity)
 
 
-def round_trip_loss(contract, quote, quantity, policy):
-    """Expected loss of buy q at the ask then sell q at the bid, with both commissions."""
-    spread = max(0.0, quote.ask - quote.bid)
+def round_trip_loss(contract, quote, quantity, policy, spread_floor=0.0):
+    """Expected loss of buy q at the ask then sell q at the bid, with both commissions; the spread
+    is at least `spread_floor` (a paper book wider than the feed's: burner.fill_spread)."""
+    spread = max(0.0, quote.ask - quote.bid, spread_floor)
     if contract.kind == "OPT":
         return quantity * contract.multiplier * spread + 2 * option_commission(policy, quantity)
     return (
@@ -196,7 +197,7 @@ def candidates(manifest, scenarios, quotes, quantities, now, *, demo, options_op
         for size in policy.quantities:
             if size > policy.max_shares:
                 continue
-            if size > min(q.ask_size, q.bid_size):
+            if policy.check_displayed_size and size > min(q.ask_size, q.bid_size):
                 rejected[f"{symbol}:{size}"] = "Exceeds displayed size"
                 continue
             if policy.sell_first and size > original:
@@ -234,7 +235,13 @@ def _candidate(contract, quote, size, original, policy, manifest):
         kind=contract.kind,
         quantity=size,  # signed: negative for a sell-first stock cycle
         original=original,
-        expected_loss=round_trip_loss(contract, quote, abs(size), manifest.policy),
+        expected_loss=round_trip_loss(
+            contract,
+            quote,
+            abs(size),
+            manifest.policy,
+            policy.fill_spread.get(contract.symbol.upper(), 0.0) if contract.kind == "STK" else 0.0,
+        ),
         bid=quote.bid,
         ask=quote.ask,
         bid_size=quote.bid_size,

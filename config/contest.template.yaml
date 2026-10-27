@@ -87,15 +87,19 @@ autostart: paper
 burner:
   mode: paper                       # off | shadow | paper
   admissibility_source: "Instructor: deliberate expense through ordinary trades not disallowed (operator confirmed 2026-10-21)"
-  symbols: [SPCX]                   # allowlisted stocks only (never SPY); RKLB paper sells after hours
-                                    # filled 2 of 21 on Oct 27
-  sell_first: true                  # sell held shares, then buy them back: a missed leg never leaves
-                                    # extra stock (Oct 27: buy-first left 5 of 35 cycles holding stock)
-  # Oct 26: IBKR paper's after-hours SPCX book sat at 147.70/147.75 ($12 a full 200-share cycle),
-  # ~40-70% of entries filled and 300 cycles took ~40 minutes. Sell-first caps a cycle at the
-  # shares held (93 SPCX on Oct 27).
-  quantities: [1, 5, 10, 25, 50, 100, 200]
-  max_shares: 200
+  symbols: [IVV]                    # allowlisted stocks only (never SPY shares). Oct 27 after hours:
+                                    # 168 of 218 SPCX/RKLB entries went unfilled; every manual IVV
+                                    # order filled at once, at any size
+  # IBKR paper fills IVV after hours at its own book, not the feed's: Oct 27 every buy at 774.40 and
+  # every sell at 773.31 while Moomoo showed ~773.2/773.3. Legs cross the feed by $1.25 to reach it
+  # (fills still come at the book's price) and cycles are planned at its ~$1.09 spread.
+  cross: {IVV: 1.25}
+  fill_spread: {IVV: 1.10}
+  check_displayed_size: false       # paper filled 1,000 IVV at one price
+  sell_first: false                 # buy, then sell: both IVV legs fill at once on paper, and cycles
+                                    # do not depend on the hedge's IVV holding (20 on Oct 27)
+  quantities: [1, 2, 5, 10, 20, 50] # ~$56 a 50-share cycle at a $1.09 book
+  max_shares: 50
   option_burn: false                # 1..option_max_contracts round trips in non-mandated options
   option_max_contracts: 5
   option_max_spread: 0.20
@@ -119,7 +123,7 @@ burner:
   daily_expense_cap: null           # optional USD cap on realized burn per session
   max_cycles_per_day: 3000          # misses count; ~70% of after-hours paper entries miss
   max_exit_attempts: 6
-  exit_collar_ticks: [0, 2, 5, 10, 25, 50]   # a buy-back steps above the ask
+  exit_collar_ticks: [0, 2, 5, 10, 25, 50]   # each exit retry steps further past the touch
   quote_age_seconds: 30            # quiet after-hours books change rarely
   day_quiet_seconds: 10            # paper filled a sell 3.4 s after reporting it Cancelled
   stop_after_residuals: 1          # a stuck cycle or a late fill turns the burner to shadow

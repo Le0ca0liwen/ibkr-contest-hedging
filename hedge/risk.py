@@ -213,6 +213,10 @@ class RiskGate:
                 # After hours a quiet book values a held stock; a trade still needs a fresh one.
                 else limits.held_option_quote_age
                 if not traded and self.manifest.extended_session(now) is not None
+                # Burner legs (post_market) trade on the burner's own quote age: Moomoo's after-hours
+                # quotes ran 2-6 s old on Oct 27 and the 5 s limit refused 17 burner exits.
+                else max(limits.stock_quote_age, self.manifest.burner.quote_age_seconds)
+                if post_market
                 else limits.stock_quote_age
             )
             greek_age = limits.greek_age if traded else max(limits.greek_age, limits.held_option_quote_age)

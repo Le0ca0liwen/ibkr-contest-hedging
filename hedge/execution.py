@@ -540,13 +540,19 @@ class ExecutionManager:
 
     def burn_limit(self, con_id, quote, signed, collar_ticks=0):
         """Marketable IOC limit: buy at the ask plus collar ticks (tick ceiling), sell at the bid
-        less collar ticks."""
+        less collar ticks; a stock with a burner.cross moves that many dollars further."""
         reference = quote.ask if signed > 0 else quote.bid
         tick = self.broker.price_tick(con_id, reference) if hasattr(self.broker, "price_tick") else 0.01
+        c = self.manifest.contract_map.get(con_id)
+        cross = Decimal(
+            str(self.manifest.burner.cross.get(c.symbol.upper(), 0) if c and c.kind == "STK" else 0)
+        )
         if signed > 0:
-            return rounded_price(Decimal(str(quote.ask)) + collar_ticks * Decimal(str(tick)), tick, -1)
+            return rounded_price(
+                Decimal(str(quote.ask)) + cross + collar_ticks * Decimal(str(tick)), tick, -1
+            )
         # Decimal arithmetic: a float bid - k*tick can land just below a tick and floor one too far.
-        return rounded_price(Decimal(str(quote.bid)) - collar_ticks * Decimal(str(tick)), tick, 1)
+        return rounded_price(Decimal(str(quote.bid)) - cross - collar_ticks * Decimal(str(tick)), tick, 1)
 
     def _burn_quote_error(self, quote, now, max_age, spread_con_id=None):
         if quote is None:

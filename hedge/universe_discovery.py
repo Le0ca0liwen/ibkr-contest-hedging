@@ -231,8 +231,16 @@ async def prepare_contest(template, account, strikes, report_source, port=4002, 
                 raise ValueError(f"Ambiguous/unavailable {symbol} {expiry} {strike}{right}")
             contracts.append(c)
             mandatory[c.con_id] = quantity
+        burner = dict(template.get("burner") or {})
+        if burner.get("symbols"):
+            # A burner symbol outside the mandated underlyings (IVV) is defined later by
+            # expand-universe; list it (and turn the burner on) again once it is.
+            burner["symbols"] = [s for s in burner["symbols"] if str(s).strip().upper() in stocks]
+            if not burner["symbols"] and not burner.get("option_burn"):
+                burner["mode"] = "off"
         data = {
             **template,
+            "burner": burner,
             "account": account,
             "report_source": report_source,
             "gateway_port": port,

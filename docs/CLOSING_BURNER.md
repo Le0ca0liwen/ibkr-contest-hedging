@@ -142,6 +142,20 @@ The remaining rules:
 - **Quote freshness.** Quotes must be live and no older than `quote_age_seconds`
   (default 3 s), with spreads inside the ordinary execution spread limits (options too).
   A locked book (ask == bid) is rejected: it would price a round trip at commissions only.
+  The risk gate checks burner legs against the same `quote_age_seconds` (when longer than
+  `risk.stock_quote_age`). On Oct 27, Moomoo's after-hours quotes ran 2-6 s old, and the
+  5 s stock limit refused 17 burner exits.
+- **Paper books outside the feed** (`cross`, `fill_spread`, `check_displayed_size`). IBKR
+  paper fills extended-hours stock orders at its own book, not Moomoo's.
+  - **What happened on Oct 27:** every IVV buy filled at 774.40 and every sell at 773.31,
+    whatever the size or limit, while Moomoo showed about 773.2/773.3.
+  - **`cross` (per symbol):** moves burner limits that many dollars beyond the feed's
+    touch, so they reach paper's book. The fill still comes at the book's price.
+  - **`fill_spread` (per symbol):** sets the spread a cycle is planned at, when it is wider
+    than the feed's: `expected_loss = q x max(ask - bid, fill_spread) + 2 x commission(q)`.
+    A cycle is then sized at what it really costs, not at a tenth of it.
+  - **`check_displayed_size: false`:** drops the displayed-size limit. Paper filled 1,000 IVV
+    at one price.
 
 ## When it may act
 
