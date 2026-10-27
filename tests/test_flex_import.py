@@ -172,6 +172,33 @@ def test_a_monday_statement_accrues_the_weekends_interest(manifest, store):
     assert service._interest_adjustment(date(2026, 10, 23))["amount"] == pytest.approx(87.33)
 
 
+def test_interest_is_the_learned_rate_on_the_cash_two_sessions_earlier(manifest, store):
+    """Oct 23: 77.86 = 3.38% of (839,437.80 - 10,000) / 360; Oct 26: 243.00 = 3 x 3.38% of
+    (872,744.50 - 10,000) / 360. Scaling Oct 23's 77.86 a day gave 233.58 for Oct 26 (-9.42)."""
+    from datetime import date
+
+    service = TradingService(manifest, store, demo=True)
+    for day, cash, gap in (
+        ("2026-10-21", "839437.80", "94.72"),
+        ("2026-10-22", "872744.50", "93.76"),
+        ("2026-10-23", "840704.33", "77.86"),
+    ):
+        store.record(
+            "flex_statement", manifest.account, {"date": day, "accrual_gap": gap, "nav": {"cash": cash}}
+        )
+    monday = service._interest_adjustment(date(2026, 10, 26))
+    assert monday["amount"] == pytest.approx(243.00, abs=0.05) and "3.379% a year" in monday["source"]
+    store.record(
+        "flex_statement",
+        manifest.account,
+        {"date": "2026-10-26", "accrual_gap": "243.00", "nav": {"cash": "854817.56"}},
+    )
+    assert service._interest_adjustment(date(2026, 10, 27))["amount"] == pytest.approx(77.99, abs=0.01)
+    # Without the cash two sessions back, the statement's own per-day amount is scaled.
+    fallback = service._interest_adjustment(date(2026, 10, 30))
+    assert fallback["amount"] == pytest.approx(81.00) and "a day x 1 day" in fallback["source"]
+
+
 async def test_the_statements_own_prices_value_its_day_once_imported(manifest, store):
     day = manifest.day_zero
     service, imp, _ = importer(manifest, store, [lambda d: report(manifest.account, d)])

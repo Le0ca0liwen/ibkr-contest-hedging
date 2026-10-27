@@ -25,10 +25,19 @@ close was. Implementation: `hedge/statement.py`.
     to small recalculation differences. Expect this around Nov 2-4.
   - **What the app sees:** IBKR's API AccruedCash takes each day's accrual only overnight
     (22:20 ET Oct 22, 23:17 ET Oct 23), after the burner stops, so all evening it still shows the
-    previous statement's figure. The app learns the statement's extra accrual per calendar day from
-    the latest imported statement and scales it by the calendar days since the previous session.
-    Every October Monday statement carried three days (Oct 5: 278.85 = 3 x 92.95; Oct 12: 191.88;
-    Oct 19: 208.80 = 3 x 69.60) and each Friday one (Oct 23: 77.86), so Monday adds three days.
+    previous statement's figure.
+  - **The day's accrual, exactly:** the rate / 360, on the statement cash above $10,000 two sessions
+    earlier, times the calendar days since the previous session.
+    - Every October Monday statement carried three days (Oct 5: 278.85 = 3 x 92.95; Oct 12: 191.88;
+      Oct 19: 208.80 = 3 x 69.60) and each Friday one.
+    - Oct 23: 77.86 = 3.38% of (839,437.80 - 10,000) / 360, Oct 21's cash. Oct 26: 243.00 =
+      3 x 3.38% of (872,744.50 - 10,000) / 360, Oct 22's cash.
+    - It holds on every October day without short stock. While cash held short-sale proceeds
+      (Oct 19-22) the implied rate was 2.93-2.96%.
+  - **How the app predicts it:** it learns the rate from the latest imported statement and applies
+    it to the cash of two sessions before the day. Without those statements' cash, it scales the
+    latest statement's per-day amount instead.
+    - Oct 26: 242.96 with the rate, 233.58 scaled from Oct 23's 77.86, against the statement's 243.00.
 - **Timing:** "The reporting window closes at ... 8:20PM EST for securities. Statements will be
   available around midnight (EST)" (IBKR Web API docs). The Account Management API that sentence
   comes from is for brokers and advisors and returns PDFs; individual accounts automate statements
@@ -280,6 +289,35 @@ nearest the money, calls and puts.
 | SPY (1,672) | 0.100 | **0.048** |
 
 The held legs' value error was $29 (midpoint $199).
+
+**Oct 23 wide and Oct 26, out of sample (Oct 27).** The live settings were scored without retuning.
+Oct 23 adds QQQ, IWM and four mid-caps (Moomoo's prev_close on Oct 26; IBKR's 16:00 wide books),
+and Oct 26 is the app's own 16:00 chain (Moomoo's prev_close on Oct 27). Mean |error| per contract,
+live rebuild against the midpoint:
+
+| | Contracts | Rebuild | Midpoint |
+|---|---|---|---|
+| Oct 23, all | 3,849 | **0.035** | 0.090 |
+| ASTS / HOOD / IONQ / PLTR | 242 / 338 / 183 / 286 | 0.031 / 0.020 / 0.018 / 0.011 | 0.111 / 0.069 / 0.100 / 0.045 |
+| QQQ / IWM | 460 / 214 | 0.038 / 0.014 | 0.092 / 0.034 |
+| Oct 26, all (SPCX, RKLB, SPY) | 876 | **0.030** | 0.080 |
+
+- **Single stocks need no forward correction.** Each symbol's call-put pairs give a median
+  forward error within ±0.01.
+- **The ETFs' errors depend on the expiry.** QQQ on Oct 23 ran from +0.14 at Oct 30 to about 0 by
+  Dec 18. SPY's held Nov 20 expiry was +0.013 on Oct 23 and -0.020 on Oct 26, so there is no
+  stable offset to correct.
+- **SPY's official close does not explain the offset.** Oct 26's official close was 765.37, 0.03
+  above the 15:59:59 quote, while the held SPY legs implied an OCC forward about 0.08 lower.
+- **The live settings stay.** A grid of 24 settings with each day held out (weight, stock forward,
+  ETF forward and its price space) chose others that did worse on the new days: $85 / $83 of
+  held-leg value error on Oct 23 / 26, against the live settings' $30 / $51.
+- **Live end to end on Oct 26:** the 20:05 prediction was +57.00 against the statement: options
+  +66.43, interest -9.42 (now fixed, above), cash and shares exact.
+- **Why the recomputed figure differs:** re-running the rebuild on the stored chain gives -50.56 for
+  the same legs. The app anchors the curve to its close-mark capture, 0.36 s earlier, whose
+  SPCX 130C ask was 20.00 against the chain's 19.95. Sub-second book timing alone moves the held
+  options' value by $50-100.
 
 **SPY at 16:00 or 16:15, settled.** The same SPY contracts priced from IBKR's 16:15 books instead
 of the 16:00 ones. Mean |error| per contract, midpoint / rebuild:

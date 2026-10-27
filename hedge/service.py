@@ -62,6 +62,7 @@ EVENING_MARKS = (timedelta(0), timedelta(hours=9))  # IBKR's position marks, 16:
 EVENING_MARKS_EVERY = timedelta(minutes=3)
 OCC_WORKERS = max(1, min(4, (os.cpu_count() or 2) - 1))  # processes for the OCC rebuild's expiries
 STATE_ROWS = 250  # most recent orders, fills and execution-quality rows in state()
+INTEREST_FREE_CASH = 10_000  # IBKR Pro pays no credit interest on the first $10,000 of cash
 # Wall-clock time running this far ahead of the monotonic clock (which stops while the computer
 # sleeps, on macOS and Linux) means the app was asleep: refresh everything from IBKR at once.
 SLEEP_GAP_SECONDS = 60
@@ -635,15 +636,16 @@ class TradingService:
     def _interest_adjustment(self, day):
         """Interest the statement accrues for `day` beyond IBKR's AccruedCash that evening: IBKR
         posts the day's accrual overnight (22:20 ET Oct 22, 23:17 ET Oct 23), after the burner stops.
-        Learned per calendar day from the latest imported statement (hedge/flex_import.py:
-        accrual_gap) and scaled by the calendar days since the previous session: every October
-        Monday statement carried three days (Oct 5, 12, 19), each Friday one. 0 until learned."""
+
+        Each accrual is a year's rate / 360 on the cash above INTEREST_FREE_CASH that the statement
+        showed two sessions earlier, times the calendar days since the previous session (Oct 23:
+        77.86 = 3.38% of 829,437.80 / 360; Oct 26: 243.00 = 3 x 3.38% of 862,744.50 / 360; every
+        October day without short stock, whose proceeds earn less). The rate is learned from the
+        latest imported statement (hedge/flex_import.py: accrual_gap); without the cash of the
+        sessions involved, that statement's own per-day amount is scaled instead. 0 until learned."""
+        records = self.store.records("flex_statement", self.manifest.account, 20)
         seen = sorted(
-            (
-                r
-                for r in self.store.records("flex_statement", self.manifest.account, 20)
-                if r.get("accrual_gap") is not None and r.get("date", "") < str(day)
-            ),
+            (r for r in records if r.get("accrual_gap") is not None and r.get("date", "") < str(day)),
             key=lambda r: r["date"],
             reverse=True,
         )
@@ -654,19 +656,36 @@ class TradingService:
         if not seen:
             return {"amount": 0.0, "source": "not learned yet (no imported statement)"}
         chosen = seen[0]
-        per_day = float(chosen["accrual_gap"]) / self._accrual_days(date.fromisoformat(chosen["date"]))
+        learned = date.fromisoformat(chosen["date"])
+        per_day = float(chosen["accrual_gap"]) / self._accrual_days(learned)
         days = self._accrual_days(day)
+        cashes = {r.get("date"): (r.get("nav") or {}).get("cash") for r in records}
+
+        def earning(session):  # the statement cash that earns interest, None if not imported
+            value = cashes.get(str(self._previous_session(self._previous_session(session))))
+            return float(value) - INTEREST_FREE_CASH if value is not None else None
+
+        then, now = earning(learned), earning(day)
+        if then and now and then > 0 and now > 0 and 0 < (rate := per_day * 360 / then) < 0.1:
+            return {
+                "amount": days * now * rate / 360,
+                "source": f"{rate:.3%} a year (learned from the {chosen['date']} statement) on "
+                f"${now:,.2f} of cash x {days} day(s)",
+            }
         return {
             "amount": per_day * days,
             "source": f"learned from the {chosen['date']} statement: ${per_day:,.2f} a day x {days} day(s)",
         }
 
-    def _accrual_days(self, day):
-        """Calendar days of interest a statement for `day` accrues: since the previous session."""
+    def _previous_session(self, day):
         previous = day - timedelta(days=1)
         while not self.manifest.is_session(previous) and (day - previous).days < 10:
             previous -= timedelta(days=1)
-        return (day - previous).days
+        return previous
+
+    def _accrual_days(self, day):
+        """Calendar days of interest a statement for `day` accrues: since the previous session."""
+        return (day - self._previous_session(day)).days
 
     async def _power_loop(self):
         """Every minute: is the Mac on battery or its lid closed? From 90 minutes before a scored
