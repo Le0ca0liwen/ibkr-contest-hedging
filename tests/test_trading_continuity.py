@@ -550,14 +550,14 @@ def test_working_orders_need_not_cure_a_breach_the_market_caused(operational, mo
         "budget": 1_000_000.0,
         "stress_loss": 0.0,
         "gross_notional": 0.0,
-        "delta:SPY": 101_000.0,
+        "residual_delta:S&P 500": 101_000.0,
         "excess_liquidity_estimate": 900_000.0,
     }
-    worse = {**metrics, "delta:SPY": 102_000.0}
+    worse = {**metrics, "residual_delta:S&P 500": 102_000.0}
 
     def evaluate(snapshot, quotes, scenarios, quantities, costs=0):
         result = worse if quantities.get(10, 0) != held.get(10, 0) else metrics
-        return RiskResult(passed=False, reasons=("Residual delta cap: SPY",), metrics=result)
+        return RiskResult(passed=False, reasons=("Residual delta cap: S&P 500",), metrics=result)
 
     monkeypatch.setattr(service.gate.engine, "evaluate", evaluate)
 
@@ -618,12 +618,12 @@ def _breach(metrics_delta):
         "budget": 1_000_000.0,
         "stress_loss": 0.0,
         "gross_notional": 0.0,
-        "delta:SPY": metrics_delta,
+        "residual_delta:S&P 500": metrics_delta,
         "excess_liquidity_estimate": 900_000.0,
     }
     failed = metrics_delta > 100_000
     return RiskResult(
-        passed=not failed, reasons=("Residual delta cap: SPY",) if failed else (), metrics=metrics
+        passed=not failed, reasons=("Residual delta cap: S&P 500",) if failed else (), metrics=metrics
     )
 
 

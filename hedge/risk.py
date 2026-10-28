@@ -4,6 +4,7 @@ from datetime import timedelta
 
 import numpy as np
 
+from .config import exposure_group
 from .models import RiskResult
 
 
@@ -119,12 +120,19 @@ class RiskEngine:
                     f"option_names:{symbol}": names.get(symbol, 0),
                 }
             )
-            if abs(delta[symbol]) > self.manifest.risk.residual_delta * budget + 0.01:
-                reasons.append(f"Residual delta cap: {symbol}")
             if stock.get(symbol, 0) > self.manifest.risk.stock_notional * budget + 0.01:
                 reasons.append(f"Stock notional cap: {symbol}")
             if names.get(symbol, 0) > self.manifest.risk.option_names:
                 reasons.append(f"Option cardinality cap: {symbol}")
+        # The residual-delta cap applies per exposure group: the S&P 500 funds (SPY, IVV, VOO,
+        # SPLG) net, so an IVV short offsets SPY options' delta; any other symbol is its own group.
+        residual = {}
+        for symbol, value in delta.items():
+            residual[exposure_group(symbol)] = residual.get(exposure_group(symbol), 0) + value
+        for group in sorted(residual):
+            metrics[f"residual_delta:{group}"] = residual[group]
+            if abs(residual[group]) > self.manifest.risk.residual_delta * budget + 0.01:
+                reasons.append(f"Residual delta cap: {group}")
         return RiskResult(passed=not reasons, reasons=tuple(reasons), metrics=metrics)
 
 
@@ -250,7 +258,7 @@ class RiskGate:
                     "gross_notional": self.manifest.risk.gross_notional * budget,
                 }
                 for key in current.metrics:
-                    if key.startswith("delta:"):
+                    if key.startswith("residual_delta:"):
                         bounds[key] = self.manifest.risk.residual_delta * budget
                     elif key.startswith("stock_notional:"):
                         bounds[key] = self.manifest.risk.stock_notional * budget

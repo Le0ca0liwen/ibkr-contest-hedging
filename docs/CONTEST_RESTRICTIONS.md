@@ -135,6 +135,17 @@ the rest from the dashboard.
   while the app is in paper, only from close-20 to close-4 min on scored days.
   The burner panel can step it down to shadow or off at any time.
 
+**One S&P 500 exposure.** The residual-delta cap (`risk.residual_delta` x budget) applies per
+exposure group, not per symbol.
+- **The group:** SPY, IVV, VOO and SPLG track the same index, so their dollar deltas add. An IVV
+  short offsets SPY options' delta, and an IVV long adds to it (operator decision, Oct 28).
+- **Everything else** is its own group.
+- **Where it shows:** each group's total is the `residual_delta:<group>` risk metric and the
+  "Residual delta cap: S&P 500" reason. The per-symbol `delta:<symbol>` metrics remain for display.
+- **Who applies it:** the optimizer, the risk gate and corrective mode all use the groups.
+- **Example:** on Oct 28 at 12:55, the SPY options' $98.2k and the 20 IVV's $15.5k make $113.7k
+  against a $98.4k cap.
+
 Risk notes: the seven fixed legs are reported as `mandated_gross_notional` and
 are outside the discretionary 3x gross cap (the SPY straddle alone is ~$3.85M of
 underlying). Held options that are not being traded may have an unchanged

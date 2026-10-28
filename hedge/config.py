@@ -27,6 +27,17 @@ LATE_OPTION_SYMBOLS = frozenset({"SPY", "QQQ", "IWM", "DIA"})
 LATE_OPTION_CLOSE = timedelta(minutes=15)
 # Implied vol rises when spot falls (leverage effect); broad index ETFs show it most strongly.
 BROAD_INDEX_ETFS = frozenset({"SPY", "IVV", "VOO", "SPLG", "QQQ", "IWM", "DIA"})
+# Funds on the same index are one exposure for the residual-delta cap: an IVV or VOO share offsets
+# an SPY option's delta dollar for dollar (operator, Oct 28; SPY shares themselves are forbidden).
+SP500_ETFS = frozenset({"SPY", "IVV", "VOO", "SPLG"})
+SP500_GROUP = "S&P 500"
+
+
+def exposure_group(symbol: str) -> str:
+    """The residual-delta cap's group: the S&P 500 funds share one, any other symbol is its own."""
+    return SP500_GROUP if symbol.upper() in SP500_ETFS else symbol
+
+
 INDEX_SPOT_VOL_CORRELATION = -0.7
 SINGLE_NAME_SPOT_VOL_CORRELATION = -0.4
 

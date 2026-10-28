@@ -7,7 +7,7 @@ import cvxpy as cp
 import numpy as np
 
 from .cashflows import cash_carry
-from .config import NY
+from .config import NY, exposure_group
 from .models import Target
 from .order_policy import spread_error
 
@@ -300,15 +300,16 @@ class HedgeOptimizer:
             if c.kind != "STK":
                 continue
             lower[j] = max(lower[j], -max(q.shortable_shares or 0, max(0, -actual.get(i, 0))))
-            # A symbol with one variable stock and no variable options has an
-            # exact affine delta interval. Use its implied integer bounds.
-            same_symbol = [k for k in candidates if m.contract_map[k].symbol == c.symbol]
+            # A stock alone among its exposure group's variables (the S&P 500 funds are one group)
+            # has an exact affine delta interval. Use its implied integer bounds.
+            group = exposure_group(c.symbol)
+            same_group = [k for k in candidates if exposure_group(m.contract_map[k].symbol) == group]
             coefficient = q.delta * q.spot
-            if same_symbol == [i] and coefficient:
+            if same_group == [i] and coefficient:
                 fixed_delta = sum(
                     quotes[k].delta * quotes[k].spot * m.contract_map[k].multiplier * actual.get(k, 0)
                     for k in frozen
-                    if m.contract_map[k].symbol == c.symbol
+                    if exposure_group(m.contract_map[k].symbol) == group
                 )
                 endpoints = sorted(
                     (
@@ -597,25 +598,28 @@ class HedgeOptimizer:
         ]
         symbols = sorted({m.contract_map[i].symbol for i in ids})
         delta_vectors = {}
-        for symbol in symbols:
+        # Residual delta per exposure group: the S&P 500 funds (SPY, IVV, VOO, SPLG) net.
+        for group in sorted({exposure_group(symbol) for symbol in symbols}):
             delta_vector = np.array(
                 [
                     quotes[i].delta * quotes[i].spot * m.contract_map[i].multiplier
-                    if m.contract_map[i].symbol == symbol
+                    if exposure_group(m.contract_map[i].symbol) == group
                     else 0
                     for i in ids
                 ]
             )
-            delta_vectors[symbol] = delta_vector
+            delta_vectors[group] = delta_vector
             cap = m.risk.residual_delta * budget
             if not any(
-                m.contract_map[i].symbol == symbol and m.contract_map[i].kind == "STK" for i in candidates
+                exposure_group(m.contract_map[i].symbol) == group and m.contract_map[i].kind == "STK"
+                for i in candidates
             ):
                 # Without tradable shares (SPY shares are forbidden) a breach can only be cured with
                 # options: keep headroom so an ordinary move does not create one, without forcing a
                 # trade when the book already sits closer to the cap.
                 cap = min(cap, max(DELTA_HEADROOM * cap, abs(float(delta_vector @ quantities))))
             constraints += [cp.abs(delta_vector @ total_h) <= cap]
+        for symbol in symbols:
             stock_vector = np.array(
                 [
                     quotes[i].spot

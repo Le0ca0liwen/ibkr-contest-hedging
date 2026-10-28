@@ -225,3 +225,45 @@ def test_nav_deficit_is_in_objective_and_can_select_target_closing_trade(manifes
         snapshot, quotes, scenarios, m.initial_nav, nav_estimate=float(m.initial_nav)
     )
     assert at_target.quantities.get(10, 0) == 0
+
+
+def _sp500_book(manifest, snapshot, held):
+    """The BA fixture renamed: options on SPY, shares of IVV (one index, one exposure group)."""
+    data = manifest.model_dump()
+    data["contracts"] = [{**c, "symbol": "IVV" if c["kind"] == "STK" else "SPY"} for c in data["contracts"]]
+    m = Manifest.model_validate(data)
+    positions = tuple(Position(con_id=i, quantity=q) for i, q in held.items())
+    return m, snapshot.model_copy(update={"positions": positions})
+
+
+def test_sp500_funds_share_one_residual_delta_cap(manifest, snapshot, quotes, now):
+    """Oct 28: SPY options carried $94-98k of delta against the $98k cap while 20 IVV added $15.5k.
+    The funds track one index: an IVV short offsets SPY options' delta, an IVV long adds to it."""
+    from hedge.risk import RiskEngine
+
+    m, snap = _sp500_book(manifest, snapshot, {**manifest.mandatory, 104: 20})
+    sc = ScenarioEngine(manifest).build(snap, quotes, now)  # same contracts, one underlying's history
+    engine = RiskEngine(m)
+    alone = engine.evaluate(snap, quotes, sc, snap.quantities())
+    options = alone.metrics["delta:SPY"]
+    cap = m.risk.residual_delta * alone.metrics["budget"]
+    assert options > cap and "Residual delta cap: S&P 500" in alone.reasons
+    shares = -round(options / quotes[10].spot)  # an IVV short the size of the options' delta
+    hedged = engine.evaluate(snap, quotes, sc, {**snap.quantities(), 10: shares})
+    assert hedged.metrics["residual_delta:S&P 500"] == pytest.approx(
+        hedged.metrics["delta:SPY"] + hedged.metrics["delta:IVV"]
+    )
+    assert abs(hedged.metrics["residual_delta:S&P 500"]) < quotes[10].spot
+    assert not any(r.startswith("Residual delta cap") for r in hedged.reasons)
+    adding = engine.evaluate(snap, quotes, sc, {**snap.quantities(), 10: 100})
+    assert "Residual delta cap: S&P 500" in adding.reasons
+
+
+def test_the_delta_solve_hedges_spy_options_with_ivv_shares(manifest, snapshot, quotes, now):
+    m, snap = _sp500_book(manifest, snapshot, {**manifest.mandatory, 104: 20})
+    m = m.model_copy(update={"allowlist": (10,)})  # options frozen: only IVV shares can trade
+    sc = ScenarioEngine(manifest).build(snap, quotes, now)
+    result = HedgeOptimizer(m).solve(snap, quotes, sc, m.initial_nav, strategy="delta")
+    options = sum(q * 100 * quotes[i].delta * quotes[i].spot for i, q in snap.quantities().items() if i != 10)
+    assert result.quantities[10] == pytest.approx(-options / quotes[10].spot, abs=2)
+    assert RiskGate(m).validate(snap, quotes, sc, result.quantities, now).passed
