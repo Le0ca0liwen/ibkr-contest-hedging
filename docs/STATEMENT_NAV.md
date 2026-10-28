@@ -319,6 +319,30 @@ live rebuild against the midpoint:
   SPCX 130C ask was 20.00 against the chain's 19.95. Sub-second book timing alone moves the held
   options' value by $50-100.
 
+**Oct 26 wide and Oct 27 (Oct 28).** Mean |error| per contract, live rebuild against the midpoint:
+
+| | Contracts | Rebuild | Midpoint |
+|---|---|---|---|
+| Oct 26 (with QQQ, IWM and the mid-caps) | 2,608 | **0.027** | 0.057 |
+| Oct 27, all | 880 | **0.074** | 0.130 |
+| Oct 27: RKLB / SPCX / SPY | 108 / 106 / 666 | 0.044 / 0.022 / 0.087 | 0.202 / 0.130 / 0.118 |
+
+- **SPY's forward error on Oct 27** was -0.15 (Nov 20) and -0.19 (Nov 27): OCC's forward sat
+  above ours. It was +0.08 at the held strike on Oct 26.
+- **SPCX and RKLB** were +0.05 / +0.03 on Nov 20, about their 15:59:59 quote less the official
+  close (SPCX 148.615 against 148.58). For SPY the close points the other way (769.70 against 769.66).
+- **The mandated structures barely feel a forward error:**
+  - The SPY Nov 20 and Nov 27 straddles cancel theirs: +30 on Oct 27, against -30.50 / +51.50 /
+    +161.10 / -152.00 leg by leg.
+  - The SPCX 130/145/160 butterfly has no net delta (25 x 0.85 - 50 x 0.55 + 25 x 0.25), so its
+    -118.75 on Oct 27 was curve shape (the 130C and 145C both about 4.5 cents high), not forward.
+- **Live end to end, so far:**
+  - Oct 26: +57.00 (options +66.43, interest -9.42).
+  - Oct 27: -91.39 (options -94.40, interest +3.01). The interest formula above predicted Oct 27's
+    77.99 exactly.
+  - Held-option errors over Oct 21-27, recomputed or live: -40, +31, +30, +66, -94, a median of
+    +30. That is no reliable bias, so the burner's post_close_margin stays at 50.
+
 **SPY at 16:00 or 16:15, settled.** The same SPY contracts priced from IBKR's 16:15 books instead
 of the 16:00 ones. Mean |error| per contract, midpoint / rebuild:
 
