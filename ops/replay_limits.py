@@ -9,12 +9,13 @@ For each recorded decision on DAY (the first in every --every minutes of the reg
     parsed by hedge/moomoo_data.py as the app parses latest.json;
   - scenarios: rebuilt by hedge/scenarios.py with the configured daily history;
   - closing target and NAV estimate: the decision's own.
-Variants (all with the configured residual-delta groups):
-  A  as configured
-  B  gross cap 3.5 x NAV
-  C  options counted at |delta| x notional in the gross cap (risk.gross_basis "delta")
-  D  B's target only when it is over the 3 x cap and lowers stress loss and |beta delta| against
-     the holdings (a risk-reducing exception); otherwise A's
+Variants (all with the configured residual-delta groups), each the app's own optimizer and risk code:
+  A    as configured
+  B    gross cap 3.5 x NAV
+  C    options counted at |delta| x notional in the gross cap (risk.gross_basis "delta")
+  D    above the cap, up to 3.5 x, only trades that lower stress loss and market exposure
+       (risk.gross_risk_reducing 3.5)
+  C+D  both
 Each target is also valued as a trade from the decision to the close: shares at their official
 close, options at the collector's last book before 16:00, less execution_cost. "close_gap" adds
 that to the session's recorded close gap (the imported statement, else the 20:05 capture), as if
@@ -48,12 +49,19 @@ RECEIVED = re.compile(rb'"received_at": "([^"]+)"')
 BETA = "beta_delta_dollars:portfolio"
 
 
+VARIANTS = {
+    "A": {},
+    "B": {"gross_notional": 3.5},
+    "C": {"gross_basis": "delta"},
+    "D": {"gross_risk_reducing": 3.5},
+    "C+D": {"gross_basis": "delta", "gross_risk_reducing": 3.5},
+}
+
+
 def variant_manifests(m):
-    risk = m.risk
     return {
-        "A": m,
-        "B": m.model_copy(update={"risk": risk.model_copy(update={"gross_notional": 3.5})}),
-        "C": m.model_copy(update={"risk": risk.model_copy(update={"gross_basis": "delta"})}),
+        name: m.model_copy(update={"risk": m.risk.model_copy(update=change)})
+        for name, change in VARIANTS.items()
     }
 
 
@@ -69,9 +77,8 @@ def trade_value(m, quotes, closes, trades):
 
 def replay_point(manifests, snapshot, quotes, scenarios, target_nav, estimate, strategy, closes):
     """{variant: result} for one decision: the solve, the target's risk metrics and its value."""
-    base = manifests["A"]
     actual = snapshot.quantities()
-    current = RiskEngine(base).evaluate(snapshot, quotes, scenarios, actual)
+    current = RiskEngine(manifests["A"]).evaluate(snapshot, quotes, scenarios, actual)
     results = {}
     for name, m in manifests.items():
         target = HedgeOptimizer(m).solve(snapshot, quotes, scenarios, target_nav, estimate, False, strategy)
@@ -93,21 +100,15 @@ def replay_point(manifests, snapshot, quotes, scenarios, target_nav, estimate, s
             "stress_loss": risk.metrics.get("stress_loss"),
             "beta_delta": risk.metrics.get(BETA),
             "residual_delta": {k: v for k, v in risk.metrics.items() if k.startswith("residual_delta:")},
+            "market_exposure": risk.metrics.get("market_exposure"),
+            "risk_reducing_solve": target.solver_metrics.get("risk_reducing"),
             "value_to_close": trade_value(m, quotes, closes, trades),
         }
-    b, budget = results["B"], current.metrics.get("budget", 0)
-    reduces = (
-        b["status"] == "OPTIMAL"
-        and b["risk_passed"]
-        and (b["gross"] or 0) > base.risk.gross_notional * budget
-        and (b["stress_loss"] or 0) <= current.metrics.get("stress_loss", 0) + 0.01
-        and abs(b["beta_delta"] or 0) <= abs(current.metrics.get(BETA, 0)) + 0.01
-    )
-    results["D"] = {**(b if reduces else results["A"]), "from": "B" if reduces else "A"}
     results["current"] = {
         "gross": current.metrics.get("gross_notional"),
         "stress_loss": current.metrics.get("stress_loss"),
         "beta_delta": current.metrics.get(BETA),
+        "market_exposure": current.metrics.get("market_exposure"),
         "residual_delta": {k: v for k, v in current.metrics.items() if k.startswith("residual_delta:")},
     }
     return results
@@ -253,7 +254,7 @@ def main(argv=None):
         recorded = payload.get("reference_midpoints") or {}
         drift = [abs(quotes[int(i)].mid - float(v)) for i, v in recorded.items() if int(i) in quotes]
         later = sum(1 for e in executions if datetime.fromisoformat(e["at"]) > moment)
-        for name in "ABCD":
+        for name in VARIANTS:
             value = results[name]["value_to_close"]
             results[name]["close_gap"] = None if close_gap is None or value is None else close_gap + value
         points.append(
@@ -279,12 +280,12 @@ def main(argv=None):
                     if results[name].get("close_gap") is not None
                     else ""
                 )
-                for name in "ABCD"
+                for name in VARIANTS
             ),
-            f"(recorded {payload.get('expected_score', 0):,.0f}; D from {results['D']['from']})",
+            f"(recorded {payload.get('expected_score', 0):,.0f})",
         )
     summary = {}
-    for name in "ABCD":
+    for name in VARIANTS:
         done = [p[name] for p in points if name in p and p[name]["status"] == "OPTIMAL"]
         gaps = [abs(r["close_gap"]) for r in done if r.get("close_gap") is not None]
         summary[name] = {

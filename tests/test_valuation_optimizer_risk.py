@@ -288,3 +288,46 @@ def test_gross_can_count_options_at_their_delta(manifest, snapshot, quotes, now)
     result = HedgeOptimizer(by_delta).solve(snap, quotes, sc, by_delta.initial_nav)
     assert result.status == "OPTIMAL"
     assert RiskGate(by_delta).validate(snap, quotes, sc, result.quantities, now).passed
+
+
+def _over_the_cap(manifest, snapshot, risk_reducing):
+    """SPY calls fill 97.5% of a 0.5x gross cap and breach the residual-delta cap: only an IVV short,
+    which needs gross above the cap, can cure it (options frozen)."""
+    m, snap = _sp500_book(manifest, snapshot, {**manifest.mandatory, 104: 20, 103: 5})
+    risk = m.risk.model_copy(update={"gross_notional": 0.5, "gross_risk_reducing": risk_reducing})
+    return m.model_copy(update={"risk": risk, "allowlist": (10,)}), snap
+
+
+def test_gross_above_the_cap_is_only_for_trades_that_lower_risk(manifest, snapshot, quotes, now):
+    from pydantic import ValidationError
+
+    from hedge.config import RiskLimits
+
+    with pytest.raises(ValidationError):
+        RiskLimits(gross_notional=3, gross_risk_reducing=2.5)
+    m, snap = _over_the_cap(manifest, snapshot, 0.8)
+    sc = ScenarioEngine(manifest).build(snap, quotes, now)
+    options = sum(q * 100 * quotes[i].delta * quotes[i].spot for i, q in snap.quantities().items() if i != 10)
+    hedge = {**snap.quantities(), 10: -round(options / quotes[10].spot)}
+    off = m.model_copy(update={"risk": m.risk.model_copy(update={"gross_risk_reducing": 0})})
+    assert (
+        "Gross underlying-equivalent notional exceeds cap"
+        in RiskGate(off).validate(snap, quotes, sc, hedge, now).reasons
+    )
+    passed = RiskGate(m).validate(snap, quotes, sc, hedge, now)
+    assert passed.passed and passed.metrics["gross_notional"] > 0.5 * passed.metrics["budget"]
+    adding = RiskGate(m).validate(snap, quotes, sc, {**snap.quantities(), 10: 300}, now)
+    assert any(r.startswith("Gross above 0.5x NAV only for trades that lower") for r in adding.reasons)
+
+
+def test_the_optimizer_hedges_over_the_cap_only_with_the_risk_reducing_ceiling(
+    manifest, snapshot, quotes, now
+):
+    off, snap = _over_the_cap(manifest, snapshot, 0)
+    on, _ = _over_the_cap(manifest, snapshot, 0.8)
+    sc = ScenarioEngine(manifest).build(snap, quotes, now)
+    assert HedgeOptimizer(off).solve(snap, quotes, sc, off.initial_nav).status != "OPTIMAL"
+    result = HedgeOptimizer(on).solve(snap, quotes, sc, on.initial_nav)
+    assert result.status == "OPTIMAL" and result.solver_metrics["risk_reducing"]["chosen"]
+    assert result.quantities[10] < -500  # an IVV short against the SPY calls' delta
+    assert RiskGate(on).validate(snap, quotes, sc, result.quantities, now).passed

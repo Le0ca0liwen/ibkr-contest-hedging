@@ -216,8 +216,57 @@ class HedgeOptimizer:
             metrics,
             started + self.manifest.policy.solver_seconds,
         )
+        limits = self.manifest.risk
+        if limits.gross_risk_reducing and (
+            result.status != "OPTIMAL" or self._at_gross_cap(snapshot, quotes, result)
+        ):
+            # The 3x cap binds, or leaves no feasible target (a residual-delta breach only shares over
+            # the cap can cure): re-solve up to gross_risk_reducing, allowed only where stress loss and
+            # market exposure both fall against the holdings (RiskGate._above_the_cap).
+            second = {"stages": []}
+            alternative = self._solve(
+                snapshot,
+                quotes,
+                scenarios,
+                previous_nav,
+                nav_estimate,
+                stock_only,
+                strategy,
+                recovery_reference,
+                recovery_symbols,
+                recovery_stress,
+                recovery_gross,
+                second,
+                monotonic() + self.manifest.policy.solver_seconds,
+                risk_reducing=True,
+            )
+            chosen = alternative.status == "OPTIMAL" and (
+                result.status != "OPTIMAL" or alternative.expected_score < result.expected_score - 0.01
+            )
+            metrics["risk_reducing"] = {
+                "status": alternative.status,
+                "expected_score": alternative.expected_score,
+                "chosen": chosen,
+                "stages": second["stages"],
+            }
+            if chosen:
+                result = alternative
         metrics["total_ms"] = round((monotonic() - started) * 1000, 3)
         return result.model_copy(update={"solver_metrics": metrics})
+
+    def _at_gross_cap(self, snapshot, quotes, target):
+        """The target uses at least 98% of the gross_notional cap."""
+        m = self.manifest
+        budget = min(self.baseline_nav, float(snapshot.nav))
+        gross = sum(
+            abs(q)
+            * m.contract_map[i].multiplier
+            * quotes[i].spot
+            * gross_weight(m, m.contract_map[i], quotes[i])
+            for i, q in target.quantities.items()
+            if q and i not in m.mandatory and i in quotes
+        )
+        return gross >= 0.98 * m.risk.gross_notional * budget
 
     def _solve(
         self,
@@ -234,6 +283,7 @@ class HedgeOptimizer:
         recovery_gross,
         metrics,
         deadline,
+        risk_reducing=False,
     ):
         m = self.manifest
         strategy = strategy or m.strategy
@@ -587,7 +637,17 @@ class HedgeOptimizer:
                 for i in ids
             ]
         )
-        constraints += [spots @ absolute_h <= m.risk.gross_notional * budget]
+        gross_cap = m.risk.gross_notional * budget
+        if m.risk.gross_risk_reducing:
+            # Holding (or shrinking) gross already above the cap is allowed; the risk-reducing solve may
+            # go up to the ceiling under the constraints below.
+            held_gross = float(spots @ np.abs(quantities))
+            gross_cap = (
+                m.risk.gross_risk_reducing * budget
+                if risk_reducing
+                else min(max(gross_cap, held_gross), m.risk.gross_risk_reducing * budget)
+            )
+        constraints += [spots @ absolute_h <= gross_cap]
         increment = cp.Variable(n, nonneg=True)
         constraints += [increment >= ah - np.abs(current)]
         margin_rates = np.array(
@@ -627,6 +687,27 @@ class HedgeOptimizer:
                 # trade when the book already sits closer to the cap.
                 cap = min(cap, max(DELTA_HEADROOM * cap, abs(float(delta_vector @ quantities))))
             constraints += [cp.abs(delta_vector @ total_h) <= cap]
+        if risk_reducing:
+            # Up to gross_risk_reducing only where stress loss and market exposure (|beta-weighted
+            # delta|, else the residual deltas' total) both stay at or below the holdings'.
+            held_stress = max(0.0, float(-np.min(scenarios.stress @ quantities)))
+            constraints += [stress_matrix @ h + stress_fixed >= -held_stress - 0.01]
+            if all(m.contract_map[i].symbol in scenarios.betas for i in ids):
+                beta = np.array(
+                    [
+                        quotes[i].delta
+                        * quotes[i].spot
+                        * m.contract_map[i].multiplier
+                        * scenarios.betas[m.contract_map[i].symbol]
+                        for i in ids
+                    ]
+                )
+                constraints += [cp.abs(beta @ total_h) <= abs(float(beta @ quantities))]
+            else:
+                held_exposure = sum(abs(float(v @ quantities)) for v in delta_vectors.values())
+                constraints += [
+                    cp.sum(cp.hstack([cp.abs(v @ total_h) for v in delta_vectors.values()])) <= held_exposure
+                ]
         for symbol in symbols:
             stock_vector = np.array(
                 [

@@ -50,6 +50,10 @@ class RiskLimits(Frozen):
     # "delta" counts an option at its |delta| share of that (an IVV share and an at-the-money SPY
     # option then use gross in proportion to their market exposure). Shares count the same either way.
     gross_basis: Literal["notional", "delta"] = "notional"
+    # Above gross_notional and up to this multiple of the budget, a trade is allowed only if it
+    # lowers both stress loss and market exposure against the current holdings (operator, Oct 28:
+    # an IVV hedge of the S&P exposure found no gross room). 0 disables it.
+    gross_risk_reducing: float = Field(default=0, ge=0, le=4)
     stock_notional: float = Field(default=0.5, gt=0, le=0.5)
     residual_delta: float = Field(default=0.1, gt=0, le=0.2)
     contracts_per_option: int = Field(default=50, gt=0, le=50)
@@ -62,6 +66,16 @@ class RiskLimits(Frozen):
     greek_age: int = Field(default=60, gt=0)
     account_age: int = Field(default=180, gt=0)
     rate_stress_shift: float = Field(default=0.01, ge=0.005, le=0.05)
+
+    @model_validator(mode="after")
+    def risk_reducing_above_the_cap(self):
+        if self.gross_risk_reducing and self.gross_risk_reducing <= self.gross_notional:
+            raise ValueError("risk.gross_risk_reducing must be 0 (off) or above risk.gross_notional")
+        return self
+
+    def gross_ceiling(self):
+        """The gross multiple no holding may exceed: gross_risk_reducing when on."""
+        return self.gross_risk_reducing or self.gross_notional
 
 
 class TradingPolicy(Frozen):

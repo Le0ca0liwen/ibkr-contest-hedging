@@ -146,6 +146,23 @@ exposure group, not per symbol.
 - **Example:** on Oct 28 at 12:55, the SPY options' $98.2k and the 20 IVV's $15.5k make $113.7k
   against a $98.4k cap.
 
+**Gross-cap options (both off by default; set under `risk:`).** The 3x discretionary gross cap is
+the app's own leverage limit, not a contest rule. It counts each contract at |quantity| x
+multiplier x underlying price, so on Oct 28 the 37 short SPY Nov 27 options used $2.85M of the
+$2.95M cap and left no room for an IVV hedge of the S&P exposure.
+- **C, `gross_basis: delta`:** an option counts at |delta| x its notional; shares count the same.
+- **D, `gross_risk_reducing: 3.5`:** above `gross_notional` and up to this multiple, a trade is
+  allowed only if it lowers both the holdings' stress loss (without trading costs) and their
+  market exposure (|beta-weighted delta|, else the residual deltas' total) against the current
+  holdings. Holding or shrinking gross there is always allowed.
+  - **In the optimizer:** when its target reaches 98% of the cap, or no target is feasible, it
+    solves a second time with that ceiling and those two constraints, and keeps the lower expected
+    score (`solver_metrics.risk_reducing`).
+  - **In the risk gate:** it refuses any other trade into that band with "Gross above 3x NAV only
+    for trades that lower stress loss and market exposure".
+- `ops/replay_limits.py` re-solves a day's recorded decisions under each variant and values the
+  trades at the close.
+
 Risk notes: the seven fixed legs are reported as `mandated_gross_notional` and
 are outside the discretionary 3x gross cap (the SPY straddle alone is ~$3.85M of
 underlying). Held options that are not being traded may have an unchanged

@@ -86,11 +86,13 @@ class RiskEngine:
                 if quantity < 0:
                     assignment_cash += abs(quantity) * c.multiplier * c.strike
         values = np.array([quantities.get(i, 0) for i in scenarios.ids])
+        position_stress = max(0.0, float(-np.min(scenarios.stress @ values)))
         stress_loss = max(0.0, float(-np.min(scenarios.stress @ values)) + costs)
         remaining_liquidity = float(snapshot.excess_liquidity) - margin_increment - costs
         metrics = {
             "budget": budget,
             "stress_loss": stress_loss,
+            "position_stress_loss": position_stress,  # the holdings' alone, without trading costs
             "stress_limit": 0.03 * budget,
             "gross_notional": gross,
             "mandated_gross_notional": mandated_gross,
@@ -109,7 +111,7 @@ class RiskEngine:
         metrics["absolute_pnl_cvar95"] = float(forecast[forecast >= cutoff].mean())
         if stress_loss > self.manifest.risk.stress_loss * budget + 0.01:
             reasons.append("Stress loss exceeds 3% budget")
-        if gross > self.manifest.risk.gross_notional * budget + 0.01:
+        if gross > self.manifest.risk.gross_ceiling() * budget + 0.01:
             reasons.append("Gross underlying-equivalent notional exceeds cap")
         if remaining_liquidity < self.manifest.risk.liquidity_buffer * budget:
             reasons.append("Insufficient excess liquidity after conservative margin estimate")
@@ -137,6 +139,11 @@ class RiskEngine:
         residual = {}
         for symbol, value in delta.items():
             residual[exposure_group(symbol)] = residual.get(exposure_group(symbol), 0) + value
+        # Market exposure for the risk-reducing gross exception: |beta-weighted delta| when every
+        # symbol has a beta, else the residual deltas' total.
+        metrics["market_exposure"] = (
+            abs(beta_delta) if beta_available else sum(abs(v) for v in residual.values())
+        )
         for group in sorted(residual):
             metrics[f"residual_delta:{group}"] = residual[group]
             if abs(residual[group]) > self.manifest.risk.residual_delta * budget + 0.01:
@@ -149,6 +156,29 @@ class RiskGate:
         self.manifest, self.demo = manifest, demo
         self.registry = MandateRegistry(manifest)
         self.engine = RiskEngine(manifest)
+
+    def _above_the_cap(self, snapshot, quotes, scenarios, actual, proposed):
+        """The reason a trade into gross between gross_notional and gross_risk_reducing is refused,
+        or None: it must lower both stress loss and market exposure against the holdings. Holding
+        or shrinking gross there is always allowed."""
+        limits = self.manifest.risk
+        budget = proposed.metrics.get("budget", 0)
+        gross = proposed.metrics.get("gross_notional", 0)
+        if not limits.gross_risk_reducing or gross <= limits.gross_notional * budget + 0.01:
+            return None
+        current = self.engine.evaluate(snapshot, quotes, scenarios, actual)
+        if gross <= current.metrics.get("gross_notional", 0) + 0.01:
+            return None
+        lower = all(
+            proposed.metrics.get(k, float("inf")) <= current.metrics.get(k, 0) + 0.01
+            for k in ("position_stress_loss", "market_exposure")
+        )
+        return (
+            None
+            if lower
+            else f"Gross above {limits.gross_notional:g}x NAV only for trades that lower stress loss and "
+            "market exposure"
+        )
 
     def validate(
         self,
@@ -255,6 +285,8 @@ class RiskGate:
                 if quantities.get(i, 0) < actual.get(i, 0) and q.bid_size < 1:
                     reasons.append(f"No bid liquidity: {i}")
         proposed = self.engine.evaluate(snapshot, quotes, scenarios, quantities, costs)
+        if reason := self._above_the_cap(snapshot, quotes, scenarios, actual, proposed):
+            reasons.append(reason)
         if not proposed.passed:
             if corrective:
                 current = self.engine.evaluate(snapshot, quotes, scenarios, actual)
@@ -263,7 +295,7 @@ class RiskGate:
                 budget = current.metrics.get("budget", 0)
                 bounds = {
                     "stress_loss": self.manifest.risk.stress_loss * budget,
-                    "gross_notional": self.manifest.risk.gross_notional * budget,
+                    "gross_notional": self.manifest.risk.gross_ceiling() * budget,
                 }
                 for key in current.metrics:
                     if key.startswith("residual_delta:"):

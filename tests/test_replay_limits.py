@@ -7,23 +7,24 @@ from hedge.scenarios import ScenarioEngine
 from ops.replay_limits import _archive_lines, replay_point, trade_value, variant_manifests
 
 
-def test_every_gross_variant_is_solved_valued_and_d_falls_back_to_a(manifest, snapshot, quotes, now):
+def test_every_gross_variant_is_solved_valued_and_risk_checked(manifest, snapshot, quotes, now):
     held = {**snapshot.quantities(), 104: -20}
     snap = snapshot.model_copy(
         update={"positions": tuple(Position(con_id=i, quantity=q) for i, q in held.items())}
     )
     sc = ScenarioEngine(manifest).build(snap, quotes, now)
     manifests = variant_manifests(manifest)
+    assert set(manifests) == {"A", "B", "C", "D", "C+D"}
     assert manifests["B"].risk.gross_notional == 3.5 and manifests["C"].risk.gross_basis == "delta"
+    assert manifests["D"].risk.gross_risk_reducing == 3.5 and manifests["C+D"].risk.gross_basis == "delta"
     closes = {i: q.mid + 0.5 for i, q in quotes.items()}
     target = manifest.initial_nav
     results = replay_point(manifests, snap, quotes, sc, target, float(target), "dynamic_l1", closes)
-    for name in "ABCD":
+    for name in manifests:
         assert results[name]["status"] == "OPTIMAL" and results[name]["risk_passed"]
-        trades = results[name]["trades"]
-        assert results[name]["value_to_close"] is not None or trades
-    # Far from 3x gross, B never needs the exception: D is A's target.
-    assert results["D"]["from"] == "A" and results["D"]["trades"] == results["A"]["trades"]
+        assert results[name]["value_to_close"] is not None
+    # Far below 3x gross, D's second solve never runs and its target is A's.
+    assert results["D"]["risk_reducing_solve"] is None and results["D"]["trades"] == results["A"]["trades"]
     assert results["current"]["gross"] < 3 * manifest.initial_nav
 
 
