@@ -8,6 +8,14 @@ from .config import exposure_group
 from .models import RiskResult
 
 
+def gross_weight(manifest, contract, quote):
+    """A discretionary position's share of its underlying notional in the gross cap: 1, or an
+    option's |delta| under risk.gross_basis "delta"."""
+    if manifest.risk.gross_basis == "delta" and contract.kind == "OPT":
+        return abs(quote.delta or 0)
+    return 1.0
+
+
 class MandateRegistry:
     def __init__(self, manifest):
         self.manifest = manifest
@@ -53,7 +61,7 @@ class RiskEngine:
             if i in self.manifest.mandatory:
                 mandated_gross += abs(quantity) * c.multiplier * q.spot
             else:
-                gross += abs(quantity) * c.multiplier * q.spot
+                gross += abs(quantity) * c.multiplier * q.spot * gross_weight(self.manifest, c, q)
             delta[c.symbol] = delta.get(c.symbol, 0) + quantity * c.multiplier * q.delta * q.spot
             gamma[c.symbol] = gamma.get(c.symbol, 0) + quantity * c.multiplier * q.gamma
             vega[c.symbol] = vega.get(c.symbol, 0) + quantity * c.multiplier * q.vega / 100

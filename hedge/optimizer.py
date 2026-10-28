@@ -10,6 +10,7 @@ from .cashflows import cash_carry
 from .config import NY, exposure_group
 from .models import Target
 from .order_policy import spread_error
+from .risk import gross_weight
 
 DELTA_HEADROOM = 0.9  # target share of the residual-delta cap for symbols without tradable shares
 LIQUIDITY_CUSHION = 0.0002  # of budget, on top of risk.liquidity_buffer
@@ -577,7 +578,14 @@ class HedgeOptimizer:
 
         # Same measure as RiskEngine: fixed mandated legs are outside the discretionary gross cap.
         spots = np.array(
-            [0.0 if i in m.mandatory else quotes[i].spot * m.contract_map[i].multiplier for i in ids]
+            [
+                0.0
+                if i in m.mandatory
+                else quotes[i].spot
+                * m.contract_map[i].multiplier
+                * gross_weight(m, m.contract_map[i], quotes[i])
+                for i in ids
+            ]
         )
         constraints += [spots @ absolute_h <= m.risk.gross_notional * budget]
         increment = cp.Variable(n, nonneg=True)

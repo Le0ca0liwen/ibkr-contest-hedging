@@ -46,6 +46,10 @@ class RiskLimits(Frozen):
     stress_loss: float = Field(default=0.03, gt=0, le=0.03)
     liquidity_buffer: float = Field(default=0.25, ge=0.25, lt=1)
     gross_notional: float = Field(default=3, gt=0, le=3)
+    # "notional" counts each discretionary contract at |quantity| x multiplier x underlying price;
+    # "delta" counts an option at its |delta| share of that (an IVV share and an at-the-money SPY
+    # option then use gross in proportion to their market exposure). Shares count the same either way.
+    gross_basis: Literal["notional", "delta"] = "notional"
     stock_notional: float = Field(default=0.5, gt=0, le=0.5)
     residual_delta: float = Field(default=0.1, gt=0, le=0.2)
     contracts_per_option: int = Field(default=50, gt=0, le=50)

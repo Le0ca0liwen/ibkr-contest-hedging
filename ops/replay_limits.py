@@ -1,0 +1,308 @@
+"""Re-solve the app's recorded decisions under alternative gross limits. Read-only research.
+
+    .venv/bin/python ops/replay_limits.py --config config/local.contest.yaml --day 2026-10-28 \
+        [--every 15] [--archives data/moomoo] [--database URL] [--output reports/replay-limits.json]
+
+For each recorded decision on DAY (the first in every --every minutes of the regular session):
+  - holdings: the latest stored snapshot at or before it;
+  - quotes: the Moomoo collector line the app read then (data/moomoo/raw-YYYYMMDD.jsonl[.gz]),
+    parsed by hedge/moomoo_data.py as the app parses latest.json;
+  - scenarios: rebuilt by hedge/scenarios.py with the configured daily history;
+  - closing target and NAV estimate: the decision's own.
+Variants (all with the configured residual-delta groups):
+  A  as configured
+  B  gross cap 3.5 x NAV
+  C  options counted at |delta| x notional in the gross cap (risk.gross_basis "delta")
+  D  B's target only when it is over the 3 x cap and lowers stress loss and |beta delta| against
+     the holdings (a risk-reducing exception); otherwise A's
+Each target is also valued as a trade from the decision to the close: shares at their official
+close, options at the collector's last book before 16:00, less execution_cost. "close_gap" adds
+that to the session's recorded close gap (the imported statement, else the 20:05 capture), as if
+the book had then been held unchanged: app trades after the decision are counted and reported.
+Never writes to the database, the archive or a broker.
+"""
+
+import argparse
+import json
+import re
+import sys
+import tempfile
+from datetime import date, datetime, time, timedelta
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "ops"))
+
+from hedge.config import NY, load_manifest  # noqa: E402
+from hedge.models import PortfolioSnapshot  # noqa: E402
+from hedge.moomoo_archive import _lines, archive_path  # noqa: E402
+from hedge.moomoo_data import MoomooData  # noqa: E402
+from hedge.optimizer import HedgeOptimizer, execution_cost  # noqa: E402
+from hedge.risk import RiskEngine  # noqa: E402
+from hedge.scenarios import ScenarioEngine  # noqa: E402
+from hedge.supervisor import PROFILES  # noqa: E402
+from hedge.universe import screen_snapshot  # noqa: E402
+
+RECEIVED = re.compile(rb'"received_at": "([^"]+)"')
+BETA = "beta_delta_dollars:portfolio"
+
+
+def variant_manifests(m):
+    risk = m.risk
+    return {
+        "A": m,
+        "B": m.model_copy(update={"risk": risk.model_copy(update={"gross_notional": 3.5})}),
+        "C": m.model_copy(update={"risk": risk.model_copy(update={"gross_basis": "delta"})}),
+    }
+
+
+def trade_value(m, quotes, closes, trades):
+    """A trade held from the quotes' moment to the close: quantity x multiplier x (close - mid),
+    less its modeled execution cost. None when a traded contract has no closing price."""
+    if any(i not in closes for i in trades):
+        return None
+    pnl = sum(q * m.contract_map[i].multiplier * (closes[i] - quotes[i].mid) for i, q in trades.items())
+    ids = list(trades)
+    return pnl - execution_cost(m, quotes, ids, [trades[i] for i in ids])
+
+
+def replay_point(manifests, snapshot, quotes, scenarios, target_nav, estimate, strategy, closes):
+    """{variant: result} for one decision: the solve, the target's risk metrics and its value."""
+    base = manifests["A"]
+    actual = snapshot.quantities()
+    current = RiskEngine(base).evaluate(snapshot, quotes, scenarios, actual)
+    results = {}
+    for name, m in manifests.items():
+        target = HedgeOptimizer(m).solve(snapshot, quotes, scenarios, target_nav, estimate, False, strategy)
+        risk = RiskEngine(m).evaluate(snapshot, quotes, scenarios, target.quantities)
+        trades = {
+            i: target.quantities.get(i, 0) - actual.get(i, 0)
+            for i in set(target.quantities) | set(actual)
+            if target.quantities.get(i, 0) != actual.get(i, 0)
+        }
+        results[name] = {
+            "status": target.status,
+            "expected_score": target.expected_score,
+            "current_score": target.current_score,
+            "uncertainty": target.uncertainty,
+            "trades": {m.contract_map[i].label: q for i, q in sorted(trades.items())},
+            "risk_passed": risk.passed,
+            "risk_reasons": list(risk.reasons),
+            "gross": risk.metrics.get("gross_notional"),
+            "stress_loss": risk.metrics.get("stress_loss"),
+            "beta_delta": risk.metrics.get(BETA),
+            "residual_delta": {k: v for k, v in risk.metrics.items() if k.startswith("residual_delta:")},
+            "value_to_close": trade_value(m, quotes, closes, trades),
+        }
+    b, budget = results["B"], current.metrics.get("budget", 0)
+    reduces = (
+        b["status"] == "OPTIMAL"
+        and b["risk_passed"]
+        and (b["gross"] or 0) > base.risk.gross_notional * budget
+        and (b["stress_loss"] or 0) <= current.metrics.get("stress_loss", 0) + 0.01
+        and abs(b["beta_delta"] or 0) <= abs(current.metrics.get(BETA, 0)) + 0.01
+    )
+    results["D"] = {**(b if reduces else results["A"]), "from": "B" if reduces else "A"}
+    results["current"] = {
+        "gross": current.metrics.get("gross_notional"),
+        "stress_loss": current.metrics.get("stress_loss"),
+        "beta_delta": current.metrics.get(BETA),
+        "residual_delta": {k: v for k, v in current.metrics.items() if k.startswith("residual_delta:")},
+    }
+    return results
+
+
+def _rows(connection, category, start, end):
+    from sqlalchemy import text
+
+    rows = connection.execute(
+        text("SELECT at, payload FROM records WHERE category = :c AND at >= :s AND at <= :e ORDER BY at"),
+        {"c": category, "s": start, "e": end},
+    )
+    for at, payload in rows:
+        yield at, json.loads(payload) if isinstance(payload, str) else payload
+
+
+def _sampled(decisions, every):
+    chosen, last = [], None
+    for payload in decisions:
+        at = datetime.fromisoformat(payload["at"])
+        if last is None or at - last >= timedelta(minutes=every):
+            chosen.append(payload)
+            last = at
+    return chosen
+
+
+def _archive_lines(path, moments):
+    """{moment: the last archive line received at or before it (within 60 s)}."""
+    moments, found, previous = sorted(moments), {}, None
+    k = 0
+    for line in _lines(path):
+        match = RECEIVED.search(line[:4096] if isinstance(line, bytes) else line.encode()[:4096])
+        if not match:
+            continue
+        received = datetime.fromisoformat(match.group(1).decode())
+        while k < len(moments) and received > moments[k]:
+            if previous is not None and moments[k] - previous[0] <= timedelta(seconds=60):
+                found[moments[k]] = previous[1]
+            k += 1
+        if k >= len(moments):
+            break
+        previous = (received, line)
+    while k < len(moments):
+        if previous is not None and moments[k] - previous[0] <= timedelta(seconds=60):
+            found[moments[k]] = previous[1]
+        k += 1
+    return found
+
+
+def _quotes(m, line, now):
+    with tempfile.NamedTemporaryFile("wb", suffix=".json", delete=False) as handle:
+        handle.write(line if isinstance(line, bytes) else line.encode())
+        path = handle.name
+    try:
+        return MoomooData(m, path).quotes(now)
+    finally:
+        Path(path).unlink(missing_ok=True)
+
+
+def main(argv=None):
+    from export_mark_dataset import database_url
+    from sqlalchemy import create_engine
+
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("--config", required=True)
+    parser.add_argument("--day", required=True, type=date.fromisoformat)
+    parser.add_argument("--every", type=int, default=15, help="minutes between replayed decisions")
+    parser.add_argument("--archives", default=str(ROOT / "data/moomoo"))
+    parser.add_argument("--database")
+    parser.add_argument("--output", default=str(ROOT / "reports/replay-limits.json"))
+    args = parser.parse_args(argv)
+    m = load_manifest(args.config)
+    manifests = variant_manifests(m)
+    day = args.day
+    opened = datetime.combine(day, time(9, 30), NY)
+    closed = datetime.combine(day, time(16), NY)
+    engine = create_engine(database_url(args.database))
+    with engine.connect() as connection:
+        decisions = [
+            p
+            for _, p in _rows(
+                connection, "decision", opened - timedelta(hours=1), closed + timedelta(hours=1)
+            )
+            if opened <= datetime.fromisoformat(p["at"]) < closed and p.get("closing_target") is not None
+        ]
+        snapshots = list(_rows(connection, "snapshot", opened - timedelta(hours=12), closed))
+        executions = [
+            p["value"]
+            for _, p in _rows(connection, "broker_event", opened, closed)
+            if p.get("event") == "execution"
+        ]
+        official = [p for _, p in _rows(connection, "official_closes", closed, closed + timedelta(hours=8))]
+        statements = [
+            p
+            for _, p in _rows(connection, "flex_statement", closed, closed + timedelta(days=4))
+            if p.get("date") == str(day)
+        ]
+        captures = [
+            p
+            for _, p in _rows(connection, "closing_capture", closed, closed + timedelta(hours=8))
+            if p.get("date") == str(day) and p.get("phase") == "end_of_day" and p.get("status") == "RECORDED"
+        ]
+    chosen = _sampled(decisions, args.every)
+    moments = [datetime.fromisoformat(p["at"]) for p in chosen]
+    path = archive_path(args.archives, day)
+    lines = _archive_lines(path, [*moments, closed - timedelta(seconds=1)])
+    final_line = lines.get(closed - timedelta(seconds=1))
+    closes = {}
+    if final_line is not None:
+        closes = {i: q.mid for i, q in _quotes(m, final_line, closed - timedelta(seconds=1)).items()}
+    for record in official:  # shares at their official close
+        closes.update({int(i): float(v) for i, v in (record.get("closes") or {}).items()})
+    target = chosen[0]["closing_target"] if chosen else None
+    close_nav = (
+        float(statements[-1]["total"]) if statements else float(captures[-1]["nav"]) if captures else None
+    )
+    close_gap = None if close_nav is None or target is None else close_nav - float(target)
+    scenario_engine = ScenarioEngine(m)
+    points = []
+    for payload, moment in zip(chosen, moments, strict=True):
+        line = lines.get(moment)
+        held = [s for at, s in snapshots if at <= moment]
+        if line is None or not held:
+            points.append({"at": payload["at"], "skipped": "no archive line or snapshot"})
+            continue
+        try:
+            snapshot = PortfolioSnapshot.model_validate(held[-1])
+            quotes = _quotes(m, line, moment)
+            ids = screen_snapshot(m, quotes, snapshot)
+            scenarios = scenario_engine.build(snapshot, quotes, moment, ids)
+            target_nav = float(payload["closing_target"])
+            estimate = target_nav + float(payload["nav_gap"])
+            strategy = PROFILES.get(payload.get("profile") or "STANDARD", "dynamic_l1")
+            results = replay_point(
+                manifests, snapshot, quotes, scenarios, target_nav, estimate, strategy, closes
+            )
+        except Exception as exc:  # one unreplayable decision never stops the rest
+            points.append({"at": payload["at"], "skipped": f"{type(exc).__name__}: {exc}"})
+            continue
+        # The rebuilt quotes against the midpoints the app recorded with this decision.
+        recorded = payload.get("reference_midpoints") or {}
+        drift = [abs(quotes[int(i)].mid - float(v)) for i, v in recorded.items() if int(i) in quotes]
+        later = sum(1 for e in executions if datetime.fromisoformat(e["at"]) > moment)
+        for name in "ABCD":
+            value = results[name]["value_to_close"]
+            results[name]["close_gap"] = None if close_gap is None or value is None else close_gap + value
+        points.append(
+            {
+                "at": payload["at"],
+                "recorded": {k: payload.get(k) for k in ("expected_score", "current_score", "uncertainty")},
+                "snapshot_age_s": (moment - datetime.fromisoformat(str(held[-1]["at"]))).total_seconds(),
+                "quote_match": {
+                    "contracts": len(drift),
+                    "max_abs_mid_diff": max(drift, default=None),
+                    "missing": len(recorded) - len(drift),
+                },
+                "app_executions_after": later,
+                **results,
+            }
+        )
+        print(
+            moment.astimezone(NY).strftime("%H:%M"),
+            " ".join(
+                f"{name} {results[name]['status'][:3]} E|g| {results[name]['expected_score']:,.0f}"
+                + (
+                    f" close {results[name]['close_gap']:+,.0f}"
+                    if results[name].get("close_gap") is not None
+                    else ""
+                )
+                for name in "ABCD"
+            ),
+            f"(recorded {payload.get('expected_score', 0):,.0f}; D from {results['D']['from']})",
+        )
+    summary = {}
+    for name in "ABCD":
+        done = [p[name] for p in points if name in p and p[name]["status"] == "OPTIMAL"]
+        gaps = [abs(r["close_gap"]) for r in done if r.get("close_gap") is not None]
+        summary[name] = {
+            "points": len(done),
+            "mean_expected_score": sum(r["expected_score"] for r in done) / len(done) if done else None,
+            "mean_abs_close_gap": sum(gaps) / len(gaps) if gaps else None,
+        }
+    report = {
+        "day": str(day),
+        "close_gap_recorded": close_gap,
+        "close_source": "statement" if statements else "end_of_day capture" if captures else None,
+        "summary": summary,
+        "points": points,
+    }
+    Path(args.output).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.output).write_text(json.dumps(report, indent=1, default=str))
+    print(json.dumps({"day": str(day), "close_gap_recorded": close_gap, "summary": summary}, indent=1))
+
+
+if __name__ == "__main__":
+    main()

@@ -267,3 +267,24 @@ def test_the_delta_solve_hedges_spy_options_with_ivv_shares(manifest, snapshot, 
     options = sum(q * 100 * quotes[i].delta * quotes[i].spot for i, q in snap.quantities().items() if i != 10)
     assert result.quantities[10] == pytest.approx(-options / quotes[10].spot, abs=2)
     assert RiskGate(m).validate(snap, quotes, sc, result.quantities, now).passed
+
+
+def test_gross_can_count_options_at_their_delta(manifest, snapshot, quotes, now):
+    """Oct 28: 37 short SPY Nov 27 options used $2.85M of the $2.95M gross cap at full notional
+    while carrying little delta; risk.gross_basis "delta" counts them at |delta| x notional."""
+    from hedge.risk import RiskEngine
+
+    held = {**snapshot.quantities(), 104: -20, 10: 300}
+    snap = snapshot.model_copy(
+        update={"positions": tuple(Position(con_id=i, quantity=q) for i, q in held.items())}
+    )
+    sc = ScenarioEngine(manifest).build(snap, quotes, now)
+    by_delta = manifest.model_copy(update={"risk": manifest.risk.model_copy(update={"gross_basis": "delta"})})
+    notional = RiskEngine(manifest).evaluate(snap, quotes, sc, held).metrics["gross_notional"]
+    delta = RiskEngine(by_delta).evaluate(snap, quotes, sc, held).metrics["gross_notional"]
+    shares = 300 * quotes[10].spot
+    assert notional == pytest.approx(shares + 20 * 100 * quotes[104].spot)
+    assert delta == pytest.approx(shares + 20 * 100 * quotes[104].spot * abs(quotes[104].delta))
+    result = HedgeOptimizer(by_delta).solve(snap, quotes, sc, by_delta.initial_nav)
+    assert result.status == "OPTIMAL"
+    assert RiskGate(by_delta).validate(snap, quotes, sc, result.quantities, now).passed
