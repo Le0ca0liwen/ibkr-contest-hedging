@@ -75,6 +75,11 @@ policy:
 # Start paper trading automatically after launch, once the mandated book is held and every paper
 # activation check passes (the same checks as "Enable paper trading"). The dashboard's
 # "Auto paper" switch overrides this; Pause trading stops it. Launch with Start Contest.command.
+risk:
+  # Short SPY options hedging the mandated Nov 20 straddle are credited out of the 3x gross cap,
+  # up to the straddle's own gross (Oct 29: they had used $2.85M of the $2.95M cap and left 6.5
+  # straddles unhedged). See docs/CONTEST_RESTRICTIONS.md.
+  mandate_offsets: true
 autostart: paper
 # Closing surplus burner (docs/CLOSING_BURNER.md): spends a NAV surplus only near the close (never
 # on Day 0). The contest scores the IBKR statement NAV, fixed by the 16:00 closing marks while

@@ -54,6 +54,14 @@ class RiskLimits(Frozen):
     # lowers both stress loss and market exposure against the current holdings (operator, Oct 28:
     # an IVV hedge of the S&P exposure found no gross room). 0 disables it.
     gross_risk_reducing: float = Field(default=0, ge=0, le=4)
+    # Options that offset a mandated option leg are credited back out of the gross cap, up to that
+    # leg's own gross (operator, Oct 29: the short SPY Nov 27 options hedging the mandated Nov 20
+    # straddle used $2.85M of the $2.95M cap and left 6.5 straddles unhedged). An offset is in the
+    # leg's exposure group and right, of opposite sign, expiring within offset_expiry_days of it,
+    # with strike/spot within offset_moneyness of the leg's.
+    mandate_offsets: bool = False
+    offset_expiry_days: int = Field(default=14, ge=0, le=31)
+    offset_moneyness: float = Field(default=0.03, ge=0, le=0.1)
     stock_notional: float = Field(default=0.5, gt=0, le=0.5)
     residual_delta: float = Field(default=0.1, gt=0, le=0.2)
     contracts_per_option: int = Field(default=50, gt=0, le=50)

@@ -161,7 +161,25 @@ $2.95M cap and left no room for an IVV hedge of the S&P exposure.
   - **In the risk gate:** it refuses any other trade into that band with "Gross above 3x NAV only
     for trades that lower stress loss and market exposure".
 - `ops/replay_limits.py` re-solves a day's recorded decisions under each variant and values the
-  trades at the close.
+  trades at the close and through the next session.
+
+**Mandate offsets (`risk.mandate_offsets: true`, on in the template).** Options that offset a
+mandated option leg are credited back out of the gross cap, up to that leg's own gross. The mandated
+legs themselves are already outside the cap, so a hedge that cancels them no longer competes with
+other trades for room.
+- **What counts as an offset:** a discretionary option in the leg's exposure group (SPY, IVV, VOO and
+  SPLG are one) and right, of opposite sign, expiring within `offset_expiry_days` (14) of the leg, with
+  strike/spot within `offset_moneyness` (3%) of the leg's. Each option is matched to its nearest leg.
+- **Where it shows:** `gross_offset_credit` (already taken out of `gross_notional`). The optimizer and
+  the risk gate use the same credit, and every other limit (stress loss, residual delta, contracts per
+  option, option names, liquidity) is unchanged.
+- **Why (Oct 29):** the 18 short Nov 27 calls and 19 puts against the mandated 25 Nov 20 straddles used
+  $2.85M of the $2.95M cap. The 6.5 straddles left over lost about $440 a day to time decay and moved
+  about $575 per volatility point; Oct 29 lost $1,264 on SPY options.
+- **Instruments:** SPY has no Nov 19 or Nov 23 expiry yet. Short Nov 13 and Nov 27 770 straddles in
+  about an 11.5 : 13.5 mix match the Nov 20 straddle's decay and vega (Cboe Greeks, Oct 29), at
+  $0.11-0.15 spreads. IVV and VOO Nov 20 options would match the expiry exactly, but on Oct 29 they
+  quoted $3.50-4.90 (IVV) and $1.40-2.40 (VOO) wide with little open interest, so they are not defined.
 
 Risk notes: the seven fixed legs are reported as `mandated_gross_notional` and
 are outside the discretionary 3x gross cap (the SPY straddle alone is ~$3.85M of

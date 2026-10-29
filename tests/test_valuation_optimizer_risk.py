@@ -331,3 +331,60 @@ def test_the_optimizer_hedges_over_the_cap_only_with_the_risk_reducing_ceiling(
     assert result.status == "OPTIMAL" and result.solver_metrics["risk_reducing"]["chosen"]
     assert result.quantities[10] < -500  # an IVV short against the SPY calls' delta
     assert RiskGate(on).validate(snap, quotes, sc, result.quantities, now).passed
+
+
+def _offsets(manifest, gross_notional=3.0, **change):
+    risk = manifest.risk.model_copy(
+        update={"mandate_offsets": True, "gross_notional": gross_notional, **change}
+    )
+    return manifest.model_copy(update={"risk": risk})
+
+
+def test_options_offsetting_the_mandated_legs_are_credited_out_of_gross(manifest, snapshot, quotes, now):
+    """Oct 29: the short SPY Nov 27 options that hedge the mandated Nov 20 straddle used $2.85M of the
+    $2.95M cap. Opposite-signed options near a mandated leg are credited back, up to the leg's gross."""
+    from hedge.risk import RiskEngine, offset_legs
+
+    on = _offsets(manifest)
+    # 190C/200C sit 2.6% from the 195C leg, 190P/200P from the 195P leg; all expire with them.
+    assert offset_legs(on, quotes) == {103: 101, 104: 101, 105: 102, 106: 102}
+    assert offset_legs(_offsets(manifest, offset_moneyness=0.01), quotes) == {}
+    assert offset_legs(manifest, quotes) == {}  # off by default
+    contract = 100 * quotes[104].spot
+
+    def gross(m, held):
+        book = {**snapshot.quantities(), **held}
+        snap = snapshot.model_copy(
+            update={"positions": tuple(Position(con_id=i, quantity=q) for i, q in book.items())}
+        )
+        sc = ScenarioEngine(manifest).build(snap, quotes, now)
+        return RiskEngine(m).evaluate(snap, quotes, sc, book).metrics
+
+    assert gross(manifest, {104: -20})["gross_notional"] == pytest.approx(20 * contract)
+    short = gross(on, {104: -20, 10: 300})
+    assert short["gross_notional"] == pytest.approx(300 * quotes[10].spot)  # only the shares remain
+    assert short["gross_offset_credit"] == pytest.approx(20 * contract)
+    assert gross(on, {104: 20})["gross_offset_credit"] == 0  # same sign as the long leg adds to it
+    over = gross(on, {103: -10, 104: -30, 105: -5})  # 40 calls against a 25-call leg; 5 puts
+    assert over["gross_offset_credit"] == pytest.approx(30 * contract)
+    assert over["gross_notional"] == pytest.approx(15 * contract)
+
+
+def test_the_optimizer_offsets_the_mandated_straddle_beyond_the_cap(manifest, snapshot, quotes, now):
+    """A 0.1x cap (five contracts) caps the hedge of the 25-lot straddle; with mandate offsets the
+    optimizer may short more of the nearby options, and the gate agrees."""
+    off = _offsets(manifest, 0.1).model_copy(
+        update={"risk": manifest.risk.model_copy(update={"gross_notional": 0.1})}
+    )
+    on = _offsets(manifest, 0.1)
+    sc = ScenarioEngine(manifest).build(snapshot, quotes, now)
+    capped = HedgeOptimizer(off).solve(snapshot, quotes, sc, off.initial_nav)
+    offset = HedgeOptimizer(on).solve(snapshot, quotes, sc, on.initial_nav)
+    contracts = lambda r: sum(abs(r.quantities.get(i, 0)) for i in (103, 104, 105, 106))  # noqa: E731
+    assert capped.status == offset.status == "OPTIMAL"
+    assert contracts(capped) <= 5
+    assert contracts(offset) > 5 and all(offset.quantities.get(i, 0) <= 0 for i in (103, 104, 105, 106))
+    assert offset.expected_score < capped.expected_score
+    checked = RiskGate(on).validate(snapshot, quotes, sc, offset.quantities, now)
+    assert checked.passed, checked.reasons
+    assert checked.metrics["gross_notional"] <= 0.1 * checked.metrics["budget"] + 0.01

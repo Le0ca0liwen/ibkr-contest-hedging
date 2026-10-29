@@ -14,18 +14,21 @@ def test_every_gross_variant_is_solved_valued_and_risk_checked(manifest, snapsho
     )
     sc = ScenarioEngine(manifest).build(snap, quotes, now)
     manifests = variant_manifests(manifest)
-    assert set(manifests) == {"A", "B", "C", "D", "C+D", "A-STK", "C-STK", "D-STK"}
+    assert set(manifests) == {"A", "B", "C", "D", "C+D", "A-STK", "C-STK", "D-STK", "O"}
     assert manifests["B"].risk.gross_notional == 3.5 and manifests["C"].risk.gross_basis == "delta"
     assert manifests["D"].risk.gross_risk_reducing == 3.5 and manifests["C+D"].risk.gross_basis == "delta"
     closes = {i: q.mid + 0.5 for i, q in quotes.items()}
     target = manifest.initial_nav
-    results = replay_point(manifests, snap, quotes, sc, target, float(target), "dynamic_l1", closes)
+    later = {i: c + 1.0 for i, c in closes.items()}
+    results = replay_point(manifests, snap, quotes, sc, target, float(target), "dynamic_l1", closes, later)
     for name in manifests:
         assert results[name]["status"] == "OPTIMAL" and results[name]["risk_passed"]
         assert results[name]["value_to_close"] is not None and results[name]["solve_ms"] > 0
     for name in ("A-STK", "C-STK", "D-STK"):  # shares only
         assert all(" " not in label for label in results[name]["trades"])
     a = results["A"]
+    traded = sum(q * (1 if " " not in k else 100) for k, q in a["trades"].items())
+    assert a["next_value"] == pytest.approx(traded)  # every close one dollar higher the next session
     assert a["value_to_close"] == pytest.approx(a["market"] - a["cost"]) and a["cost"] >= 0
     assert a["eligible"] == (a["improvement"] > a["threshold"] and a["risk_passed"])
     # Far below 3x gross, D's second solve never runs and its target is A's.

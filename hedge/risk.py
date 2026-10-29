@@ -16,6 +16,52 @@ def gross_weight(manifest, contract, quote):
     return 1.0
 
 
+def offset_legs(manifest, quotes):
+    """{discretionary option conId: the mandated option leg it can offset} under
+    risk.mandate_offsets (else {}): same exposure group and right, expiry within offset_expiry_days,
+    strike/spot within offset_moneyness of the leg's. The nearest leg (moneyness, then days) wins."""
+    limits = manifest.risk
+    if not limits.mandate_offsets:
+        return {}
+    c_map = manifest.contract_map
+    legs = [c_map[i] for i in manifest.mandatory if c_map[i].kind == "OPT" and i in quotes]
+    found = {}
+    for c in c_map.values():
+        if c.kind != "OPT" or c.con_id in manifest.mandatory or c.con_id not in quotes:
+            continue
+        nearest = None
+        for leg in legs:
+            if leg.right != c.right or exposure_group(leg.symbol) != exposure_group(c.symbol):
+                continue
+            days = abs((c.expiry - leg.expiry).days)
+            moneyness = abs(c.strike / quotes[c.con_id].spot - leg.strike / quotes[leg.con_id].spot)
+            if days <= limits.offset_expiry_days and moneyness <= limits.offset_moneyness:
+                if nearest is None or (moneyness, days) < nearest[0]:
+                    nearest = ((moneyness, days), leg.con_id)
+        if nearest is not None:
+            found[c.con_id] = nearest[1]
+    return found
+
+
+def leg_gross(manifest, con_id, quotes, quantity):
+    c = manifest.contract_map[con_id]
+    return abs(quantity) * c.multiplier * quotes[con_id].spot * gross_weight(manifest, c, quotes[con_id])
+
+
+def offset_credit(manifest, quotes, quantities, legs=None):
+    """Gross credited back for holdings that offset mandated legs: per leg, the opposite-signed
+    offsets' gross, up to the leg's own gross (same basis)."""
+    legs = offset_legs(manifest, quotes) if legs is None else legs
+    held = {}
+    for i, leg in legs.items():
+        quantity = quantities.get(i, 0)
+        if quantity * manifest.mandatory[leg] < 0:
+            held[leg] = held.get(leg, 0) + leg_gross(manifest, i, quotes, quantity)
+    return sum(
+        min(amount, leg_gross(manifest, leg, quotes, manifest.mandatory[leg])) for leg, amount in held.items()
+    )
+
+
 class MandateRegistry:
     def __init__(self, manifest):
         self.manifest = manifest
@@ -85,6 +131,8 @@ class RiskEngine:
                 margin_increment += increment * c.multiplier * (q.mid + 0.2 * q.spot)
                 if quantity < 0:
                     assignment_cash += abs(quantity) * c.multiplier * c.strike
+        credit = offset_credit(self.manifest, quotes, active)
+        gross -= credit
         values = np.array([quantities.get(i, 0) for i in scenarios.ids])
         position_stress = max(0.0, float(-np.min(scenarios.stress @ values)))
         stress_loss = max(0.0, float(-np.min(scenarios.stress @ values)) + costs)
@@ -95,6 +143,7 @@ class RiskEngine:
             "position_stress_loss": position_stress,  # the holdings' alone, without trading costs
             "stress_limit": 0.03 * budget,
             "gross_notional": gross,
+            "gross_offset_credit": credit,  # mandate offsets' gross, already taken out of gross_notional
             "mandated_gross_notional": mandated_gross,
             "excess_liquidity_estimate": remaining_liquidity,
             "assignment_cash": assignment_cash,

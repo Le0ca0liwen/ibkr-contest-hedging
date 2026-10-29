@@ -10,7 +10,7 @@ from .cashflows import cash_carry
 from .config import NY, exposure_group
 from .models import Target
 from .order_policy import spread_error
-from .risk import gross_weight
+from .risk import gross_weight, leg_gross, offset_credit, offset_legs
 
 DELTA_HEADROOM = 0.9  # target share of the residual-delta cap for symbols without tradable shares
 LIQUIDITY_CUSHION = 0.0002  # of budget, on top of risk.liquidity_buffer
@@ -265,7 +265,7 @@ class HedgeOptimizer:
             * gross_weight(m, m.contract_map[i], quotes[i])
             for i, q in target.quantities.items()
             if q and i not in m.mandatory and i in quotes
-        )
+        ) - offset_credit(m, quotes, target.quantities)
         return gross >= 0.98 * m.risk.gross_notional * budget
 
     def _solve(
@@ -637,17 +637,39 @@ class HedgeOptimizer:
                 for i in ids
             ]
         )
+        # Mandate offsets (risk.mandate_offsets): per mandated leg, a credit up to the leg's own gross
+        # and to the opposite-signed offsets' gross. hpos and hneg never both hold a position, so
+        # the credit cannot be inflated without adding as much gross.
+        credits = []
+        legs = offset_legs(m, quotes)
+        for leg in sorted(set(legs.values())):
+            parts = []
+            for i in (i for i, x in legs.items() if x == leg and i in ids):
+                weight = spots[ids.index(i)]
+                if i in candidates:
+                    j = candidates.index(i)
+                    parts.append((hneg[j] if m.mandatory[leg] > 0 else hpos[j]) * weight)
+                else:
+                    parts.append(max(0, -np.sign(m.mandatory[leg]) * actual.get(i, 0)) * weight)
+            if parts:
+                credit = cp.Variable(nonneg=True)
+                constraints += [
+                    credit <= sum(parts),
+                    credit <= leg_gross(m, leg, quotes, m.mandatory[leg]),
+                ]
+                credits.append(credit)
+        credited = sum(credits) if credits else 0
         gross_cap = m.risk.gross_notional * budget
         if m.risk.gross_risk_reducing:
             # Holding (or shrinking) gross already above the cap is allowed; the risk-reducing solve may
             # go up to the ceiling under the constraints below.
-            held_gross = float(spots @ np.abs(quantities))
+            held_gross = float(spots @ np.abs(quantities)) - offset_credit(m, quotes, actual, legs)
             gross_cap = (
                 m.risk.gross_risk_reducing * budget
                 if risk_reducing
                 else min(max(gross_cap, held_gross), m.risk.gross_risk_reducing * budget)
             )
-        constraints += [spots @ absolute_h <= gross_cap]
+        constraints += [spots @ absolute_h - credited <= gross_cap]
         increment = cp.Variable(n, nonneg=True)
         constraints += [increment >= ah - np.abs(current)]
         margin_rates = np.array(

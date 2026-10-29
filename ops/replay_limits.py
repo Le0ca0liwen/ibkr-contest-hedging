@@ -17,6 +17,7 @@ Variants (all with the configured residual-delta groups), each the app's own opt
        (risk.gross_risk_reducing 3.5)
   C+D  both
   A-STK, C-STK, D-STK  A, C and D trading shares only (the optimizer's stock_only solve)
+  O    options offsetting the mandated legs credited out of the gross cap (risk.mandate_offsets)
 Each decision also records whether the live app would trade it ("eligible": OPTIMAL, risk passed
 and improvement above max(policy.score_threshold, policy.uncertainty_multiplier x uncertainty)).
 Each target is also valued as a trade from the decision to the close: shares at their official
@@ -24,6 +25,8 @@ close, options at the collector's last book before 16:00, less execution_cost ("
 separately). "close_gap" adds
 that to the session's recorded close gap (the imported statement, else the 20:05 capture), as if
 the book had then been held unchanged: app trades after the decision are counted and reported.
+"next_value" holds the trade on through the next scored session (its close against this one's) and
+"next_close_gap" adds it to that session's recorded gap: each session is scored on its own.
 Never writes to the database, the archive or a broker.
 """
 
@@ -62,6 +65,7 @@ VARIANTS = {
     "A-STK": {},
     "C-STK": {"gross_basis": "delta"},
     "D-STK": {"gross_risk_reducing": 3.5},
+    "O": {"mandate_offsets": True},
 }
 STOCK_ONLY = {"A-STK", "C-STK", "D-STK"}
 
@@ -89,7 +93,16 @@ def trade_value(m, quotes, closes, trades):
     return None if parts is None else parts[0] - parts[1]
 
 
-def replay_point(manifests, snapshot, quotes, scenarios, target_nav, estimate, strategy, closes):
+def next_value(m, closes, closes_next, trades):
+    """A trade held through the next session: quantity x multiplier x (next close - close), or None."""
+    if not trades or any(i not in closes or i not in closes_next for i in trades):
+        return None if trades else 0.0
+    return sum(q * m.contract_map[i].multiplier * (closes_next[i] - closes[i]) for i, q in trades.items())
+
+
+def replay_point(
+    manifests, snapshot, quotes, scenarios, target_nav, estimate, strategy, closes, closes_next=None
+):
     """{variant: result} for one decision: the solve, the target's risk metrics and its value."""
     actual = snapshot.quantities()
     current = RiskEngine(manifests["A"]).evaluate(snapshot, quotes, scenarios, actual)
@@ -128,6 +141,8 @@ def replay_point(manifests, snapshot, quotes, scenarios, target_nav, estimate, s
             "improvement": improvement,
             "threshold": threshold,
             "eligible": target.status == "OPTIMAL" and risk.passed and improvement > threshold,
+            "next_value": None if closes_next is None else next_value(m, closes, closes_next, trades),
+            "gross_offset_credit": risk.metrics.get("gross_offset_credit"),
         }
     results["current"] = {
         "gross": current.metrics.get("gross_notional"),
@@ -158,6 +173,44 @@ def _sampled(decisions, every):
             chosen.append(payload)
             last = at
     return chosen
+
+
+def _session_closes(connection, m, archives, day):
+    """(closes, recorded close gap, closing target) for a session: shares at their official close,
+    options at the collector's last book before 16:00; the statement (else end-of-day capture)
+    against the session's first recorded closing target."""
+    closed = datetime.combine(day, time(16), NY)
+    closes = {}
+    try:
+        line = _archive_lines(archive_path(archives, day), [closed - timedelta(seconds=1)]).get(
+            closed - timedelta(seconds=1)
+        )
+    except FileNotFoundError:
+        line = None
+    if line is not None:
+        closes = {i: q.mid for i, q in _quotes(m, line, closed - timedelta(seconds=1)).items()}
+    for _, record in _rows(connection, "official_closes", closed, closed + timedelta(hours=8)):
+        closes.update({int(i): float(v) for i, v in (record.get("closes") or {}).items()})
+    statements = [
+        p
+        for _, p in _rows(connection, "flex_statement", closed, closed + timedelta(days=4))
+        if p.get("date") == str(day)
+    ]
+    captures = [
+        p
+        for _, p in _rows(connection, "closing_capture", closed, closed + timedelta(hours=8))
+        if p.get("date") == str(day) and p.get("phase") == "end_of_day" and p.get("status") == "RECORDED"
+    ]
+    opened = datetime.combine(day, time(4), NY)
+    targets = [
+        p["closing_target"]
+        for _, p in _rows(connection, "decision", opened, closed)
+        if p.get("closing_target") is not None
+    ]
+    target = targets[0] if targets else None
+    nav = float(statements[-1]["total"]) if statements else float(captures[-1]["nav"]) if captures else None
+    gap = None if nav is None or target is None else nav - float(target)
+    return closes, gap, target, "statement" if statements else "end_of_day capture" if captures else None
 
 
 def _archive_lines(path, moments):
@@ -227,32 +280,14 @@ def main(argv=None):
             for _, p in _rows(connection, "broker_event", opened, closed)
             if p.get("event") == "execution"
         ]
-        official = [p for _, p in _rows(connection, "official_closes", closed, closed + timedelta(hours=8))]
-        statements = [
-            p
-            for _, p in _rows(connection, "flex_statement", closed, closed + timedelta(days=4))
-            if p.get("date") == str(day)
-        ]
-        captures = [
-            p
-            for _, p in _rows(connection, "closing_capture", closed, closed + timedelta(hours=8))
-            if p.get("date") == str(day) and p.get("phase") == "end_of_day" and p.get("status") == "RECORDED"
-        ]
+        closes, close_gap, _, close_source = _session_closes(connection, m, args.archives, day)
+        following = next((d for d in m.scoring_sessions if d > day), None)
+        closes_next, next_gap = None, None
+        if following is not None:
+            closes_next, next_gap, _, _ = _session_closes(connection, m, args.archives, following)
     chosen = _sampled(decisions, args.every)
     moments = [datetime.fromisoformat(p["at"]) for p in chosen]
-    path = archive_path(args.archives, day)
-    lines = _archive_lines(path, [*moments, closed - timedelta(seconds=1)])
-    final_line = lines.get(closed - timedelta(seconds=1))
-    closes = {}
-    if final_line is not None:
-        closes = {i: q.mid for i, q in _quotes(m, final_line, closed - timedelta(seconds=1)).items()}
-    for record in official:  # shares at their official close
-        closes.update({int(i): float(v) for i, v in (record.get("closes") or {}).items()})
-    target = chosen[0]["closing_target"] if chosen else None
-    close_nav = (
-        float(statements[-1]["total"]) if statements else float(captures[-1]["nav"]) if captures else None
-    )
-    close_gap = None if close_nav is None or target is None else close_nav - float(target)
+    lines = _archive_lines(archive_path(args.archives, day), moments)
     scenario_engine = ScenarioEngine(m)
     points = []
     for payload, moment in zip(chosen, moments, strict=True):
@@ -270,7 +305,7 @@ def main(argv=None):
             estimate = target_nav + float(payload["nav_gap"])
             strategy = PROFILES.get(payload.get("profile") or "STANDARD", "dynamic_l1")
             results = replay_point(
-                manifests, snapshot, quotes, scenarios, target_nav, estimate, strategy, closes
+                manifests, snapshot, quotes, scenarios, target_nav, estimate, strategy, closes, closes_next
             )
         except Exception as exc:  # one unreplayable decision never stops the rest
             points.append({"at": payload["at"], "skipped": f"{type(exc).__name__}: {exc}"})
@@ -282,6 +317,10 @@ def main(argv=None):
         for name in VARIANTS:
             value = results[name]["value_to_close"]
             results[name]["close_gap"] = None if close_gap is None or value is None else close_gap + value
+            later_value = results[name]["next_value"]
+            results[name]["next_close_gap"] = (
+                None if next_gap is None or later_value is None else next_gap + later_value
+            )
         points.append(
             {
                 "at": payload["at"],
@@ -327,7 +366,9 @@ def main(argv=None):
     report = {
         "day": str(day),
         "close_gap_recorded": close_gap,
-        "close_source": "statement" if statements else "end_of_day capture" if captures else None,
+        "close_source": close_source,
+        "next_session": str(following) if following else None,
+        "next_close_gap_recorded": next_gap,
         "summary": summary,
         "points": points,
     }
