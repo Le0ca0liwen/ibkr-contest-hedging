@@ -1,0 +1,2808 @@
+{
+ "day": "2026-10-28",
+ "close_gap_recorded": -179.7868134889286,
+ "close_source": "statement",
+ "summary": {
+  "A": {
+   "points": 8,
+   "mean_expected_score": 1213.262203626933,
+   "mean_abs_close_gap": null,
+   "max_solve_ms": 3029.749,
+   "risk_reducing_chosen": 0,
+   "eligible": 0,
+   "eligible_value": 0,
+   "eligible_cost": 0
+  },
+  "B": {
+   "points": 8,
+   "mean_expected_score": 992.9795643945436,
+   "mean_abs_close_gap": null,
+   "max_solve_ms": 3063.448,
+   "risk_reducing_chosen": 0,
+   "eligible": 6,
+   "eligible_value": 0,
+   "eligible_cost": 0
+  },
+  "C": {
+   "points": 8,
+   "mean_expected_score": 949.8677413454822,
+   "mean_abs_close_gap": null,
+   "max_solve_ms": 2631.05,
+   "risk_reducing_chosen": 0,
+   "eligible": 7,
+   "eligible_value": 0,
+   "eligible_cost": 0
+  },
+  "D": {
+   "points": 8,
+   "mean_expected_score": 992.4882274734184,
+   "mean_abs_close_gap": null,
+   "max_solve_ms": 4615.105,
+   "risk_reducing_chosen": 8,
+   "eligible": 6,
+   "eligible_value": 0,
+   "eligible_cost": 0
+  },
+  "C+D": {
+   "points": 8,
+   "mean_expected_score": 949.8677413454822,
+   "mean_abs_close_gap": null,
+   "max_solve_ms": 2638.227,
+   "risk_reducing_chosen": 0,
+   "eligible": 7,
+   "eligible_value": 0,
+   "eligible_cost": 0
+  },
+  "A-STK": {
+   "points": 8,
+   "mean_expected_score": 1270.4396751299062,
+   "mean_abs_close_gap": 221.1043134889285,
+   "max_solve_ms": 245.499,
+   "risk_reducing_chosen": 0,
+   "eligible": 0,
+   "eligible_value": 0,
+   "eligible_cost": 0
+  },
+  "C-STK": {
+   "points": 8,
+   "mean_expected_score": 1270.4396751299062,
+   "mean_abs_close_gap": 221.1043134889285,
+   "max_solve_ms": 442.257,
+   "risk_reducing_chosen": 0,
+   "eligible": 0,
+   "eligible_value": 0,
+   "eligible_cost": 0
+  },
+  "D-STK": {
+   "points": 8,
+   "mean_expected_score": 1270.4396751299062,
+   "mean_abs_close_gap": 221.1043134889285,
+   "max_solve_ms": 565.866,
+   "risk_reducing_chosen": 0,
+   "eligible": 0,
+   "eligible_value": 0,
+   "eligible_cost": 0
+  }
+ },
+ "points": [
+  {
+   "at": "2026-10-28T16:38:22.075963+00:00",
+   "recorded": {
+    "expected_score": 1088.5912739495784,
+    "current_score": 1195.668139405312,
+    "uncertainty": 76.90709464398095
+   },
+   "snapshot_age_s": 0.307312,
+   "quote_match": {
+    "contracts": 22,
+    "max_abs_mid_diff": 0.0,
+    "missing": 0
+   },
+   "app_executions_after": 0,
+   "nav_gap": -573.2362467680359,
+   "A": {
+    "status": "OPTIMAL",
+    "expected_score": 1089.695656440344,
+    "current_score": 1195.6598733614178,
+    "uncertainty": 82.4266142165628,
+    "trades": {
+     "IVV": -20,
+     "RKLB": -99,
+     "SPCX": -46,
+     "SPCX 2026-11-20 145P": 2,
+     "SPCX 2026-11-27 145C": 1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2951138.79,
+    "stress_loss": 8758.340330788662,
+    "beta_delta": 120008.12853459133,
+    "residual_delta": {
+     "residual_delta:RKLB": 9978.190540279902,
+     "residual_delta:S&P 500": 79442.53913284035,
+     "residual_delta:SPCX": 886.9964273003234
+    },
+    "market_exposure": 120008.12853459133,
+    "risk_reducing_solve": null,
+    "solve_ms": 1676.887,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 105.96421692107378,
+    "threshold": 135.5917803862458,
+    "eligible": false,
+    "close_gap": null
+   },
+   "B": {
+    "status": "OPTIMAL",
+    "expected_score": 774.4727317632136,
+    "current_score": 1195.6598733614178,
+    "uncertainty": 132.91017345940102,
+    "trades": {
+     "IVV": -25,
+     "RKLB": -199,
+     "SPCX 2026-11-20 145P": 9,
+     "SPCX 2026-11-27 145C": 6,
+     "SPY 2026-11-27 770C": -2,
+     "SPY 2026-11-27 770P": -2
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3438152.535,
+    "stress_loss": 5407.839470892837,
+    "beta_delta": 69637.11757663393,
+    "residual_delta": {
+     "residual_delta:RKLB": 4209.190540279902,
+     "residual_delta:S&P 500": 59287.72478378066,
+     "residual_delta:SPCX": -1595.5936278460867
+    },
+    "market_exposure": 69637.11757663393,
+    "risk_reducing_solve": null,
+    "solve_ms": 1897.626,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 421.1871415982042,
+    "threshold": 218.63723534071468,
+    "eligible": true,
+    "close_gap": null
+   },
+   "C": {
+    "status": "OPTIMAL",
+    "expected_score": 741.7336008759746,
+    "current_score": 1195.6598733614178,
+    "uncertainty": 135.8186477656269,
+    "trades": {
+     "RKLB": -126,
+     "SPCX 2026-11-20 145P": 10,
+     "SPY 2026-11-13 770C": -4,
+     "SPY 2026-11-13 770P": -3,
+     "SPCX 2026-11-27 145C": 7
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 1902216.0967696714,
+    "stress_loss": 4553.6540159633405,
+    "beta_delta": 59593.37106677593,
+    "residual_delta": {
+     "residual_delta:RKLB": 8420.560540279897,
+     "residual_delta:S&P 500": 30304.22264824216,
+     "residual_delta:SPCX": -692.5234414480947
+    },
+    "market_exposure": 59593.37106677593,
+    "risk_reducing_solve": null,
+    "solve_ms": 1073.417,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 453.9262724854432,
+    "threshold": 223.42167557445626,
+    "eligible": true,
+    "close_gap": null
+   },
+   "D": {
+    "status": "OPTIMAL",
+    "expected_score": 774.4727317632136,
+    "current_score": 1195.6598733614178,
+    "uncertainty": 132.91017345940102,
+    "trades": {
+     "IVV": -25,
+     "RKLB": -199,
+     "SPCX 2026-11-20 145P": 9,
+     "SPCX 2026-11-27 145C": 6,
+     "SPY 2026-11-27 770C": -2,
+     "SPY 2026-11-27 770P": -2
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3438152.535,
+    "stress_loss": 5407.839470892837,
+    "beta_delta": 69637.11757663393,
+    "residual_delta": {
+     "residual_delta:RKLB": 4209.190540279902,
+     "residual_delta:S&P 500": 59287.72478378066,
+     "residual_delta:SPCX": -1595.5936278460867
+    },
+    "market_exposure": 69637.11757663393,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 774.4727317632136,
+     "chosen": true,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 1147.435,
+       "solver_ms": 1003.261,
+       "nodes": 1,
+       "mip_gap": 0.006386961842075314,
+       "dual_bound": 769.5262039777155,
+       "incumbent": 774.4727317632149,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "user_limit",
+       "total_ms": 1005.694,
+       "solver_ms": 1001.92,
+       "nodes": 0,
+       "mip_gap": 0.37809513966598074,
+       "dual_bound": 21136.110202835815,
+       "incumbent": 33986.083002284,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 3819.021,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 421.1871415982042,
+    "threshold": 218.63723534071468,
+    "eligible": true,
+    "close_gap": null
+   },
+   "C+D": {
+    "status": "OPTIMAL",
+    "expected_score": 741.7336008759746,
+    "current_score": 1195.6598733614178,
+    "uncertainty": 135.8186477656269,
+    "trades": {
+     "RKLB": -126,
+     "SPCX 2026-11-20 145P": 10,
+     "SPY 2026-11-13 770C": -4,
+     "SPY 2026-11-13 770P": -3,
+     "SPCX 2026-11-27 145C": 7
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 1902216.0967696714,
+    "stress_loss": 4553.6540159633405,
+    "beta_delta": 59593.37106677593,
+    "residual_delta": {
+     "residual_delta:RKLB": 8420.560540279897,
+     "residual_delta:S&P 500": 30304.22264824216,
+     "residual_delta:SPCX": -692.5234414480947
+    },
+    "market_exposure": 59593.37106677593,
+    "risk_reducing_solve": null,
+    "solve_ms": 1079.403,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 453.9262724854432,
+    "threshold": 223.42167557445626,
+    "eligible": true,
+    "close_gap": null
+   },
+   "A-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1162.3045506318945,
+    "current_score": 1195.6598733614178,
+    "uncertainty": 25.143731511587056,
+    "trades": {
+     "RKLB": -41,
+     "SPCX": -29
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2928992.85,
+    "stress_loss": 12789.24988630729,
+    "beta_delta": 176882.74031402846,
+    "residual_delta": {
+     "residual_delta:RKLB": 13324.210540279899,
+     "residual_delta:S&P 500": 94934.63913284036,
+     "residual_delta:SPCX": 9275.696734470534
+    },
+    "market_exposure": 176882.74031402846,
+    "risk_reducing_solve": null,
+    "solve_ms": 211.018,
+    "value_to_close": -52.040000000000305,
+    "market": -49.20000000000005,
+    "cost": 2.8400000000002548,
+    "improvement": 33.35532272952332,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -231.8268134889289
+   },
+   "C-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1162.3045506318945,
+    "current_score": 1195.6598733614178,
+    "uncertainty": 25.143731511587056,
+    "trades": {
+     "RKLB": -41,
+     "SPCX": -29
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 1506117.1435821084,
+    "stress_loss": 12789.24988630729,
+    "beta_delta": 176882.74031402846,
+    "residual_delta": {
+     "residual_delta:RKLB": 13324.210540279899,
+     "residual_delta:S&P 500": 94934.63913284036,
+     "residual_delta:SPCX": 9275.696734470534
+    },
+    "market_exposure": 176882.74031402846,
+    "risk_reducing_solve": null,
+    "solve_ms": 224.199,
+    "value_to_close": -52.040000000000305,
+    "market": -49.20000000000005,
+    "cost": 2.8400000000002548,
+    "improvement": 33.35532272952332,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -231.8268134889289
+   },
+   "D-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1162.3045506318945,
+    "current_score": 1195.6598733614178,
+    "uncertainty": 25.143731511587056,
+    "trades": {
+     "RKLB": -41,
+     "SPCX": -29
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2928992.85,
+    "stress_loss": 12789.24988630729,
+    "beta_delta": 176882.74031402846,
+    "residual_delta": {
+     "residual_delta:RKLB": 13324.210540279899,
+     "residual_delta:S&P 500": 94934.63913284036,
+     "residual_delta:SPCX": 9275.696734470534
+    },
+    "market_exposure": 176882.74031402846,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 1162.5339790605597,
+     "chosen": false,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 105.893,
+       "solver_ms": 65.366,
+       "nodes": 1,
+       "mip_gap": 0.0003909596467138539,
+       "dual_bound": 1142.560193566193,
+       "incumbent": 1143.0070632038146,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "optimal",
+       "total_ms": 62.676,
+       "solver_ms": 61.299,
+       "nodes": 0,
+       "mip_gap": 0.0,
+       "dual_bound": 6477.943002925997,
+       "incumbent": 6477.943002926,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 387.433,
+    "value_to_close": -52.040000000000305,
+    "market": -49.20000000000005,
+    "cost": 2.8400000000002548,
+    "improvement": 33.35532272952332,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -231.8268134889289
+   },
+   "current": {
+    "gross": 2935557.92,
+    "stress_loss": 13629.205886307296,
+    "beta_delta": 200194.2925979821,
+    "market_exposure": 200194.2925979821,
+    "residual_delta": {
+     "residual_delta:RKLB": 15689.500540279907,
+     "residual_delta:S&P 500": 94934.63913284036,
+     "residual_delta:SPCX": 13475.476734470561
+    }
+   }
+  },
+  {
+   "at": "2026-10-28T16:54:08.345332+00:00",
+   "recorded": {
+    "expected_score": 1051.6357585963347,
+    "current_score": 1084.715187759964,
+    "uncertainty": 21.033542843671803
+   },
+   "snapshot_age_s": 0.265709,
+   "quote_match": {
+    "contracts": 22,
+    "max_abs_mid_diff": 0.0,
+    "missing": 0
+   },
+   "app_executions_after": 0,
+   "nav_gap": -427.76540688611567,
+   "A": {
+    "status": "OPTIMAL",
+    "expected_score": 988.5285180844642,
+    "current_score": 1084.7080147420743,
+    "uncertainty": 78.1576803527704,
+    "trades": {
+     "IVV": -20,
+     "RKLB": -134,
+     "SPCX": -37,
+     "SPCX 2026-11-20 145P": 2,
+     "SPCX 2026-11-27 145C": 1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2951167.02,
+    "stress_loss": 9287.728857782771,
+    "beta_delta": 116097.96474525101,
+    "residual_delta": {
+     "residual_delta:RKLB": 7642.250843869115,
+     "residual_delta:S&P 500": 83619.6851767418,
+     "residual_delta:SPCX": 1089.8674358135859
+    },
+    "market_exposure": 116097.96474525101,
+    "risk_reducing_solve": null,
+    "solve_ms": 3029.749,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 96.17949665761012,
+    "threshold": 128.5693841803073,
+    "eligible": false,
+    "close_gap": null
+   },
+   "B": {
+    "status": "OPTIMAL",
+    "expected_score": 673.8012897374485,
+    "current_score": 1084.7080147420743,
+    "uncertainty": 119.53660756616489,
+    "trades": {
+     "IVV": -26,
+     "RKLB": -200,
+     "SPCX": 24,
+     "SPCX 2026-11-20 145P": 9,
+     "SPCX 2026-11-27 145C": 6,
+     "SPY 2026-11-27 770C": -2,
+     "SPY 2026-11-27 770P": -2
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3442969.115,
+    "stress_loss": 5462.643105194087,
+    "beta_delta": 76642.40849070105,
+    "residual_delta": {
+     "residual_delta:RKLB": 3839.9908438691127,
+     "residual_delta:S&P 500": 61758.19306185854,
+     "residual_delta:SPCX": 129.84371914303483
+    },
+    "market_exposure": 76642.40849070105,
+    "risk_reducing_solve": null,
+    "solve_ms": 1770.702,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 410.90672500462574,
+    "threshold": 196.63771944634124,
+    "eligible": true,
+    "close_gap": null
+   },
+   "C": {
+    "status": "OPTIMAL",
+    "expected_score": 621.5316758587226,
+    "current_score": 1084.7080147420743,
+    "uncertainty": 132.54185390334573,
+    "trades": {
+     "RKLB": -218,
+     "SPCX": 711,
+     "SPCX 2026-11-20 145P": 17,
+     "SPY 2026-11-13 770P": -3,
+     "SPY 2026-11-27 770C": -5
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2038894.8662947244,
+    "stress_loss": 3528.1497282046703,
+    "beta_delta": -7046.515393517271,
+    "residual_delta": {
+     "residual_delta:RKLB": 2803.0108438691095,
+     "residual_delta:S&P 500": -12319.24607663137,
+     "residual_delta:SPCX": -1535.2376996372623
+    },
+    "market_exposure": 7046.515393517271,
+    "risk_reducing_solve": null,
+    "solve_ms": 1687.773,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 463.1763388833517,
+    "threshold": 218.0313496710037,
+    "eligible": true,
+    "close_gap": null
+   },
+   "D": {
+    "status": "OPTIMAL",
+    "expected_score": 673.8012897374485,
+    "current_score": 1084.7080147420743,
+    "uncertainty": 119.53660756616489,
+    "trades": {
+     "IVV": -26,
+     "RKLB": -200,
+     "SPCX": 24,
+     "SPCX 2026-11-20 145P": 9,
+     "SPCX 2026-11-27 145C": 6,
+     "SPY 2026-11-27 770C": -2,
+     "SPY 2026-11-27 770P": -2
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3442969.115,
+    "stress_loss": 5462.643105194087,
+    "beta_delta": 76642.40849070105,
+    "residual_delta": {
+     "residual_delta:RKLB": 3839.9908438691127,
+     "residual_delta:S&P 500": 61758.19306185854,
+     "residual_delta:SPCX": 129.84371914303483
+    },
+    "market_exposure": 76642.40849070105,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 673.8012897374485,
+     "chosen": true,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 588.421,
+       "solver_ms": 443.741,
+       "nodes": 1,
+       "mip_gap": 0.007261389481504834,
+       "dual_bound": 668.9085561395237,
+       "incumbent": 673.8012897374476,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "user_limit",
+       "total_ms": 1004.856,
+       "solver_ms": 1001.191,
+       "nodes": 0,
+       "mip_gap": 0.26444360775978654,
+       "dual_bound": 20165.563890879333,
+       "incumbent": 27415.388002357005,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 4615.105,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 410.90672500462574,
+    "threshold": 196.63771944634124,
+    "eligible": true,
+    "close_gap": null
+   },
+   "C+D": {
+    "status": "OPTIMAL",
+    "expected_score": 621.5316758587226,
+    "current_score": 1084.7080147420743,
+    "uncertainty": 132.54185390334573,
+    "trades": {
+     "RKLB": -218,
+     "SPCX": 711,
+     "SPCX 2026-11-20 145P": 17,
+     "SPY 2026-11-13 770P": -3,
+     "SPY 2026-11-27 770C": -5
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2038894.8662947244,
+    "stress_loss": 3528.1497282046703,
+    "beta_delta": -7046.515393517271,
+    "residual_delta": {
+     "residual_delta:RKLB": 2803.0108438691095,
+     "residual_delta:S&P 500": -12319.24607663137,
+     "residual_delta:SPCX": -1535.2376996372623
+    },
+    "market_exposure": 7046.515393517271,
+    "risk_reducing_solve": null,
+    "solve_ms": 1670.567,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 463.1763388833517,
+    "threshold": 218.0313496710037,
+    "eligible": true,
+    "close_gap": null
+   },
+   "A-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1052.9742833705225,
+    "current_score": 1084.7080147420743,
+    "uncertainty": 21.401583352560234,
+    "trades": {
+     "IVV": -1,
+     "RKLB": -12,
+     "SPCX": -28
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2930825.6100000003,
+    "stress_loss": 13116.461669858625,
+    "beta_delta": 182601.44972996716,
+    "residual_delta": {
+     "residual_delta:RKLB": 14670.67084386912,
+     "residual_delta:S&P 500": 98341.5501767418,
+     "residual_delta:SPCX": 8474.306138127635
+    },
+    "market_exposure": 182601.44972996716,
+    "risk_reducing_solve": null,
+    "solve_ms": 182.806,
+    "value_to_close": -34.429000000000514,
+    "market": -29.075000000000188,
+    "cost": 5.354000000000326,
+    "improvement": 31.733731371551812,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -214.21581348892911
+   },
+   "C-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1052.9742833705225,
+    "current_score": 1084.7080147420743,
+    "uncertainty": 21.401583352560234,
+    "trades": {
+     "IVV": -1,
+     "RKLB": -12,
+     "SPCX": -28
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 1506887.417901455,
+    "stress_loss": 13116.461669858625,
+    "beta_delta": 182601.44972996716,
+    "residual_delta": {
+     "residual_delta:RKLB": 14670.67084386912,
+     "residual_delta:S&P 500": 98341.5501767418,
+     "residual_delta:SPCX": 8474.306138127635
+    },
+    "market_exposure": 182601.44972996716,
+    "risk_reducing_solve": null,
+    "solve_ms": 177.603,
+    "value_to_close": -34.429000000000514,
+    "market": -29.075000000000188,
+    "cost": 5.354000000000326,
+    "improvement": 31.733731371551812,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -214.21581348892911
+   },
+   "D-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1052.9742833705225,
+    "current_score": 1084.7080147420743,
+    "uncertainty": 21.401583352560234,
+    "trades": {
+     "IVV": -1,
+     "RKLB": -12,
+     "SPCX": -28
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2930825.6100000003,
+    "stress_loss": 13116.461669858625,
+    "beta_delta": 182601.44972996716,
+    "residual_delta": {
+     "residual_delta:RKLB": 14670.67084386912,
+     "residual_delta:S&P 500": 98341.5501767418,
+     "residual_delta:SPCX": 8474.306138127635
+    },
+    "market_exposure": 182601.44972996716,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 1052.9742833705225,
+     "chosen": false,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 55.623,
+       "solver_ms": 15.28,
+       "nodes": 1,
+       "mip_gap": 0.0004491222571785906,
+       "dual_bound": 1033.038659882317,
+       "incumbent": 1033.5028290056805,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "optimal",
+       "total_ms": 105.193,
+       "solver_ms": 103.78,
+       "nodes": 1,
+       "mip_gap": 0.0,
+       "dual_bound": 5516.218003014999,
+       "incumbent": 5516.218003014999,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 350.908,
+    "value_to_close": -34.429000000000514,
+    "market": -29.075000000000188,
+    "cost": 5.354000000000326,
+    "improvement": 31.733731371551812,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -214.21581348892911
+   },
+   "current": {
+    "gross": 2936341.825,
+    "stress_loss": 13926.473669858628,
+    "beta_delta": 199879.4458644318,
+    "market_exposure": 199879.4458644318,
+    "residual_delta": {
+     "residual_delta:RKLB": 15361.990843869113,
+     "residual_delta:S&P 500": 99116.3851767418,
+     "residual_delta:SPCX": 12524.366138127632
+    }
+   }
+  },
+  {
+   "at": "2026-10-28T17:09:09.792208+00:00",
+   "recorded": {
+    "expected_score": 938.7294820963288,
+    "current_score": 1049.9674661536724,
+    "uncertainty": 75.66952758407021
+   },
+   "snapshot_age_s": 0.252924,
+   "quote_match": {
+    "contracts": 22,
+    "max_abs_mid_diff": 0.029999999999972715,
+    "missing": 0
+   },
+   "app_executions_after": 0,
+   "nav_gap": -404.1659778910689,
+   "A": {
+    "status": "OPTIMAL",
+    "expected_score": 948.8929478786104,
+    "current_score": 1052.2990779975116,
+    "uncertainty": 80.46119641554102,
+    "trades": {
+     "IVV": -10,
+     "RKLB": -124,
+     "SPCX 2026-11-20 145P": 2
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2950870.67,
+    "stress_loss": 9423.154575161934,
+    "beta_delta": 125305.26182412007,
+    "residual_delta": {
+     "residual_delta:RKLB": 8572.564285352382,
+     "residual_delta:S&P 500": 93723.23748176396,
+     "residual_delta:SPCX": -190.67439109637598
+    },
+    "market_exposure": 125305.26182412007,
+    "risk_reducing_solve": null,
+    "solve_ms": 2067.487,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 103.40613011890127,
+    "threshold": 132.35866810356498,
+    "eligible": false,
+    "close_gap": null
+   },
+   "B": {
+    "status": "OPTIMAL",
+    "expected_score": 665.2756916696515,
+    "current_score": 1052.2990779975116,
+    "uncertainty": 101.8528175583201,
+    "trades": {
+     "VOO": 9,
+     "RKLB": -198,
+     "SPCX 2026-11-20 145P": 8,
+     "SPCX 2026-11-27 145C": 6,
+     "SPY 2026-11-27 770C": -3,
+     "SPY 2026-11-27 770P": -1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3442725.24,
+    "stress_loss": 5084.502823277773,
+    "beta_delta": 42698.629987151624,
+    "residual_delta": {
+     "residual_delta:RKLB": 4300.914285352381,
+     "residual_delta:S&P 500": 12635.742469249812,
+     "residual_delta:SPCX": 4046.961805346262
+    },
+    "market_exposure": 42698.629987151624,
+    "risk_reducing_solve": null,
+    "solve_ms": 3063.448,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 387.0233863278602,
+    "threshold": 167.54788488343655,
+    "eligible": true,
+    "close_gap": null
+   },
+   "C": {
+    "status": "OPTIMAL",
+    "expected_score": 596.5458415718241,
+    "current_score": 1052.2990779975116,
+    "uncertainty": 127.12783680176877,
+    "trades": {
+     "IVV": 12,
+     "RKLB": -239,
+     "SPCX": 667,
+     "SPCX 2026-11-20 145P": 16,
+     "SPY 2026-11-13 770C": -6,
+     "SPY 2026-11-13 770P": -4
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2110127.3341693017,
+    "stress_loss": 5267.101318219237,
+    "beta_delta": -3278.5851307779085,
+    "residual_delta": {
+     "residual_delta:RKLB": 1934.1892853523823,
+     "residual_delta:S&P 500": -8351.98303140633,
+     "residual_delta:SPCX": -642.1555612365046
+    },
+    "market_exposure": 3278.5851307779085,
+    "risk_reducing_solve": null,
+    "solve_ms": 2005.842,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 455.75323642568753,
+    "threshold": 209.1252915389096,
+    "eligible": true,
+    "close_gap": null
+   },
+   "D": {
+    "status": "OPTIMAL",
+    "expected_score": 661.6072867607875,
+    "current_score": 1052.2990779975116,
+    "uncertainty": 117.40456868790405,
+    "trades": {
+     "IVV": -24,
+     "RKLB": -217,
+     "SPCX": 23,
+     "SPCX 2026-11-20 145P": 9,
+     "SPCX 2026-11-27 145C": 6,
+     "SPY 2026-11-27 770C": -2,
+     "SPY 2026-11-27 770P": -2
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3440618.755,
+    "stress_loss": 5334.459961429122,
+    "beta_delta": 78810.05659379953,
+    "residual_delta": {
+     "residual_delta:RKLB": 3204.1392853523867,
+     "residual_delta:S&P 500": 65203.483907459275,
+     "residual_delta:SPCX": 454.06672176484426
+    },
+    "market_exposure": 78810.05659379953,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 661.6072867607875,
+     "chosen": true,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 1046.701,
+       "solver_ms": 944.054,
+       "nodes": 3,
+       "mip_gap": 0.007282206532670931,
+       "dual_bound": 656.7893258550737,
+       "incumbent": 661.6072867607858,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "user_limit",
+       "total_ms": 1009.244,
+       "solver_ms": 1005.769,
+       "nodes": 1,
+       "mip_gap": 0.14698198828221046,
+       "dual_bound": 18705.027585100936,
+       "incumbent": 21928.057002493002,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 4132.751,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 390.69179123672416,
+    "threshold": 193.13051549160215,
+    "eligible": true,
+    "close_gap": null
+   },
+   "C+D": {
+    "status": "OPTIMAL",
+    "expected_score": 596.5458415718241,
+    "current_score": 1052.2990779975116,
+    "uncertainty": 127.12783680176877,
+    "trades": {
+     "IVV": 12,
+     "RKLB": -239,
+     "SPCX": 667,
+     "SPCX 2026-11-20 145P": 16,
+     "SPY 2026-11-13 770C": -6,
+     "SPY 2026-11-13 770P": -4
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2110127.3341693017,
+    "stress_loss": 5267.101318219237,
+    "beta_delta": -3278.5851307779085,
+    "residual_delta": {
+     "residual_delta:RKLB": 1934.1892853523823,
+     "residual_delta:S&P 500": -8351.98303140633,
+     "residual_delta:SPCX": -642.1555612365046
+    },
+    "market_exposure": 3278.5851307779085,
+    "risk_reducing_solve": null,
+    "solve_ms": 2035.022,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 455.75323642568753,
+    "threshold": 209.1252915389096,
+    "eligible": true,
+    "close_gap": null
+   },
+   "A-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1009.6011011501696,
+    "current_score": 1052.2990779975116,
+    "uncertainty": 23.383134362855692,
+    "trades": {
+     "VOO": -5,
+     "RKLB": -24,
+     "SPCX": -30
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2934705.97,
+    "stress_loss": 12937.8190254062,
+    "beta_delta": 183824.08740420928,
+    "residual_delta": {
+     "residual_delta:RKLB": 14345.06428535239,
+     "residual_delta:S&P 500": 97926.93748176396,
+     "residual_delta:SPCX": 9306.95577606649
+    },
+    "market_exposure": 183824.08740420928,
+    "risk_reducing_solve": null,
+    "solve_ms": 245.499,
+    "value_to_close": -55.651999999999475,
+    "market": -46.79999999999899,
+    "cost": 8.852000000000487,
+    "improvement": 42.697976847342034,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -235.43881348892808
+   },
+   "C-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1009.6011011501696,
+    "current_score": 1052.2990779975116,
+    "uncertainty": 23.383134362855692,
+    "trades": {
+     "VOO": -5,
+     "RKLB": -24,
+     "SPCX": -30
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 1510346.8182132975,
+    "stress_loss": 12937.8190254062,
+    "beta_delta": 183824.08740420928,
+    "residual_delta": {
+     "residual_delta:RKLB": 14345.06428535239,
+     "residual_delta:S&P 500": 97926.93748176396,
+     "residual_delta:SPCX": 9306.95577606649
+    },
+    "market_exposure": 183824.08740420928,
+    "risk_reducing_solve": null,
+    "solve_ms": 442.257,
+    "value_to_close": -55.651999999999475,
+    "market": -46.79999999999899,
+    "cost": 8.852000000000487,
+    "improvement": 42.697976847342034,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -235.43881348892808
+   },
+   "D-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1009.6011011501696,
+    "current_score": 1052.2990779975116,
+    "uncertainty": 23.383134362855692,
+    "trades": {
+     "VOO": -5,
+     "RKLB": -24,
+     "SPCX": -30
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2934705.97,
+    "stress_loss": 12937.8190254062,
+    "beta_delta": 183824.08740420928,
+    "residual_delta": {
+     "residual_delta:RKLB": 14345.06428535239,
+     "residual_delta:S&P 500": 97926.93748176396,
+     "residual_delta:SPCX": 9306.95577606649
+    },
+    "market_exposure": 183824.08740420928,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 1009.6011011501696,
+     "chosen": false,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 82.235,
+       "solver_ms": 14.908,
+       "nodes": 1,
+       "mip_gap": 0.0020719009391503224,
+       "dual_bound": 989.7883395345616,
+       "incumbent": 991.843340683614,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "optimal",
+       "total_ms": 238.448,
+       "solver_ms": 236.977,
+       "nodes": 1,
+       "mip_gap": 0.0,
+       "dual_bound": 9266.004002962,
+       "incumbent": 9266.004002962003,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 565.866,
+    "value_to_close": -55.651999999999475,
+    "market": -46.79999999999899,
+    "cost": 8.852000000000487,
+    "improvement": 42.697976847342034,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -235.43881348892808
+   },
+   "current": {
+    "gross": 2936880.17,
+    "stress_loss": 13804.759025406202,
+    "beta_delta": 207457.00342762348,
+    "market_exposure": 207457.00342762348,
+    "residual_delta": {
+     "residual_delta:RKLB": 15730.464285352384,
+     "residual_delta:S&P 500": 101472.83748176396,
+     "residual_delta:SPCX": 13641.655776066502
+    }
+   }
+  },
+  {
+   "at": "2026-10-28T17:24:42.467287+00:00",
+   "recorded": {
+    "expected_score": 1199.7605242600264,
+    "current_score": 1229.2987850522936,
+    "uncertainty": 23.553501970756496
+   },
+   "snapshot_age_s": 0.258986,
+   "quote_match": {
+    "contracts": 22,
+    "max_abs_mid_diff": 0.025000000000000355,
+    "missing": 0
+   },
+   "app_executions_after": 0,
+   "nav_gap": -712.5430787879741,
+   "A": {
+    "status": "OPTIMAL",
+    "expected_score": 1133.8074936241912,
+    "current_score": 1225.4662152035664,
+    "uncertainty": 71.97134762370686,
+    "trades": {
+     "IVV": -18,
+     "RKLB": -90,
+     "SPCX": 409,
+     "SPCX 2026-11-20 145P": 9,
+     "SPY 2026-11-27 770C": 1,
+     "SPY 2026-11-27 770P": 1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2950726.73,
+    "stress_loss": 11034.832343693939,
+    "beta_delta": 165671.05163287112,
+    "residual_delta": {
+     "residual_delta:RKLB": 10716.427151769502,
+     "residual_delta:S&P 500": 87176.40366826134,
+     "residual_delta:SPCX": 11126.955656088248
+    },
+    "market_exposure": 165671.05163287112,
+    "risk_reducing_solve": null,
+    "solve_ms": 2878.163,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 91.6587215793752,
+    "threshold": 118.39286684099778,
+    "eligible": false,
+    "close_gap": null
+   },
+   "B": {
+    "status": "OPTIMAL",
+    "expected_score": 875.8002853773794,
+    "current_score": 1225.4662152035664,
+    "uncertainty": 120.46883836636994,
+    "trades": {
+     "IVV": -12,
+     "RKLB": -173,
+     "SPCX": 781,
+     "SPCX 2026-11-20 145P": 18,
+     "SPY 2026-11-27 770C": -1,
+     "SPY 2026-11-27 770P": -1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3442505.63,
+    "stress_loss": 8108.57095043843,
+    "beta_delta": 105079.51868886914,
+    "residual_delta": {
+     "residual_delta:RKLB": 5921.517151769498,
+     "residual_delta:S&P 500": 75914.76017630333,
+     "residual_delta:SPCX": 2009.115689551516
+    },
+    "market_exposure": 105079.51868886914,
+    "risk_reducing_solve": null,
+    "solve_ms": 1555.417,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 349.66592982618704,
+    "threshold": 198.17123911267853,
+    "eligible": true,
+    "close_gap": null
+   },
+   "C": {
+    "status": "OPTIMAL",
+    "expected_score": 825.1953289836447,
+    "current_score": 1225.4662152035664,
+    "uncertainty": 135.3562481804969,
+    "trades": {
+     "IVV": -16,
+     "RKLB": -231,
+     "SPCX": 816,
+     "SPCX 2026-11-20 145P": 19,
+     "SPY 2026-11-13 770C": -5,
+     "SPY 2026-11-13 770P": -4
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2088554.0754616652,
+    "stress_loss": 3276.010746658292,
+    "beta_delta": 19822.37271644076,
+    "residual_delta": {
+     "residual_delta:RKLB": 2570.857151769502,
+     "residual_delta:S&P 500": 9871.88783319085,
+     "residual_delta:SPCX": 82.37569326968514
+    },
+    "market_exposure": 19822.37271644076,
+    "risk_reducing_solve": null,
+    "solve_ms": 2631.05,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 400.27088621992175,
+    "threshold": 222.66102825691738,
+    "eligible": true,
+    "close_gap": null
+   },
+   "D": {
+    "status": "OPTIMAL",
+    "expected_score": 875.8002853773794,
+    "current_score": 1225.4662152035664,
+    "uncertainty": 120.46883836636994,
+    "trades": {
+     "IVV": -12,
+     "RKLB": -173,
+     "SPCX": 781,
+     "SPCX 2026-11-20 145P": 18,
+     "SPY 2026-11-27 770C": -1,
+     "SPY 2026-11-27 770P": -1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3442505.63,
+    "stress_loss": 8108.57095043843,
+    "beta_delta": 105079.51868886914,
+    "residual_delta": {
+     "residual_delta:RKLB": 5921.517151769498,
+     "residual_delta:S&P 500": 75914.76017630333,
+     "residual_delta:SPCX": 2009.115689551516
+    },
+    "market_exposure": 105079.51868886914,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 875.8002853773794,
+     "chosen": true,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 492.315,
+       "solver_ms": 356.021,
+       "nodes": 1,
+       "mip_gap": 0.005028704429965647,
+       "dual_bound": 871.3961446025367,
+       "incumbent": 875.800285377379,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "user_limit",
+       "total_ms": 1005.074,
+       "solver_ms": 1001.566,
+       "nodes": 0,
+       "mip_gap": 0.11387612985981914,
+       "dual_bound": 94866.84955754006,
+       "incumbent": 107058.22600460198,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 4389.506,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 349.66592982618704,
+    "threshold": 198.17123911267853,
+    "eligible": true,
+    "close_gap": null
+   },
+   "C+D": {
+    "status": "OPTIMAL",
+    "expected_score": 825.1953289836447,
+    "current_score": 1225.4662152035664,
+    "uncertainty": 135.3562481804969,
+    "trades": {
+     "IVV": -16,
+     "RKLB": -231,
+     "SPCX": 816,
+     "SPCX 2026-11-20 145P": 19,
+     "SPY 2026-11-13 770C": -5,
+     "SPY 2026-11-13 770P": -4
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2088554.0754616652,
+    "stress_loss": 3276.010746658292,
+    "beta_delta": 19822.37271644076,
+    "residual_delta": {
+     "residual_delta:RKLB": 2570.857151769502,
+     "residual_delta:S&P 500": 9871.88783319085,
+     "residual_delta:SPCX": 82.37569326968514
+    },
+    "market_exposure": 19822.37271644076,
+    "risk_reducing_solve": null,
+    "solve_ms": 2638.227,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 400.27088621992175,
+    "threshold": 222.66102825691738,
+    "eligible": true,
+    "close_gap": null
+   },
+   "A-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1196.1683011545215,
+    "current_score": 1225.4662152035664,
+    "uncertainty": 23.447465740883988,
+    "trades": {
+     "RKLB": -24,
+     "SPCX": -33
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2929097.8999999994,
+    "stress_loss": 12805.558625277867,
+    "beta_delta": 182632.37391348218,
+    "residual_delta": {
+     "residual_delta:RKLB": 14529.247151769501,
+     "residual_delta:S&P 500": 93163.3069222824,
+     "residual_delta:SPCX": 10146.595622625027
+    },
+    "market_exposure": 182632.37391348218,
+    "risk_reducing_solve": null,
+    "solve_ms": 210.626,
+    "value_to_close": -54.61400000000034,
+    "market": -51.93000000000009,
+    "cost": 2.684000000000248,
+    "improvement": 29.297914049044948,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -234.40081348892895
+   },
+   "C-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1196.1683011545215,
+    "current_score": 1225.4662152035664,
+    "uncertainty": 23.447465740883988,
+    "trades": {
+     "RKLB": -24,
+     "SPCX": -33
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 1506354.526555907,
+    "stress_loss": 12805.558625277867,
+    "beta_delta": 182632.37391348218,
+    "residual_delta": {
+     "residual_delta:RKLB": 14529.247151769501,
+     "residual_delta:S&P 500": 93163.3069222824,
+     "residual_delta:SPCX": 10146.595622625027
+    },
+    "market_exposure": 182632.37391348218,
+    "risk_reducing_solve": null,
+    "solve_ms": 279.671,
+    "value_to_close": -54.61400000000034,
+    "market": -51.93000000000009,
+    "cost": 2.684000000000248,
+    "improvement": 29.297914049044948,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -234.40081348892895
+   },
+   "D-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1196.1683011545215,
+    "current_score": 1225.4662152035664,
+    "uncertainty": 23.447465740883988,
+    "trades": {
+     "RKLB": -24,
+     "SPCX": -33
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2929097.8999999994,
+    "stress_loss": 12805.558625277867,
+    "beta_delta": 182632.37391348218,
+    "residual_delta": {
+     "residual_delta:RKLB": 14529.247151769501,
+     "residual_delta:S&P 500": 93163.3069222824,
+     "residual_delta:SPCX": 10146.595622625027
+    },
+    "market_exposure": 182632.37391348218,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 1196.1683011545215,
+     "chosen": false,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 92.023,
+       "solver_ms": 50.82,
+       "nodes": 1,
+       "mip_gap": 0.00046399596905916427,
+       "dual_bound": 1176.1824601728263,
+       "incumbent": 1176.7284574337527,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "optimal",
+       "total_ms": 88.6,
+       "solver_ms": 87.021,
+       "nodes": 1,
+       "mip_gap": 0.0,
+       "dual_bound": 6147.063002959967,
+       "incumbent": 6147.06300295997,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 397.069,
+    "value_to_close": -54.61400000000034,
+    "market": -51.93000000000009,
+    "cost": 2.684000000000248,
+    "improvement": 29.297914049044948,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -234.40081348892895
+   },
+   "current": {
+    "gross": 2935244.96,
+    "stress_loss": 13757.674625277868,
+    "beta_delta": 204188.516115839,
+    "market_exposure": 204188.516115839,
+    "residual_delta": {
+     "residual_delta:RKLB": 15915.727151769497,
+     "residual_delta:S&P 500": 93163.3069222824,
+     "residual_delta:SPCX": 14907.175622625044
+    }
+   }
+  },
+  {
+   "at": "2026-10-28T17:40:05.905621+00:00",
+   "recorded": {
+    "expected_score": 1223.1069856469812,
+    "current_score": 1308.1527350146223,
+    "uncertainty": 73.24879031191175
+   },
+   "snapshot_age_s": 0.255885,
+   "quote_match": {
+    "contracts": 22,
+    "max_abs_mid_diff": 0.019999999999999574,
+    "missing": 0
+   },
+   "app_executions_after": 0,
+   "nav_gap": -840.3337829143275,
+   "A": {
+    "status": "OPTIMAL",
+    "expected_score": 1222.4064351679885,
+    "current_score": 1307.8927965997823,
+    "uncertainty": 73.29281088307638,
+    "trades": {
+     "IVV": -16,
+     "RKLB": -88,
+     "SPCX": 399,
+     "SPCX 2026-11-20 145P": 9,
+     "SPY 2026-11-27 770C": 1,
+     "SPY 2026-11-27 770P": 1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2950574.46,
+    "stress_loss": 10933.760432642735,
+    "beta_delta": 164581.74119360597,
+    "residual_delta": {
+     "residual_delta:RKLB": 10560.264230392226,
+     "residual_delta:S&P 500": 88631.58387143626,
+     "residual_delta:SPCX": 10556.716365499458
+    },
+    "market_exposure": 164581.74119360597,
+    "risk_reducing_solve": null,
+    "solve_ms": 2123.176,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 85.48636143179374,
+    "threshold": 120.56667390266065,
+    "eligible": false,
+    "close_gap": null
+   },
+   "B": {
+    "status": "OPTIMAL",
+    "expected_score": 1011.2629321058989,
+    "current_score": 1307.8927965997823,
+    "uncertainty": 118.9218889964979,
+    "trades": {
+     "IVV": -21,
+     "RKLB": -149,
+     "SPCX": 774,
+     "SPCX 2026-11-20 145P": 18,
+     "SPY 2026-11-27 770C": -1,
+     "SPY 2026-11-27 770P": -1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3436835.585,
+    "stress_loss": 7975.590555882216,
+    "beta_delta": 99985.34778795246,
+    "residual_delta": {
+     "residual_delta:RKLB": 7039.954230392228,
+     "residual_delta:S&P 500": 68910.6695761089,
+     "residual_delta:SPCX": 1340.7750840725785
+    },
+    "market_exposure": 99985.34778795246,
+    "risk_reducing_solve": null,
+    "solve_ms": 1430.238,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 296.62986449388336,
+    "threshold": 195.62650739923905,
+    "eligible": true,
+    "close_gap": null
+   },
+   "C": {
+    "status": "OPTIMAL",
+    "expected_score": 979.1086300605582,
+    "current_score": 1307.8927965997823,
+    "uncertainty": 130.37957267013942,
+    "trades": {
+     "RKLB": -200,
+     "SPCX": 868,
+     "SPCX 2026-11-20 145P": 20,
+     "SPY 2026-11-13 770C": -3,
+     "SPY 2026-11-13 770P": -3,
+     "SPY 2026-11-27 770C": -1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2041386.679385939,
+    "stress_loss": 4715.788057215925,
+    "beta_delta": 47218.43588726291,
+    "residual_delta": {
+     "residual_delta:RKLB": 4096.744230392229,
+     "residual_delta:S&P 500": 28963.075876118564,
+     "residual_delta:SPCX": 829.4814659777039
+    },
+    "market_exposure": 47218.43588726291,
+    "risk_reducing_solve": null,
+    "solve_ms": 1432.734,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 328.7841665392241,
+    "threshold": 214.47439704237937,
+    "eligible": true,
+    "close_gap": null
+   },
+   "D": {
+    "status": "OPTIMAL",
+    "expected_score": 1011.2801191731704,
+    "current_score": 1307.8927965997823,
+    "uncertainty": 118.96425844944541,
+    "trades": {
+     "IVV": -20,
+     "RKLB": -149,
+     "SPCX": 774,
+     "SPCX 2026-11-20 145P": 18,
+     "SPY 2026-11-27 770C": -1,
+     "SPY 2026-11-27 770P": -1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3436061.105,
+    "stress_loss": 7975.590555882216,
+    "beta_delta": 100759.97759245889,
+    "residual_delta": {
+     "residual_delta:RKLB": 7039.954230392228,
+     "residual_delta:S&P 500": 69685.1495761089,
+     "residual_delta:SPCX": 1340.7750840725785
+    },
+    "market_exposure": 100759.97759245889,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 1011.2801191731704,
+     "chosen": true,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 380.483,
+       "solver_ms": 269.83,
+       "nodes": 1,
+       "mip_gap": 0.0027266563836294165,
+       "dual_bound": 1008.5227057805896,
+       "incumbent": 1011.2801191731706,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "user_limit",
+       "total_ms": 1005.296,
+       "solver_ms": 1001.89,
+       "nodes": 0,
+       "mip_gap": 0.3155316455884086,
+       "dual_bound": 72534.01296497518,
+       "incumbent": 105971.317004611,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 3513.205,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 296.61267742661187,
+    "threshold": 195.69620514933771,
+    "eligible": true,
+    "close_gap": null
+   },
+   "C+D": {
+    "status": "OPTIMAL",
+    "expected_score": 979.1086300605582,
+    "current_score": 1307.8927965997823,
+    "uncertainty": 130.37957267013942,
+    "trades": {
+     "RKLB": -200,
+     "SPCX": 868,
+     "SPCX 2026-11-20 145P": 20,
+     "SPY 2026-11-13 770C": -3,
+     "SPY 2026-11-13 770P": -3,
+     "SPY 2026-11-27 770C": -1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2041386.679385939,
+    "stress_loss": 4715.788057215925,
+    "beta_delta": 47218.43588726291,
+    "residual_delta": {
+     "residual_delta:RKLB": 4096.744230392229,
+     "residual_delta:S&P 500": 28963.075876118564,
+     "residual_delta:SPCX": 829.4814659777039
+    },
+    "market_exposure": 47218.43588726291,
+    "risk_reducing_solve": null,
+    "solve_ms": 1468.737,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 328.7841665392241,
+    "threshold": 214.47439704237937,
+    "eligible": true,
+    "close_gap": null
+   },
+   "A-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1285.8477193487615,
+    "current_score": 1307.8927965997823,
+    "uncertainty": 26.691890610118346,
+    "trades": {
+     "SPCX": -41
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2929208.52,
+    "stress_loss": 12549.632928964216,
+    "beta_delta": 187638.93519447383,
+    "residual_delta": {
+     "residual_delta:RKLB": 15638.744230392236,
+     "residual_delta:S&P 500": 93099.00672377265,
+     "residual_delta:SPCX": 10408.432646926361
+    },
+    "market_exposure": 187638.93519447383,
+    "risk_reducing_solve": null,
+    "solve_ms": 238.352,
+    "value_to_close": -52.5029999999997,
+    "market": -47.764999999999674,
+    "cost": 4.738000000000028,
+    "improvement": 22.045077251020757,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -232.2898134889283
+   },
+   "C-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1285.8477193487615,
+    "current_score": 1307.8927965997823,
+    "uncertainty": 26.691890610118346,
+    "trades": {
+     "SPCX": -41
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 1506715.2743482513,
+    "stress_loss": 12549.632928964216,
+    "beta_delta": 187638.93519447383,
+    "residual_delta": {
+     "residual_delta:RKLB": 15638.744230392236,
+     "residual_delta:S&P 500": 93099.00672377265,
+     "residual_delta:SPCX": 10408.432646926361
+    },
+    "market_exposure": 187638.93519447383,
+    "risk_reducing_solve": null,
+    "solve_ms": 273.342,
+    "value_to_close": -52.5029999999997,
+    "market": -47.764999999999674,
+    "cost": 4.738000000000028,
+    "improvement": 22.045077251020757,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -232.2898134889283
+   },
+   "D-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1285.8477193487615,
+    "current_score": 1307.8927965997823,
+    "uncertainty": 26.691890610118346,
+    "trades": {
+     "SPCX": -41
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2929208.52,
+    "stress_loss": 12549.632928964216,
+    "beta_delta": 187638.93519447383,
+    "residual_delta": {
+     "residual_delta:RKLB": 15638.744230392236,
+     "residual_delta:S&P 500": 93099.00672377265,
+     "residual_delta:SPCX": 10408.432646926361
+    },
+    "market_exposure": 187638.93519447383,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 1285.8477193487615,
+     "chosen": false,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 85.75,
+       "solver_ms": 43.57,
+       "nodes": 1,
+       "mip_gap": 0.00013866069940181717,
+       "dual_bound": 1265.8945808259666,
+       "incumbent": 1266.070134996377,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "optimal",
+       "total_ms": 140.112,
+       "solver_ms": 138.656,
+       "nodes": 1,
+       "mip_gap": 0.0,
+       "dual_bound": 5906.668002999999,
+       "incumbent": 5906.668003,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 477.371,
+    "value_to_close": -52.5029999999997,
+    "market": -47.764999999999674,
+    "cost": 4.738000000000028,
+    "improvement": 22.045077251020757,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -232.2898134889283
+   },
+   "current": {
+    "gross": 2935115.185,
+    "stress_loss": 13730.965928964215,
+    "beta_delta": 207915.94822264125,
+    "market_exposure": 207915.94822264125,
+    "residual_delta": {
+     "residual_delta:RKLB": 15638.744230392236,
+     "residual_delta:S&P 500": 93099.00672377265,
+     "residual_delta:SPCX": 16315.09764692634
+    }
+   }
+  },
+  {
+   "at": "2026-10-28T17:55:20.637945+00:00",
+   "recorded": {
+    "expected_score": 1045.1002707343764,
+    "current_score": 1122.659071805314,
+    "uncertainty": 70.92813248942721
+   },
+   "snapshot_age_s": 0.288551,
+   "quote_match": {
+    "contracts": 22,
+    "max_abs_mid_diff": 0.04000000000007731,
+    "missing": 0
+   },
+   "app_executions_after": 0,
+   "nav_gap": -650.1557682448765,
+   "A": {
+    "status": "OPTIMAL",
+    "expected_score": 1052.1622219157232,
+    "current_score": 1122.1506720305015,
+    "uncertainty": 60.89084547463299,
+    "trades": {
+     "IVV": -20,
+     "SPCX": 8,
+     "SPCX 2026-11-20 145P": 2
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2951424.8899999997,
+    "stress_loss": 9521.903351171866,
+    "beta_delta": 149565.38012456335,
+    "residual_delta": {
+     "residual_delta:RKLB": 16428.096613919945,
+     "residual_delta:S&P 500": 85281.54813538399,
+     "residual_delta:SPCX": 731.1232859360753
+    },
+    "market_exposure": 149565.38012456335,
+    "risk_reducing_solve": null,
+    "solve_ms": 1430.613,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 69.98845011477829,
+    "threshold": 100.16544080577127,
+    "eligible": false,
+    "close_gap": null
+   },
+   "B": {
+    "status": "OPTIMAL",
+    "expected_score": 887.1349447805842,
+    "current_score": 1122.1506720305015,
+    "uncertainty": 94.4859294882177,
+    "trades": {
+     "SPCX": 287,
+     "SPCX 2026-11-20 145P": 12,
+     "SPCX 2026-11-27 145C": 4,
+     "SPY 2026-11-27 770C": -2,
+     "SPY 2026-11-27 770P": -1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3440726.34,
+    "stress_loss": 6605.830563208463,
+    "beta_delta": 116840.62131595406,
+    "residual_delta": {
+     "residual_delta:RKLB": 16428.096613919945,
+     "residual_delta:S&P 500": 48805.857147940624,
+     "residual_delta:SPCX": 1822.8912375026557
+    },
+    "market_exposure": 116840.62131595406,
+    "risk_reducing_solve": null,
+    "solve_ms": 1219.055,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 235.0157272499173,
+    "threshold": 155.42935400811814,
+    "eligible": true,
+    "close_gap": null
+   },
+   "C": {
+    "status": "OPTIMAL",
+    "expected_score": 836.963164229928,
+    "current_score": 1122.1506720305015,
+    "uncertainty": 107.63449481476805,
+    "trades": {
+     "IVV": -20,
+     "SPCX": 831,
+     "SPCX 2026-11-20 145P": 19,
+     "SPY 2026-11-13 770C": -2,
+     "SPY 2026-11-27 770C": -1,
+     "SPY 2026-11-27 770P": -2
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 1947078.0028451323,
+    "stress_loss": 5622.044865875729,
+    "beta_delta": 91781.65720142245,
+    "residual_delta": {
+     "residual_delta:RKLB": 16428.096613919945,
+     "residual_delta:S&P 500": 25235.930286989795,
+     "residual_delta:SPCX": 1390.010054421844
+    },
+    "market_exposure": 91781.65720142245,
+    "risk_reducing_solve": null,
+    "solve_ms": 1388.073,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 285.1875078005735,
+    "threshold": 177.05874397029345,
+    "eligible": true,
+    "close_gap": null
+   },
+   "D": {
+    "status": "OPTIMAL",
+    "expected_score": 886.8554672531756,
+    "current_score": 1122.1506720305015,
+    "uncertainty": 93.76129672647389,
+    "trades": {
+     "SPCX": 289,
+     "SPCX 2026-11-20 145P": 12,
+     "SPCX 2026-11-27 145C": 4,
+     "SPY 2026-11-27 770C": -2,
+     "SPY 2026-11-27 770P": -1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3441015.04,
+    "stress_loss": 6605.830563208463,
+    "beta_delta": 117831.70065788929,
+    "residual_delta": {
+     "residual_delta:RKLB": 16428.096613919945,
+     "residual_delta:S&P 500": 48805.857147940624,
+     "residual_delta:SPCX": 2111.5912375026674
+    },
+    "market_exposure": 117831.70065788929,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 886.8554672531756,
+     "chosen": true,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 740.591,
+       "solver_ms": 668.346,
+       "nodes": 1,
+       "mip_gap": 0.005687418088046672,
+       "dual_bound": 866.8724845397121,
+       "incumbent": 871.8309516639245,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "optimal",
+       "total_ms": 299.954,
+       "solver_ms": 297.218,
+       "nodes": 1,
+       "mip_gap": 0.0,
+       "dual_bound": 58006.15600086201,
+       "incumbent": 58006.15600086201,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 2506.413,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 235.29520477732592,
+    "threshold": 154.23733311504955,
+    "eligible": true,
+    "close_gap": null
+   },
+   "C+D": {
+    "status": "OPTIMAL",
+    "expected_score": 836.963164229928,
+    "current_score": 1122.1506720305015,
+    "uncertainty": 107.63449481476805,
+    "trades": {
+     "IVV": -20,
+     "SPCX": 831,
+     "SPCX 2026-11-20 145P": 19,
+     "SPY 2026-11-13 770C": -2,
+     "SPY 2026-11-27 770C": -1,
+     "SPY 2026-11-27 770P": -2
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 1947078.0028451323,
+    "stress_loss": 5622.044865875729,
+    "beta_delta": 91781.65720142245,
+    "residual_delta": {
+     "residual_delta:RKLB": 16428.096613919945,
+     "residual_delta:S&P 500": 25235.930286989795,
+     "residual_delta:SPCX": 1390.010054421844
+    },
+    "market_exposure": 91781.65720142245,
+    "risk_reducing_solve": null,
+    "solve_ms": 1401.089,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 285.1875078005735,
+    "threshold": 177.05874397029345,
+    "eligible": true,
+    "close_gap": null
+   },
+   "A-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1098.31016053749,
+    "current_score": 1122.1506720305015,
+    "uncertainty": 20.642389588711477,
+    "trades": {
+     "VOO": -4,
+     "SPCX": -33
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2934971.36,
+    "stress_loss": 12717.24521709048,
+    "beta_delta": 189629.27383903577,
+    "residual_delta": {
+     "residual_delta:RKLB": 16428.096613919945,
+     "residual_delta:S&P 500": 97943.32813538398,
+     "residual_delta:SPCX": 8711.733666114247
+    },
+    "market_exposure": 189629.27383903577,
+    "risk_reducing_solve": null,
+    "solve_ms": 87.091,
+    "value_to_close": -34.563999999999,
+    "market": -32.11999999999884,
+    "cost": 2.444000000000159,
+    "improvement": 23.84051149301149,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -214.3508134889276
+   },
+   "C-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1098.31016053749,
+    "current_score": 1122.1506720305015,
+    "uncertainty": 20.642389588711477,
+    "trades": {
+     "VOO": -4,
+     "SPCX": -33
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 1511072.1935727885,
+    "stress_loss": 12717.24521709048,
+    "beta_delta": 189629.27383903577,
+    "residual_delta": {
+     "residual_delta:RKLB": 16428.096613919945,
+     "residual_delta:S&P 500": 97943.32813538398,
+     "residual_delta:SPCX": 8711.733666114247
+    },
+    "market_exposure": 189629.27383903577,
+    "risk_reducing_solve": null,
+    "solve_ms": 83.34,
+    "value_to_close": -34.563999999999,
+    "market": -32.11999999999884,
+    "cost": 2.444000000000159,
+    "improvement": 23.84051149301149,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -214.3508134889276
+   },
+   "D-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1098.31016053749,
+    "current_score": 1122.1506720305015,
+    "uncertainty": 20.642389588711477,
+    "trades": {
+     "VOO": -4,
+     "SPCX": -33
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2934971.36,
+    "stress_loss": 12717.24521709048,
+    "beta_delta": 189629.27383903577,
+    "residual_delta": {
+     "residual_delta:RKLB": 16428.096613919945,
+     "residual_delta:S&P 500": 97943.32813538398,
+     "residual_delta:SPCX": 8711.733666114247
+    },
+    "market_exposure": 189629.27383903577,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 1098.31016053749,
+     "chosen": false,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 60.571,
+       "solver_ms": 25.929,
+       "nodes": 1,
+       "mip_gap": 0.0008068169405750005,
+       "dual_bound": 1078.6743414916914,
+       "incumbent": 1079.5453369576676,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "optimal",
+       "total_ms": 31.351,
+       "solver_ms": 30.118,
+       "nodes": 1,
+       "mip_gap": 0.0,
+       "dual_bound": 7600.073000192001,
+       "incumbent": 7600.073000192001,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 185.392,
+    "value_to_close": -34.563999999999,
+    "market": -32.11999999999884,
+    "cost": 2.444000000000159,
+    "improvement": 23.84051149301149,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -214.3508134889276
+   },
+   "current": {
+    "gross": 2936898.3899999997,
+    "stress_loss": 13669.955217090479,
+    "beta_delta": 208816.15515105805,
+    "market_exposure": 208816.15515105805,
+    "residual_delta": {
+     "residual_delta:RKLB": 16428.096613919945,
+     "residual_delta:S&P 500": 100779.84813538399,
+     "residual_delta:SPCX": 13475.283666114236
+    }
+   }
+  },
+  {
+   "at": "2026-10-28T18:10:32.253075+00:00",
+   "recorded": {
+    "expected_score": 1607.5261238306402,
+    "current_score": 1644.0687226014825,
+    "uncertainty": 30.643201465558533
+   },
+   "snapshot_age_s": 0.241614,
+   "quote_match": {
+    "contracts": 22,
+    "max_abs_mid_diff": 0.029999999999972715,
+    "missing": 0
+   },
+   "app_executions_after": 0,
+   "nav_gap": -1259.612474034424,
+   "A": {
+    "status": "OPTIMAL",
+    "expected_score": 1589.8843718309067,
+    "current_score": 1644.309455411169,
+    "uncertainty": 67.28446294639834,
+    "trades": {
+     "IVV": -10,
+     "RKLB": -88,
+     "SPCX 2026-11-20 145P": 2
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2948786.44,
+    "stress_loss": 9283.584002977208,
+    "beta_delta": 124752.67967579496,
+    "residual_delta": {
+     "residual_delta:RKLB": 9839.321672999773,
+     "residual_delta:S&P 500": 75342.79266315093,
+     "residual_delta:SPCX": 3615.0029178612076
+    },
+    "market_exposure": 124752.67967579496,
+    "risk_reducing_solve": null,
+    "solve_ms": 1487.573,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 54.42508358026225,
+    "threshold": 110.68294154682526,
+    "eligible": false,
+    "close_gap": null
+   },
+   "B": {
+    "status": "OPTIMAL",
+    "expected_score": 1496.1330094666723,
+    "current_score": 1644.309455411169,
+    "uncertainty": 111.14659989308134,
+    "trades": {
+     "IVV": -13,
+     "RKLB": -117,
+     "SPCX": 780,
+     "SPCX 2026-11-20 145P": 18,
+     "SPY 2026-11-13 770C": -1,
+     "SPY 2026-11-27 770P": -1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3440572.6,
+    "stress_loss": 8462.850473874558,
+    "beta_delta": 101572.21463097705,
+    "residual_delta": {
+     "residual_delta:RKLB": 8171.531672999772,
+     "residual_delta:S&P 500": 66843.65725531243,
+     "residual_delta:SPCX": 1165.3123179738031
+    },
+    "market_exposure": 101572.21463097705,
+    "risk_reducing_solve": null,
+    "solve_ms": 1570.12,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 148.17644594449666,
+    "threshold": 182.8361568241188,
+    "eligible": false,
+    "close_gap": null
+   },
+   "C": {
+    "status": "OPTIMAL",
+    "expected_score": 1468.9655309404686,
+    "current_score": 1644.309455411169,
+    "uncertainty": 115.04022433853633,
+    "trades": {
+     "RKLB": -182,
+     "SPCX": 781,
+     "SPCX 2026-11-20 145P": 18,
+     "SPY 2026-11-13 770C": -4,
+     "SPY 2026-11-13 770P": -3
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2016138.9644409157,
+    "stress_loss": 4684.750939582656,
+    "beta_delta": 45666.9716371191,
+    "residual_delta": {
+     "residual_delta:RKLB": 4433.381672999771,
+     "residual_delta:S&P 500": 24500.06581433132,
+     "residual_delta:SPCX": 1308.8723179738008
+    },
+    "market_exposure": 45666.9716371191,
+    "risk_reducing_solve": null,
+    "solve_ms": 1836.064,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 175.34392447070036,
+    "threshold": 189.24116903689227,
+    "eligible": false,
+    "close_gap": null
+   },
+   "D": {
+    "status": "OPTIMAL",
+    "expected_score": 1496.1330094666723,
+    "current_score": 1644.309455411169,
+    "uncertainty": 111.14659989308134,
+    "trades": {
+     "IVV": -13,
+     "RKLB": -117,
+     "SPCX": 780,
+     "SPCX 2026-11-20 145P": 18,
+     "SPY 2026-11-13 770C": -1,
+     "SPY 2026-11-27 770P": -1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3440572.6,
+    "stress_loss": 8462.850473874558,
+    "beta_delta": 101572.21463097705,
+    "residual_delta": {
+     "residual_delta:RKLB": 8171.531672999772,
+     "residual_delta:S&P 500": 66843.65725531243,
+     "residual_delta:SPCX": 1165.3123179738031
+    },
+    "market_exposure": 101572.21463097705,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 1496.1330094666723,
+     "chosen": true,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 315.584,
+       "solver_ms": 210.487,
+       "nodes": 1,
+       "mip_gap": 0.0016911136648362632,
+       "dual_bound": 1493.6028784899515,
+       "incumbent": 1496.1330094666732,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "user_limit",
+       "total_ms": 1030.741,
+       "solver_ms": 1027.309,
+       "nodes": 0,
+       "mip_gap": 0.39085843092270484,
+       "dual_bound": 19304.042317894287,
+       "incumbent": 31690.568002337,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 2838.863,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 148.17644594449666,
+    "threshold": 182.8361568241188,
+    "eligible": false,
+    "close_gap": null
+   },
+   "C+D": {
+    "status": "OPTIMAL",
+    "expected_score": 1468.9655309404686,
+    "current_score": 1644.309455411169,
+    "uncertainty": 115.04022433853633,
+    "trades": {
+     "RKLB": -182,
+     "SPCX": 781,
+     "SPCX 2026-11-20 145P": 18,
+     "SPY 2026-11-13 770C": -4,
+     "SPY 2026-11-13 770P": -3
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2016138.9644409157,
+    "stress_loss": 4684.750939582656,
+    "beta_delta": 45666.9716371191,
+    "residual_delta": {
+     "residual_delta:RKLB": 4433.381672999771,
+     "residual_delta:S&P 500": 24500.06581433132,
+     "residual_delta:SPCX": 1308.8723179738008
+    },
+    "market_exposure": 45666.9716371191,
+    "risk_reducing_solve": null,
+    "solve_ms": 1862.347,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 175.34392447070036,
+    "threshold": 189.24116903689227,
+    "eligible": false,
+    "close_gap": null
+   },
+   "A-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1629.0223985604125,
+    "current_score": 1644.309455411169,
+    "uncertainty": 15.7083370118393,
+    "trades": {
+     "SPCX": -27
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2928998.7,
+    "stress_loss": 12928.77973109774,
+    "beta_delta": 187319.45936044108,
+    "residual_delta": {
+     "residual_delta:RKLB": 14900.20167299977,
+     "residual_delta:S&P 500": 83082.29266315093,
+     "residual_delta:SPCX": 14042.194242847138
+    },
+    "market_exposure": 187319.45936044108,
+    "risk_reducing_solve": null,
+    "solve_ms": 107.704,
+    "value_to_close": -46.73799999999999,
+    "market": -45.08999999999966,
+    "cost": 1.6480000000003314,
+    "improvement": 15.287056850756471,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -226.5248134889286
+   },
+   "C-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1629.0223985604125,
+    "current_score": 1644.309455411169,
+    "uncertainty": 15.7083370118393,
+    "trades": {
+     "SPCX": -27
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 1508489.7029293976,
+    "stress_loss": 12928.77973109774,
+    "beta_delta": 187319.45936044108,
+    "residual_delta": {
+     "residual_delta:RKLB": 14900.20167299977,
+     "residual_delta:S&P 500": 83082.29266315093,
+     "residual_delta:SPCX": 14042.194242847138
+    },
+    "market_exposure": 187319.45936044108,
+    "risk_reducing_solve": null,
+    "solve_ms": 184.401,
+    "value_to_close": -46.73799999999999,
+    "market": -45.08999999999966,
+    "cost": 1.6480000000003314,
+    "improvement": 15.287056850756471,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -226.5248134889286
+   },
+   "D-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1629.0223985604125,
+    "current_score": 1644.309455411169,
+    "uncertainty": 15.7083370118393,
+    "trades": {
+     "SPCX": -27
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2928998.7,
+    "stress_loss": 12928.77973109774,
+    "beta_delta": 187319.45936044108,
+    "residual_delta": {
+     "residual_delta:RKLB": 14900.20167299977,
+     "residual_delta:S&P 500": 83082.29266315093,
+     "residual_delta:SPCX": 14042.194242847138
+    },
+    "market_exposure": 187319.45936044108,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 1629.0223985604125,
+     "chosen": false,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 53.175,
+       "solver_ms": 11.109,
+       "nodes": 1,
+       "mip_gap": 0.0007143446835193632,
+       "dual_bound": 1609.3234268736255,
+       "incumbent": 1610.4738603136875,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "optimal",
+       "total_ms": 32.21,
+       "solver_ms": 30.872,
+       "nodes": 1,
+       "mip_gap": 0.0,
+       "dual_bound": 3876.1230030559964,
+       "incumbent": 3876.123003056,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 202.389,
+    "value_to_close": -46.73799999999999,
+    "market": -45.08999999999966,
+    "cost": 1.6480000000003314,
+    "improvement": 15.287056850756471,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -226.5248134889286
+   },
+   "current": {
+    "gross": 2932874.8200000003,
+    "stress_loss": 13704.003731097742,
+    "beta_delta": 200625.80663741392,
+    "market_exposure": 200625.80663741392,
+    "residual_delta": {
+     "residual_delta:RKLB": 14900.20167299977,
+     "residual_delta:S&P 500": 83082.29266315093,
+     "residual_delta:SPCX": 17918.314242847133
+    }
+   }
+  },
+  {
+   "at": "2026-10-28T18:25:55.695413+00:00",
+   "recorded": {
+    "expected_score": 1722.204948136356,
+    "current_score": 1729.1285297641155,
+    "uncertainty": 7.183015083947678
+   },
+   "snapshot_age_s": 0.222365,
+   "quote_match": {
+    "contracts": 22,
+    "max_abs_mid_diff": 0.07499999999993179,
+    "missing": 0
+   },
+   "app_executions_after": 0,
+   "nav_gap": -1366.147361758398,
+   "A": {
+    "status": "OPTIMAL",
+    "expected_score": 1680.7199840732353,
+    "current_score": 1729.2888862854768,
+    "uncertainty": 75.07247900664916,
+    "trades": {
+     "RKLB": -86,
+     "SPCX": 24,
+     "SPCX 2026-11-20 145P": 7,
+     "SPCX 2026-11-27 145C": 5,
+     "SPY 2026-11-27 770C": 1,
+     "SPY 2026-11-27 770P": 1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2949233.98,
+    "stress_loss": 11496.868367541469,
+    "beta_delta": 149189.0703673045,
+    "residual_delta": {
+     "residual_delta:RKLB": 10145.563073429286,
+     "residual_delta:S&P 500": 86155.94851398407,
+     "residual_delta:SPCX": 7247.551599173756
+    },
+    "market_exposure": 149189.0703673045,
+    "risk_reducing_solve": null,
+    "solve_ms": 2293.667,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 48.56890221224148,
+    "threshold": 123.49422796593787,
+    "eligible": false,
+    "close_gap": null
+   },
+   "B": {
+    "status": "OPTIMAL",
+    "expected_score": 1559.9556302554997,
+    "current_score": 1729.2888862854768,
+    "uncertainty": 103.10804411522419,
+    "trades": {
+     "IVV": -20,
+     "RKLB": -100,
+     "SPCX": 774,
+     "SPCX 2026-11-20 145P": 18,
+     "SPY 2026-11-13 770C": -1,
+     "SPY 2026-11-27 770P": -1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3435155.09,
+    "stress_loss": 8712.007924720268,
+    "beta_delta": 93624.62821640211,
+    "residual_delta": {
+     "residual_delta:RKLB": 9340.073073429288,
+     "residual_delta:S&P 500": 58358.079015534226,
+     "residual_delta:SPCX": 42.361351716914214
+    },
+    "market_exposure": 93624.62821640211,
+    "risk_reducing_solve": null,
+    "solve_ms": 1492.075,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 169.33325602997706,
+    "threshold": 169.6127325695438,
+    "eligible": false,
+    "close_gap": null
+   },
+   "C": {
+    "status": "OPTIMAL",
+    "expected_score": 1528.8981582427368,
+    "current_score": 1729.2888862854768,
+    "uncertainty": 112.79409083567356,
+    "trades": {
+     "VOO": 25,
+     "RKLB": -193,
+     "SPCX": 879,
+     "SPCX 2026-11-20 145P": 20,
+     "SPY 2026-11-13 770C": -5,
+     "SPY 2026-11-13 770P": -3
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2101918.4994191127,
+    "stress_loss": 4572.370536317276,
+    "beta_delta": 17205.391850033106,
+    "residual_delta": {
+     "residual_delta:RKLB": 3989.318073429291,
+     "residual_delta:S&P 500": -990.8670025578394,
+     "residual_delta:SPCX": 934.3865231368109
+    },
+    "market_exposure": 17205.391850033106,
+    "risk_reducing_solve": null,
+    "solve_ms": 2467.549,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 200.39072804273997,
+    "threshold": 185.546279424683,
+    "eligible": true,
+    "close_gap": null
+   },
+   "D": {
+    "status": "OPTIMAL",
+    "expected_score": 1559.9556302554997,
+    "current_score": 1729.2888862854768,
+    "uncertainty": 103.10804411522419,
+    "trades": {
+     "IVV": -20,
+     "RKLB": -100,
+     "SPCX": 774,
+     "SPCX 2026-11-20 145P": 18,
+     "SPY 2026-11-13 770C": -1,
+     "SPY 2026-11-27 770P": -1
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 3435155.09,
+    "stress_loss": 8712.007924720268,
+    "beta_delta": 93624.62821640211,
+    "residual_delta": {
+     "residual_delta:RKLB": 9340.073073429288,
+     "residual_delta:S&P 500": 58358.079015534226,
+     "residual_delta:SPCX": 42.361351716914214
+    },
+    "market_exposure": 93624.62821640211,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 1559.9556302554997,
+     "chosen": true,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 465.915,
+       "solver_ms": 353.735,
+       "nodes": 1,
+       "mip_gap": 0.0023137622825758555,
+       "dual_bound": 1556.3462637557238,
+       "incumbent": 1559.9556302555009,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "user_limit",
+       "total_ms": 1018.664,
+       "solver_ms": 1015.019,
+       "nodes": 0,
+       "mip_gap": 0.32179550235443494,
+       "dual_bound": 52272.09825790816,
+       "incumbent": 77074.243003953,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 3793.464,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 169.33325602997706,
+    "threshold": 169.6127325695438,
+    "eligible": false,
+    "close_gap": null
+   },
+   "C+D": {
+    "status": "OPTIMAL",
+    "expected_score": 1528.8981582427368,
+    "current_score": 1729.2888862854768,
+    "uncertainty": 112.79409083567356,
+    "trades": {
+     "VOO": 25,
+     "RKLB": -193,
+     "SPCX": 879,
+     "SPCX 2026-11-20 145P": 20,
+     "SPY 2026-11-13 770C": -5,
+     "SPY 2026-11-13 770P": -3
+    },
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2101918.4994191127,
+    "stress_loss": 4572.370536317276,
+    "beta_delta": 17205.391850033106,
+    "residual_delta": {
+     "residual_delta:RKLB": 3989.318073429291,
+     "residual_delta:S&P 500": -990.8670025578394,
+     "residual_delta:SPCX": 934.3865231368109
+    },
+    "market_exposure": 17205.391850033106,
+    "risk_reducing_solve": null,
+    "solve_ms": 2488.701,
+    "value_to_close": null,
+    "market": null,
+    "cost": null,
+    "improvement": 200.39072804273997,
+    "threshold": 185.546279424683,
+    "eligible": true,
+    "close_gap": null
+   },
+   "A-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1729.2888862854768,
+    "current_score": 1729.2888862854768,
+    "uncertainty": 0.0,
+    "trades": {},
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2932301.99,
+    "stress_loss": 13660.355729268158,
+    "beta_delta": 193353.08940336818,
+    "residual_delta": {
+     "residual_delta:RKLB": 15093.573073429288,
+     "residual_delta:S&P 500": 79623.93834735823,
+     "residual_delta:SPCX": 16595.384808937684
+    },
+    "market_exposure": 193353.08940336818,
+    "risk_reducing_solve": null,
+    "solve_ms": 72.974,
+    "value_to_close": 0.0,
+    "market": 0,
+    "cost": 0.0,
+    "improvement": 0.0,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -179.7868134889286
+   },
+   "C-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1729.2888862854768,
+    "current_score": 1729.2888862854768,
+    "uncertainty": 0.0,
+    "trades": {},
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 1512517.384087175,
+    "stress_loss": 13660.355729268158,
+    "beta_delta": 193353.08940336818,
+    "residual_delta": {
+     "residual_delta:RKLB": 15093.573073429288,
+     "residual_delta:S&P 500": 79623.93834735823,
+     "residual_delta:SPCX": 16595.384808937684
+    },
+    "market_exposure": 193353.08940336818,
+    "risk_reducing_solve": null,
+    "solve_ms": 106.532,
+    "value_to_close": 0.0,
+    "market": 0,
+    "cost": 0.0,
+    "improvement": 0.0,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -179.7868134889286
+   },
+   "D-STK": {
+    "status": "OPTIMAL",
+    "expected_score": 1729.2888862854768,
+    "current_score": 1729.2888862854768,
+    "uncertainty": 0.0,
+    "trades": {},
+    "risk_passed": true,
+    "risk_reasons": [],
+    "gross": 2932301.99,
+    "stress_loss": 13660.355729268158,
+    "beta_delta": 193353.08940336818,
+    "residual_delta": {
+     "residual_delta:RKLB": 15093.573073429288,
+     "residual_delta:S&P 500": 79623.93834735823,
+     "residual_delta:SPCX": 16595.384808937684
+    },
+    "market_exposure": 193353.08940336818,
+    "risk_reducing_solve": {
+     "status": "OPTIMAL",
+     "expected_score": 1729.2888862854768,
+     "chosen": false,
+     "stages": [
+      {
+       "stage": "primary",
+       "status": "optimal",
+       "total_ms": 55.036,
+       "solver_ms": 12.131,
+       "nodes": 1,
+       "mip_gap": 0.0006206214347405207,
+       "dual_bound": 1710.3975233630858,
+       "incumbent": 1711.4596919325936,
+       "absolute_gap_limit": 5.0
+      },
+      {
+       "stage": "turnover",
+       "status": "optimal",
+       "total_ms": 9.433,
+       "solver_ms": 8.102,
+       "nodes": 1,
+       "mip_gap": 0.0,
+       "dual_bound": 0.00300316400534939,
+       "incumbent": 0.003003164,
+       "absolute_gap_limit": 1e-06
+      }
+     ]
+    },
+    "solve_ms": 144.008,
+    "value_to_close": 0.0,
+    "market": 0,
+    "cost": 0.0,
+    "improvement": 0.0,
+    "threshold": 100.0,
+    "eligible": false,
+    "close_gap": -179.7868134889286
+   },
+   "current": {
+    "gross": 2932301.99,
+    "stress_loss": 13660.355729268158,
+    "beta_delta": 193353.08940336818,
+    "market_exposure": 193353.08940336818,
+    "residual_delta": {
+     "residual_delta:RKLB": 15093.573073429288,
+     "residual_delta:S&P 500": 79623.93834735823,
+     "residual_delta:SPCX": 16595.384808937684
+    }
+   }
+  }
+ ]
+}
