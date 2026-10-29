@@ -16,8 +16,12 @@ Variants (all with the configured residual-delta groups), each the app's own opt
   D    above the cap, up to 3.5 x, only trades that lower stress loss and market exposure
        (risk.gross_risk_reducing 3.5)
   C+D  both
+  A-STK, C-STK, D-STK  A, C and D trading shares only (the optimizer's stock_only solve)
+Each decision also records whether the live app would trade it ("eligible": OPTIMAL, risk passed
+and improvement above max(policy.score_threshold, policy.uncertainty_multiplier x uncertainty)).
 Each target is also valued as a trade from the decision to the close: shares at their official
-close, options at the collector's last book before 16:00, less execution_cost. "close_gap" adds
+close, options at the collector's last book before 16:00, less execution_cost ("market" and "cost"
+separately). "close_gap" adds
 that to the session's recorded close gap (the imported statement, else the 20:05 capture), as if
 the book had then been held unchanged: app trades after the decision are counted and reported.
 Never writes to the database, the archive or a broker.
@@ -55,7 +59,11 @@ VARIANTS = {
     "C": {"gross_basis": "delta"},
     "D": {"gross_risk_reducing": 3.5},
     "C+D": {"gross_basis": "delta", "gross_risk_reducing": 3.5},
+    "A-STK": {},
+    "C-STK": {"gross_basis": "delta"},
+    "D-STK": {"gross_risk_reducing": 3.5},
 }
+STOCK_ONLY = {"A-STK", "C-STK", "D-STK"}
 
 
 def variant_manifests(m):
@@ -65,14 +73,20 @@ def variant_manifests(m):
     }
 
 
-def trade_value(m, quotes, closes, trades):
-    """A trade held from the quotes' moment to the close: quantity x multiplier x (close - mid),
-    less its modeled execution cost. None when a traded contract has no closing price."""
+def trade_parts(m, quotes, closes, trades):
+    """(market, cost) of a trade held from the quotes' moment to the close: quantity x multiplier x
+    (close - mid), and its modeled execution cost. None when a traded contract has no closing price."""
     if any(i not in closes for i in trades):
         return None
-    pnl = sum(q * m.contract_map[i].multiplier * (closes[i] - quotes[i].mid) for i, q in trades.items())
+    market = sum(q * m.contract_map[i].multiplier * (closes[i] - quotes[i].mid) for i, q in trades.items())
     ids = list(trades)
-    return pnl - execution_cost(m, quotes, ids, [trades[i] for i in ids])
+    return market, execution_cost(m, quotes, ids, [trades[i] for i in ids])
+
+
+def trade_value(m, quotes, closes, trades):
+    """trade_parts' market less cost, or None."""
+    parts = trade_parts(m, quotes, closes, trades)
+    return None if parts is None else parts[0] - parts[1]
 
 
 def replay_point(manifests, snapshot, quotes, scenarios, target_nav, estimate, strategy, closes):
@@ -81,13 +95,18 @@ def replay_point(manifests, snapshot, quotes, scenarios, target_nav, estimate, s
     current = RiskEngine(manifests["A"]).evaluate(snapshot, quotes, scenarios, actual)
     results = {}
     for name, m in manifests.items():
-        target = HedgeOptimizer(m).solve(snapshot, quotes, scenarios, target_nav, estimate, False, strategy)
+        target = HedgeOptimizer(m).solve(
+            snapshot, quotes, scenarios, target_nav, estimate, name in STOCK_ONLY, strategy
+        )
         risk = RiskEngine(m).evaluate(snapshot, quotes, scenarios, target.quantities)
         trades = {
             i: target.quantities.get(i, 0) - actual.get(i, 0)
             for i in set(target.quantities) | set(actual)
             if target.quantities.get(i, 0) != actual.get(i, 0)
         }
+        parts = trade_parts(m, quotes, closes, trades)
+        improvement = target.current_score - target.expected_score
+        threshold = max(m.policy.score_threshold, m.policy.uncertainty_multiplier * target.uncertainty)
         results[name] = {
             "status": target.status,
             "expected_score": target.expected_score,
@@ -103,7 +122,12 @@ def replay_point(manifests, snapshot, quotes, scenarios, target_nav, estimate, s
             "market_exposure": risk.metrics.get("market_exposure"),
             "risk_reducing_solve": target.solver_metrics.get("risk_reducing"),
             "solve_ms": target.solver_metrics.get("total_ms"),
-            "value_to_close": trade_value(m, quotes, closes, trades),
+            "value_to_close": None if parts is None else parts[0] - parts[1],
+            "market": None if parts is None else parts[0],
+            "cost": None if parts is None else parts[1],
+            "improvement": improvement,
+            "threshold": threshold,
+            "eligible": target.status == "OPTIMAL" and risk.passed and improvement > threshold,
         }
     results["current"] = {
         "gross": current.metrics.get("gross_notional"),
@@ -269,6 +293,7 @@ def main(argv=None):
                     "missing": len(recorded) - len(drift),
                 },
                 "app_executions_after": later,
+                "nav_gap": payload.get("nav_gap"),
                 **results,
             }
         )
@@ -295,6 +320,9 @@ def main(argv=None):
             "mean_abs_close_gap": sum(gaps) / len(gaps) if gaps else None,
             "max_solve_ms": max((r["solve_ms"] or 0 for r in done), default=None),
             "risk_reducing_chosen": sum(1 for r in done if (r["risk_reducing_solve"] or {}).get("chosen")),
+            "eligible": sum(1 for r in done if r["eligible"]),
+            "eligible_value": sum(r["value_to_close"] or 0 for r in done if r["eligible"]),
+            "eligible_cost": sum(r["cost"] or 0 for r in done if r["eligible"]),
         }
     report = {
         "day": str(day),

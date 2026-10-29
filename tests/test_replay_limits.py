@@ -14,7 +14,7 @@ def test_every_gross_variant_is_solved_valued_and_risk_checked(manifest, snapsho
     )
     sc = ScenarioEngine(manifest).build(snap, quotes, now)
     manifests = variant_manifests(manifest)
-    assert set(manifests) == {"A", "B", "C", "D", "C+D"}
+    assert set(manifests) == {"A", "B", "C", "D", "C+D", "A-STK", "C-STK", "D-STK"}
     assert manifests["B"].risk.gross_notional == 3.5 and manifests["C"].risk.gross_basis == "delta"
     assert manifests["D"].risk.gross_risk_reducing == 3.5 and manifests["C+D"].risk.gross_basis == "delta"
     closes = {i: q.mid + 0.5 for i, q in quotes.items()}
@@ -23,6 +23,11 @@ def test_every_gross_variant_is_solved_valued_and_risk_checked(manifest, snapsho
     for name in manifests:
         assert results[name]["status"] == "OPTIMAL" and results[name]["risk_passed"]
         assert results[name]["value_to_close"] is not None and results[name]["solve_ms"] > 0
+    for name in ("A-STK", "C-STK", "D-STK"):  # shares only
+        assert all(" " not in label for label in results[name]["trades"])
+    a = results["A"]
+    assert a["value_to_close"] == pytest.approx(a["market"] - a["cost"]) and a["cost"] >= 0
+    assert a["eligible"] == (a["improvement"] > a["threshold"] and a["risk_passed"])
     # Far below 3x gross, D's second solve never runs and its target is A's.
     assert results["D"]["risk_reducing_solve"] is None and results["D"]["trades"] == results["A"]["trades"]
     assert results["current"]["gross"] < 3 * manifest.initial_nav
