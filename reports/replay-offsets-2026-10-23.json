@@ -7,9 +7,9 @@
  "summary": {
   "A": {
    "points": 17,
-   "mean_expected_score": 1185.4137619278956,
+   "mean_expected_score": 1186.082631802513,
    "mean_abs_close_gap": null,
-   "max_solve_ms": 2842.113,
+   "max_solve_ms": 2890.472,
    "risk_reducing_chosen": 0,
    "eligible": 4,
    "eligible_value": 0,
@@ -19,7 +19,7 @@
    "points": 17,
    "mean_expected_score": 750.8305561977259,
    "mean_abs_close_gap": null,
-   "max_solve_ms": 3808.894,
+   "max_solve_ms": 3880.967,
    "risk_reducing_chosen": 0,
    "eligible": 17,
    "eligible_value": 0,
@@ -29,7 +29,7 @@
    "points": 17,
    "mean_expected_score": 592.8344020450834,
    "mean_abs_close_gap": null,
-   "max_solve_ms": 2975.701,
+   "max_solve_ms": 2961.039,
    "risk_reducing_chosen": 0,
    "eligible": 17,
    "eligible_value": 0,
@@ -39,7 +39,7 @@
    "points": 17,
    "mean_expected_score": 752.0193556006802,
    "mean_abs_close_gap": null,
-   "max_solve_ms": 6860.471,
+   "max_solve_ms": 6931.575,
    "risk_reducing_chosen": 17,
    "eligible": 17,
    "eligible_value": 0,
@@ -49,7 +49,7 @@
    "points": 17,
    "mean_expected_score": 592.8344020450834,
    "mean_abs_close_gap": null,
-   "max_solve_ms": 3000.923,
+   "max_solve_ms": 3002.88,
    "risk_reducing_chosen": 0,
    "eligible": 17,
    "eligible_value": 0,
@@ -59,7 +59,7 @@
    "points": 17,
    "mean_expected_score": 1247.3768324941273,
    "mean_abs_close_gap": 557.5030133973132,
-   "max_solve_ms": 507.857,
+   "max_solve_ms": 472.708,
    "risk_reducing_chosen": 0,
    "eligible": 0,
    "eligible_value": 0,
@@ -69,7 +69,7 @@
    "points": 17,
    "mean_expected_score": 1210.1152717074965,
    "mean_abs_close_gap": 505.85271927966704,
-   "max_solve_ms": 722.655,
+   "max_solve_ms": 562.286,
    "risk_reducing_chosen": 0,
    "eligible": 2,
    "eligible_value": -40.81599999998982,
@@ -79,7 +79,7 @@
    "points": 17,
    "mean_expected_score": 1239.3946676123778,
    "mean_abs_close_gap": 500.4478369267255,
-   "max_solve_ms": 756.134,
+   "max_solve_ms": 798.919,
    "risk_reducing_chosen": 12,
    "eligible": 0,
    "eligible_value": 0,
@@ -87,9 +87,9 @@
   },
   "O": {
    "points": 17,
-   "mean_expected_score": 591.9307355626969,
+   "mean_expected_score": 586.7683251850349,
    "mean_abs_close_gap": null,
-   "max_solve_ms": 3164.925,
+   "max_solve_ms": 2947.2,
    "risk_reducing_chosen": 0,
    "eligible": 17,
    "eligible_value": 0,
@@ -136,7 +136,7 @@
     },
     "market_exposure": 66634.56952473079,
     "risk_reducing_solve": null,
-    "solve_ms": 1059.705,
+    "solve_ms": 1067.39,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -144,6 +144,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -211.05700000000402,
+      "next_value": -299.89000000000254
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -171,7 +181,7 @@
     },
     "market_exposure": 47249.181019950876,
     "risk_reducing_solve": null,
-    "solve_ms": 1256.154,
+    "solve_ms": 1259.678,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -179,6 +189,16 @@
     "threshold": 125.24426778004896,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -43.88300000000338,
+      "next_value": -263.2800000000027
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -207,7 +227,7 @@
     },
     "market_exposure": 8630.603680896296,
     "risk_reducing_solve": null,
-    "solve_ms": 1245.291,
+    "solve_ms": 1252.994,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -215,6 +235,16 @@
     "threshold": 167.95209479984788,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -235.73099999998604,
+      "next_value": 776.7599999999875
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -249,8 +279,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 261.389,
-       "solver_ms": 187.316,
+       "total_ms": 267.176,
+       "solver_ms": 189.862,
        "nodes": 1,
        "mip_gap": 0.0021141444293319264,
        "dual_bound": 1390.812123938057,
@@ -260,8 +290,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 634.425,
-       "solver_ms": 631.851,
+       "total_ms": 643.441,
+       "solver_ms": 640.712,
        "nodes": 32,
        "mip_gap": 0.6554915854107368,
        "dual_bound": 12240.188290749735,
@@ -270,7 +300,7 @@
       }
      ]
     },
-    "solve_ms": 1995.501,
+    "solve_ms": 2034.931,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -278,6 +308,16 @@
     "threshold": 125.24426778004896,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -43.88300000000338,
+      "next_value": -263.2800000000027
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -306,7 +346,7 @@
     },
     "market_exposure": 8630.603680896296,
     "risk_reducing_solve": null,
-    "solve_ms": 1286.124,
+    "solve_ms": 1290.352,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -314,6 +354,16 @@
     "threshold": 167.95209479984788,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -235.73099999998604,
+      "next_value": 776.7599999999875
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -336,7 +386,7 @@
     },
     "market_exposure": 72243.6283191028,
     "risk_reducing_solve": null,
-    "solve_ms": 146.556,
+    "solve_ms": 148.189,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -344,6 +394,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -369,7 +429,7 @@
     },
     "market_exposure": 79217.43034250429,
     "risk_reducing_solve": null,
-    "solve_ms": 425.114,
+    "solve_ms": 431.084,
     "value_to_close": 8.106999999999948,
     "market": 10.485000000000184,
     "cost": 2.378000000000236,
@@ -377,6 +437,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 23.07000000000025,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 8.106999999999948,
+      "next_value": 23.07000000000025
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 572.780131044372,
     "next_close_gap": 74.04362693038328
@@ -406,8 +476,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 66.521,
-       "solver_ms": 25.485,
+       "total_ms": 110.395,
+       "solver_ms": 25.811,
        "nodes": 1,
        "mip_gap": 0.000595304494415561,
        "dual_bound": 1749.497344623645,
@@ -417,8 +487,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 10.505,
-       "solver_ms": 9.176,
+       "total_ms": 10.762,
+       "solver_ms": 9.35,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 0.0030038830009289086,
@@ -427,7 +497,7 @@
       }
      ]
     },
-    "solve_ms": 230.497,
+    "solve_ms": 279.736,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -435,6 +505,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -463,7 +543,7 @@
     },
     "market_exposure": 8630.603680896296,
     "risk_reducing_solve": null,
-    "solve_ms": 1304.005,
+    "solve_ms": 1275.93,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -471,6 +551,16 @@
     "threshold": 167.95209479984788,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -235.73099999998604,
+      "next_value": 776.7599999999875
+     }
+    },
     "gross_offset_credit": 3571060.0,
     "close_gap": null,
     "next_close_gap": null
@@ -526,7 +616,7 @@
     },
     "market_exposure": 75531.40877244202,
     "risk_reducing_solve": null,
-    "solve_ms": 2842.113,
+    "solve_ms": 2890.472,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -534,6 +624,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -125.4959999999985,
+      "next_value": -351.2500000000025
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -563,7 +663,7 @@
     },
     "market_exposure": 9054.596669068767,
     "risk_reducing_solve": null,
-    "solve_ms": 1995.296,
+    "solve_ms": 1980.41,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -571,6 +671,16 @@
     "threshold": 139.67404574770845,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -472.35199999999975,
+      "next_value": -488.9400000000016
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -599,7 +709,7 @@
     },
     "market_exposure": 16637.899922702865,
     "risk_reducing_solve": null,
-    "solve_ms": 2968.369,
+    "solve_ms": 2938.212,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -607,6 +717,16 @@
     "threshold": 160.23198416934494,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -417.5920000000003,
+      "next_value": -261.07999999999976
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -643,8 +763,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 931.344,
-       "solver_ms": 800.562,
+       "total_ms": 940.91,
+       "solver_ms": 805.039,
        "nodes": 11,
        "mip_gap": 0.005981860257002316,
        "dual_bound": 789.2580461344851,
@@ -654,8 +774,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 823.356,
-       "solver_ms": 820.042,
+       "total_ms": 834.108,
+       "solver_ms": 830.918,
        "nodes": 32,
        "mip_gap": 0.5095789689179743,
        "dual_bound": 19637.358989163375,
@@ -664,7 +784,7 @@
       }
      ]
     },
-    "solve_ms": 4586.822,
+    "solve_ms": 4638.356,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -672,6 +792,16 @@
     "threshold": 139.67404574770845,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -472.35199999999975,
+      "next_value": -488.9400000000016
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -700,7 +830,7 @@
     },
     "market_exposure": 16637.899922702865,
     "risk_reducing_solve": null,
-    "solve_ms": 2852.989,
+    "solve_ms": 2887.79,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -708,6 +838,16 @@
     "threshold": 160.23198416934494,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -417.5920000000003,
+      "next_value": -261.07999999999976
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -734,7 +874,7 @@
     },
     "market_exposure": 84035.88373308966,
     "risk_reducing_solve": null,
-    "solve_ms": 331.556,
+    "solve_ms": 374.061,
     "value_to_close": -89.16800000000035,
     "market": -83.90000000000062,
     "cost": 5.267999999999728,
@@ -742,6 +882,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 1.0000000000005116,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -89.16800000000035,
+      "next_value": 1.0000000000005116
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 475.50513104437164,
     "next_close_gap": 51.973626930383546
@@ -768,7 +918,7 @@
     },
     "market_exposure": 106614.09418971592,
     "risk_reducing_solve": null,
-    "solve_ms": 595.205,
+    "solve_ms": 562.286,
     "value_to_close": -221.95999999999972,
     "market": -212.0200000000013,
     "cost": 9.939999999998435,
@@ -776,6 +926,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 144.4400000000026,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -221.95999999999972,
+      "next_value": 144.4400000000026
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 342.7131310443723,
     "next_close_gap": 195.41362693038565
@@ -809,8 +969,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 55.852,
-       "solver_ms": 12.276,
+       "total_ms": 55.446,
+       "solver_ms": 12.378,
        "nodes": 1,
        "mip_gap": 0.0017726653981348266,
        "dual_bound": 1339.1147114681296,
@@ -820,8 +980,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 167.339,
-       "solver_ms": 165.972,
+       "total_ms": 169.245,
+       "solver_ms": 167.789,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 32751.524003625993,
@@ -830,7 +990,7 @@
       }
      ]
     },
-    "solve_ms": 559.135,
+    "solve_ms": 559.899,
     "value_to_close": -204.50399999999817,
     "market": -194.89999999999947,
     "cost": 9.603999999998697,
@@ -838,6 +998,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 79.56999999999746,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -204.50399999999817,
+      "next_value": 79.56999999999746
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 360.1691310443738,
     "next_close_gap": 130.5436269303805
@@ -869,7 +1039,7 @@
     },
     "market_exposure": 6887.2457146680645,
     "risk_reducing_solve": null,
-    "solve_ms": 2190.596,
+    "solve_ms": 2947.2,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -877,6 +1047,16 @@
     "threshold": 156.70584880994332,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -538.1279999999929,
+      "next_value": 248.27999999999187
+     }
+    },
     "gross_offset_credit": 3666909.0,
     "close_gap": null,
     "next_close_gap": null
@@ -930,7 +1110,7 @@
     },
     "market_exposure": 153052.20457626643,
     "risk_reducing_solve": null,
-    "solve_ms": 1777.73,
+    "solve_ms": 1789.782,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -938,6 +1118,16 @@
     "threshold": 100.42528489202688,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 1.8400000000001455,
+      "next_value": -38.63999999999942
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -967,7 +1157,7 @@
     },
     "market_exposure": 16497.222328036034,
     "risk_reducing_solve": null,
-    "solve_ms": 2446.177,
+    "solve_ms": 2483.875,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -975,6 +1165,16 @@
     "threshold": 134.73552022946606,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -450.0280000000005,
+      "next_value": -422.9400000000017
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1006,7 +1206,7 @@
     },
     "market_exposure": 13287.215135227598,
     "risk_reducing_solve": null,
-    "solve_ms": 2119.188,
+    "solve_ms": 2114.847,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1014,6 +1214,16 @@
     "threshold": 173.1797689736407,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -643.4389999999939,
+      "next_value": 472.43000000000507
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1050,8 +1260,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 2168.593,
-       "solver_ms": 2075.962,
+       "total_ms": 2225.34,
+       "solver_ms": 2088.006,
        "nodes": 13,
        "mip_gap": 0.006189136369989001,
        "dual_bound": 769.2086840783804,
@@ -1061,8 +1271,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 1015.625,
-       "solver_ms": 1012.385,
+       "total_ms": 1024.484,
+       "solver_ms": 1021.2,
        "nodes": 0,
        "mip_gap": 0.6426722468086801,
        "dual_bound": 19907.130053005883,
@@ -1071,7 +1281,7 @@
       }
      ]
     },
-    "solve_ms": 5021.978,
+    "solve_ms": 5099.479,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1079,6 +1289,16 @@
     "threshold": 134.73552022946606,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -450.0280000000005,
+      "next_value": -422.9400000000017
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1110,7 +1330,7 @@
     },
     "market_exposure": 13287.215135227598,
     "risk_reducing_solve": null,
-    "solve_ms": 2123.047,
+    "solve_ms": 2097.851,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1118,6 +1338,16 @@
     "threshold": 173.1797689736407,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -643.4389999999939,
+      "next_value": 472.43000000000507
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1142,7 +1372,7 @@
     },
     "market_exposure": 84684.96572565206,
     "risk_reducing_solve": null,
-    "solve_ms": 442.807,
+    "solve_ms": 449.803,
     "value_to_close": -3.17599999999984,
     "market": -2.0799999999999272,
     "cost": 1.0959999999999126,
@@ -1150,6 +1380,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 21.76000000000022,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -3.17599999999984,
+      "next_value": 21.76000000000022
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 561.4971310443722,
     "next_close_gap": 72.73362693038325
@@ -1174,7 +1414,7 @@
     },
     "market_exposure": 135788.89557048178,
     "risk_reducing_solve": null,
-    "solve_ms": 280.898,
+    "solve_ms": 325.905,
     "value_to_close": -40.62399999999716,
     "market": -36.91999999999871,
     "cost": 3.70399999999845,
@@ -1182,6 +1422,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": 386.2400000000039,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -40.62399999999716,
+      "next_value": 386.2400000000039
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 524.0491310443748,
     "next_close_gap": 437.2136269303869
@@ -1214,8 +1464,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 89.729,
-       "solver_ms": 10.822,
+       "total_ms": 54.189,
+       "solver_ms": 11.106,
        "nodes": 1,
        "mip_gap": 0.0020252063742933067,
        "dual_bound": 1376.1498087820094,
@@ -1225,8 +1475,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 44.085,
-       "solver_ms": 42.765,
+       "total_ms": 45.045,
+       "solver_ms": 43.639,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 24315.674003657,
@@ -1235,7 +1485,7 @@
       }
      ]
     },
-    "solve_ms": 586.751,
+    "solve_ms": 557.373,
     "value_to_close": -216.18999999999883,
     "market": -210.52999999999975,
     "cost": 5.6599999999990755,
@@ -1243,6 +1493,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 20.55999999999807,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -216.18999999999883,
+      "next_value": 20.55999999999807
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 348.4831310443732,
     "next_close_gap": 71.5336269303811
@@ -1274,7 +1534,7 @@
     },
     "market_exposure": 13287.215135227598,
     "risk_reducing_solve": null,
-    "solve_ms": 1871.213,
+    "solve_ms": 2496.507,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1282,6 +1542,16 @@
     "threshold": 173.1797689736407,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -643.4389999999939,
+      "next_value": 472.43000000000507
+     }
+    },
     "gross_offset_credit": 3618156.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1339,7 +1609,7 @@
     },
     "market_exposure": 120750.67421866773,
     "risk_reducing_solve": null,
-    "solve_ms": 1892.167,
+    "solve_ms": 1859.982,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1347,6 +1617,16 @@
     "threshold": 116.50055334478306,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -297.4559999999982,
+      "next_value": -445.24000000000206
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1377,7 +1657,7 @@
     },
     "market_exposure": 21963.494411038555,
     "risk_reducing_solve": null,
-    "solve_ms": 3414.219,
+    "solve_ms": 3474.496,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1385,6 +1665,16 @@
     "threshold": 131.34494016087038,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -410.12399999999974,
+      "next_value": -386.5400000000015
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1415,7 +1705,7 @@
     },
     "market_exposure": 15738.327984754404,
     "risk_reducing_solve": null,
-    "solve_ms": 2492.087,
+    "solve_ms": 2449.789,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1423,6 +1713,16 @@
     "threshold": 183.4461197285319,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -604.7319999999979,
+      "next_value": -347.7999999999999
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1460,8 +1760,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 3990.846,
-       "solver_ms": 3852.393,
+       "total_ms": 3999.987,
+       "solver_ms": 3897.541,
        "nodes": 40,
        "mip_gap": 0.0065292156616865785,
        "dual_bound": 755.4804011662039,
@@ -1471,8 +1771,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 1004.109,
-       "solver_ms": 1000.701,
+       "total_ms": 1006.069,
+       "solver_ms": 1002.633,
        "nodes": 1,
        "mip_gap": 0.6664263303600252,
        "dual_bound": 17145.23562884837,
@@ -1481,7 +1781,7 @@
       }
      ]
     },
-    "solve_ms": 6860.471,
+    "solve_ms": 6931.575,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1489,6 +1789,16 @@
     "threshold": 136.6717762890239,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -475.48099999999516,
+      "next_value": -550.3500000000028
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1519,7 +1829,7 @@
     },
     "market_exposure": 15738.327984754404,
     "risk_reducing_solve": null,
-    "solve_ms": 2447.546,
+    "solve_ms": 2480.475,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1527,6 +1837,16 @@
     "threshold": 183.4461197285319,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -604.7319999999979,
+      "next_value": -347.7999999999999
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1552,7 +1872,7 @@
     },
     "market_exposure": 85541.18276337752,
     "risk_reducing_solve": null,
-    "solve_ms": 507.857,
+    "solve_ms": 472.708,
     "value_to_close": -9.089999999998861,
     "market": -6.4899999999991,
     "cost": 2.599999999999761,
@@ -1560,6 +1880,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 13.529999999999575,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -9.089999999998861,
+      "next_value": 13.529999999999575
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 555.5831310443731,
     "next_close_gap": 64.50362693038261
@@ -1585,7 +1915,7 @@
     },
     "market_exposure": 132458.4322463242,
     "risk_reducing_solve": null,
-    "solve_ms": 349.452,
+    "solve_ms": 362.617,
     "value_to_close": -0.19199999999266293,
     "market": 3.2600000000063574,
     "cost": 3.4519999999990203,
@@ -1593,6 +1923,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": 331.12999999999477,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -0.19199999999266293,
+      "next_value": 331.12999999999477
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.4811310443794,
     "next_close_gap": 382.1036269303778
@@ -1625,8 +1965,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 54.306,
-       "solver_ms": 12.874,
+       "total_ms": 54.886,
+       "solver_ms": 13.212,
        "nodes": 1,
        "mip_gap": 0.0008036168738412068,
        "dual_bound": 1379.3916098432785,
@@ -1636,8 +1976,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 224.472,
-       "solver_ms": 222.993,
+       "total_ms": 224.431,
+       "solver_ms": 222.901,
        "nodes": 7,
        "mip_gap": 0.0,
        "dual_bound": 36438.634003544,
@@ -1646,7 +1986,7 @@
       }
      ]
     },
-    "solve_ms": 756.134,
+    "solve_ms": 798.919,
     "value_to_close": -311.77799999999615,
     "market": -304.8899999999967,
     "cost": 6.887999999999469,
@@ -1654,43 +1994,64 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 30.839999999997104,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -311.77799999999615,
+      "next_value": 30.839999999997104
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 252.89513104437583,
     "next_close_gap": 81.81362693038014
    },
    "O": {
     "status": "OPTIMAL",
-    "expected_score": 463.50658511108423,
+    "expected_score": 437.9765328814773,
     "current_score": 1436.4922527955644,
-    "uncertainty": 109.23417925480574,
+    "uncertainty": 111.95645604470552,
     "trades": {
-     "RKLB": -265,
-     "SPCX": 319,
-     "SPCX 2026-11-20 145P": 8,
-     "SPY 2026-11-13 770C": -12,
+     "VOO": 32,
+     "RKLB": -257,
+     "SPCX": 356,
+     "SPCX 2026-11-20 145P": 9,
+     "SPY 2026-11-13 770C": -18,
      "SPY 2026-11-13 770P": -4,
-     "SPY 2026-11-27 770C": 4
+     "SPY 2026-11-27 770C": 9
     },
     "risk_passed": true,
     "risk_reasons": [],
-    "gross": 279743.28500000015,
-    "stress_loss": 7855.014208456226,
-    "beta_delta": -18428.579738301894,
+    "gross": 398740.95999999996,
+    "stress_loss": 16279.315649007214,
+    "beta_delta": -10612.33553976295,
     "residual_delta": {
-     "residual_delta:RKLB": -308.7798071137804,
-     "residual_delta:S&P 500": -13221.176635228738,
-     "residual_delta:SPCX": -1253.2302410186312
+     "residual_delta:RKLB": 94.34019288622949,
+     "residual_delta:S&P 500": -5151.334952883368,
+     "residual_delta:SPCX": -1859.8096447735588
     },
-    "market_exposure": 18428.579738301894,
+    "market_exposure": 10612.33553976295,
     "risk_reducing_solve": null,
-    "solve_ms": 3164.925,
+    "solve_ms": 1925.958,
     "value_to_close": null,
     "market": null,
     "cost": null,
-    "improvement": 972.9856676844802,
-    "threshold": 179.69022487415543,
+    "improvement": 998.5157199140871,
+    "threshold": 184.16837019354057,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -732.2619999999838,
+      "next_value": -369.0200000000033
+     }
+    },
     "gross_offset_credit": 3723191.5,
     "close_gap": null,
     "next_close_gap": null
@@ -1745,7 +2106,7 @@
     },
     "market_exposure": 153659.9061505583,
     "risk_reducing_solve": null,
-    "solve_ms": 1336.013,
+    "solve_ms": 1397.645,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1753,6 +2114,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 124.72199999999987,
+      "next_value": -251.3099999999995
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1783,7 +2154,7 @@
     },
     "market_exposure": 697.535941559312,
     "risk_reducing_solve": null,
-    "solve_ms": 2924.978,
+    "solve_ms": 2959.297,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1791,6 +2162,16 @@
     "threshold": 147.3715788549397,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -158.17899999999852,
+      "next_value": -524.9700000000022
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1821,7 +2202,7 @@
     },
     "market_exposure": 14083.880175316248,
     "risk_reducing_solve": null,
-    "solve_ms": 1768.34,
+    "solve_ms": 1772.082,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1829,6 +2210,16 @@
     "threshold": 170.6110611853744,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -547.5260000000026,
+      "next_value": -414.8400000000001
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1866,8 +2257,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 2616.868,
-       "solver_ms": 2516.374,
+       "total_ms": 2645.237,
+       "solver_ms": 2545.258,
        "nodes": 1,
        "mip_gap": 0.007146657017166482,
        "dual_bound": 692.106086426405,
@@ -1877,8 +2268,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 1005.977,
-       "solver_ms": 1002.599,
+       "total_ms": 1004.55,
+       "solver_ms": 1001.18,
        "nodes": 0,
        "mip_gap": 0.4707236540398201,
        "dual_bound": 26966.358309242118,
@@ -1887,7 +2278,7 @@
       }
      ]
     },
-    "solve_ms": 5002.683,
+    "solve_ms": 5047.203,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1895,6 +2286,16 @@
     "threshold": 147.3715788549397,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -158.17899999999852,
+      "next_value": -524.9700000000022
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1925,7 +2326,7 @@
     },
     "market_exposure": 14083.880175316248,
     "risk_reducing_solve": null,
-    "solve_ms": 1801.525,
+    "solve_ms": 1812.285,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -1933,6 +2334,16 @@
     "threshold": 170.6110611853744,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -547.5260000000026,
+      "next_value": -414.8400000000001
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -1958,7 +2369,7 @@
     },
     "market_exposure": 111495.235479797,
     "risk_reducing_solve": null,
-    "solve_ms": 144.381,
+    "solve_ms": 144.694,
     "value_to_close": -4.128000000000005,
     "market": -2.0799999999999983,
     "cost": 2.0480000000000076,
@@ -1966,6 +2377,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": -1.8499999999999943,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -4.128000000000005,
+      "next_value": -1.8499999999999943
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 560.5451310443719,
     "next_close_gap": 49.12362693038304
@@ -1991,7 +2412,7 @@
     },
     "market_exposure": 139531.96453602158,
     "risk_reducing_solve": null,
-    "solve_ms": 346.85,
+    "solve_ms": 350.213,
     "value_to_close": -85.7539999999978,
     "market": -82.88999999999828,
     "cost": 2.863999999999521,
@@ -1999,6 +2420,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 119.78999999999797,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -85.7539999999978,
+      "next_value": 119.78999999999797
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 478.9191310443742,
     "next_close_gap": 170.763626930381
@@ -2031,8 +2462,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 65.679,
-       "solver_ms": 26.813,
+       "total_ms": 68.043,
+       "solver_ms": 27.733,
        "nodes": 1,
        "mip_gap": 0.0008922189620136976,
        "dual_bound": 1251.4454903516523,
@@ -2042,8 +2473,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 28.843,
-       "solver_ms": 27.58,
+       "total_ms": 30.305,
+       "solver_ms": 28.815,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 11361.574003776997,
@@ -2052,7 +2483,7 @@
       }
      ]
     },
-    "solve_ms": 210.79,
+    "solve_ms": 180.123,
     "value_to_close": -101.17399999999897,
     "market": -98.06999999999923,
     "cost": 3.103999999999746,
@@ -2060,45 +2491,65 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 9.109999999999104,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -101.17399999999897,
+      "next_value": 9.109999999999104
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 463.49913104437303,
     "next_close_gap": 60.08362693038214
    },
    "O": {
     "status": "OPTIMAL",
-    "expected_score": 471.6594313547611,
+    "expected_score": 459.4747076673815,
     "current_score": 1283.4041822587087,
-    "uncertainty": 103.71493081177776,
+    "uncertainty": 104.74681477077998,
     "trades": {
-     "RKLB": -282,
-     "SPCX": 120,
-     "SPCX 2026-11-20 145P": 6,
-     "SPY 2026-11-13 770C": -13,
+     "VOO": 33,
+     "RKLB": -274,
+     "SPCX": 363,
+     "SPCX 2026-11-20 145P": 9,
+     "SPY 2026-11-13 770C": -18,
      "SPY 2026-11-13 770P": -4,
-     "SPCX 2026-11-27 145C": 2,
-     "SPY 2026-11-27 770C": 5
+     "SPY 2026-11-27 770C": 9
     },
     "risk_passed": true,
     "risk_reasons": [],
-    "gross": 221103.86500000022,
-    "stress_loss": 7875.288208152374,
-    "beta_delta": -14083.880175316248,
+    "gross": 401504.1750000003,
+    "stress_loss": 16085.592590923072,
+    "beta_delta": -10045.474288554367,
     "residual_delta": {
-     "residual_delta:RKLB": -108.90165730187437,
-     "residual_delta:S&P 500": -9107.676911678987,
-     "residual_delta:SPCX": -1445.8249827696054
+     "residual_delta:RKLB": 299.85834269813495,
+     "residual_delta:S&P 500": -7972.131141162827,
+     "residual_delta:SPCX": -1039.176631469105
     },
-    "market_exposure": 14083.880175316248,
+    "market_exposure": 10045.474288554367,
     "risk_reducing_solve": null,
-    "solve_ms": 2811.852,
+    "solve_ms": 1616.76,
     "value_to_close": null,
     "market": null,
     "cost": null,
-    "improvement": 811.7447509039475,
-    "threshold": 170.6110611853744,
+    "improvement": 823.9294745913272,
+    "threshold": 172.30851029793305,
     "eligible": true,
     "next_value": null,
-    "gross_offset_credit": 3766693.5,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -848.8900000000026,
+      "next_value": -389.06000000000336
+     }
+    },
+    "gross_offset_credit": 3737009.5,
     "close_gap": null,
     "next_close_gap": null
    },
@@ -2152,7 +2603,7 @@
     },
     "market_exposure": 158714.9209312011,
     "risk_reducing_solve": null,
-    "solve_ms": 1151.43,
+    "solve_ms": 1132.06,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -2160,6 +2611,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 110.23600000000059,
+      "next_value": -235.0900000000015
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -2188,7 +2649,7 @@
     },
     "market_exposure": 3405.43097730109,
     "risk_reducing_solve": null,
-    "solve_ms": 3808.894,
+    "solve_ms": 3880.967,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -2196,6 +2657,16 @@
     "threshold": 148.7177584404221,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -218.907999999998,
+      "next_value": -569.0300000000024
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -2225,7 +2696,7 @@
     },
     "market_exposure": 11809.08044706221,
     "risk_reducing_solve": null,
-    "solve_ms": 2700.27,
+    "solve_ms": 2688.027,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -2233,6 +2704,16 @@
     "threshold": 153.31110160819821,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -496.7930000000048,
+      "next_value": -485.4700000000006
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -2269,8 +2750,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 1991.547,
-       "solver_ms": 1888.189,
+       "total_ms": 2011.464,
+       "solver_ms": 1910.423,
        "nodes": 104,
        "mip_gap": 0.007901082220583678,
        "dual_bound": 624.3696744140801,
@@ -2280,8 +2761,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 1004.758,
-       "solver_ms": 1001.327,
+       "total_ms": 1010.08,
+       "solver_ms": 1006.635,
        "nodes": 0,
        "mip_gap": 0.6082803287285562,
        "dual_bound": 19488.53859570861,
@@ -2290,7 +2771,7 @@
       }
      ]
     },
-    "solve_ms": 4171.052,
+    "solve_ms": 4206.619,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -2298,6 +2779,16 @@
     "threshold": 147.46275405357204,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -274.71199999999834,
+      "next_value": -486.90000000000146
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -2327,7 +2818,7 @@
     },
     "market_exposure": 11809.08044706221,
     "risk_reducing_solve": null,
-    "solve_ms": 2714.947,
+    "solve_ms": 2726.159,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -2335,6 +2826,16 @@
     "threshold": 153.31110160819821,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -496.7930000000048,
+      "next_value": -485.4700000000006
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -2357,7 +2858,7 @@
     },
     "market_exposure": 114750.39376461052,
     "risk_reducing_solve": null,
-    "solve_ms": 174.689,
+    "solve_ms": 176.978,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -2365,6 +2866,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -2389,7 +2900,7 @@
     },
     "market_exposure": 136931.5475054445,
     "risk_reducing_solve": null,
-    "solve_ms": 328.971,
+    "solve_ms": 335.906,
     "value_to_close": -78.92299999999837,
     "market": -76.70499999999947,
     "cost": 2.2179999999988924,
@@ -2397,6 +2908,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 157.76000000000158,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -78.92299999999837,
+      "next_value": 157.76000000000158
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 485.75013104437363,
     "next_close_gap": 208.73362693038462
@@ -2426,8 +2947,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 153.133,
-       "solver_ms": 75.855,
+       "total_ms": 119.278,
+       "solver_ms": 77.095,
        "nodes": 1,
        "mip_gap": 0.0004376297163263873,
        "dual_bound": 1198.4153953814393,
@@ -2437,8 +2958,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 10.719,
-       "solver_ms": 9.387,
+       "total_ms": 10.992,
+       "solver_ms": 9.564,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 0.00300386199978675,
@@ -2447,7 +2968,7 @@
       }
      ]
     },
-    "solve_ms": 346.578,
+    "solve_ms": 355.64,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -2455,43 +2976,63 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
    },
    "O": {
     "status": "OPTIMAL",
-    "expected_score": 414.79953868671964,
+    "expected_score": 414.0147979789237,
     "current_score": 1214.743617362107,
-    "uncertainty": 93.19823805969496,
+    "uncertainty": 93.5450064109178,
     "trades": {
-     "RKLB": -263,
+     "RKLB": -256,
      "SPCX": 279,
-     "SPY 2026-11-13 770C": -12,
+     "SPY 2026-11-13 770C": -13,
      "SPY 2026-11-13 770P": -4,
      "SPCX 2026-11-27 145P": 7,
-     "SPY 2026-11-27 770C": 4
+     "SPY 2026-11-27 770C": 5
     },
     "risk_passed": true,
     "risk_reasons": [],
-    "gross": 259320.91500000004,
-    "stress_loss": 7841.711042336611,
-    "beta_delta": -11809.08044706221,
+    "gross": 259679.38499999978,
+    "stress_loss": 7836.4481023653725,
+    "beta_delta": -7730.984002536978,
     "residual_delta": {
-     "residual_delta:RKLB": 646.8484357271373,
-     "residual_delta:S&P 500": -12097.076994031311,
+     "residual_delta:RKLB": 1005.3184357271384,
+     "residual_delta:S&P 500": -9502.587531633493,
      "residual_delta:SPCX": -755.2947556089857
     },
-    "market_exposure": 11809.08044706221,
+    "market_exposure": 7730.984002536978,
     "risk_reducing_solve": null,
-    "solve_ms": 2733.265,
+    "solve_ms": 1474.234,
     "value_to_close": null,
     "market": null,
     "cost": null,
-    "improvement": 799.9440786753873,
-    "threshold": 153.31110160819821,
+    "improvement": 800.7288193831832,
+    "threshold": 153.88153554595976,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -486.9790000000048,
+      "next_value": -476.93000000000063
+     }
+    },
     "gross_offset_credit": 3736397.0,
     "close_gap": null,
     "next_close_gap": null
@@ -2547,7 +3088,7 @@
     },
     "market_exposure": 148921.5114723179,
     "risk_reducing_solve": null,
-    "solve_ms": 1374.77,
+    "solve_ms": 1383.786,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -2555,6 +3096,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 119.78399999999435,
+      "next_value": -326.1400000000026
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -2585,7 +3136,7 @@
     },
     "market_exposure": 3771.311102178617,
     "risk_reducing_solve": null,
-    "solve_ms": 1965.206,
+    "solve_ms": 2017.719,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -2593,6 +3144,16 @@
     "threshold": 146.3069669362121,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -174.82600000000394,
+      "next_value": -495.89000000000226
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -2623,7 +3184,7 @@
     },
     "market_exposure": 12807.649800752857,
     "risk_reducing_solve": null,
-    "solve_ms": 2218.839,
+    "solve_ms": 2187.345,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -2631,6 +3192,16 @@
     "threshold": 166.92323452834373,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -229.25699999999742,
+      "next_value": -413.9300000000002
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -2668,8 +3239,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 1376.496,
-       "solver_ms": 1241.756,
+       "total_ms": 1362.76,
+       "solver_ms": 1264.638,
        "nodes": 1,
        "mip_gap": 0.007310943427273122,
        "dual_bound": 677.7694807250493,
@@ -2679,8 +3250,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 1005.448,
-       "solver_ms": 1002.133,
+       "total_ms": 1009.646,
+       "solver_ms": 1006.167,
        "nodes": 0,
        "mip_gap": 0.3972894317024122,
        "dual_bound": 29802.53504627748,
@@ -2689,7 +3260,7 @@
       }
      ]
     },
-    "solve_ms": 3733.432,
+    "solve_ms": 3772.778,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -2697,6 +3268,16 @@
     "threshold": 146.3069669362121,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -174.82600000000394,
+      "next_value": -495.89000000000226
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -2727,7 +3308,7 @@
     },
     "market_exposure": 12807.649800752857,
     "risk_reducing_solve": null,
-    "solve_ms": 2212.113,
+    "solve_ms": 2228.938,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -2735,6 +3316,16 @@
     "threshold": 166.92323452834373,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -229.25699999999742,
+      "next_value": -413.9300000000002
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -2757,7 +3348,7 @@
     },
     "market_exposure": 118984.95268702379,
     "risk_reducing_solve": null,
-    "solve_ms": 73.119,
+    "solve_ms": 72.686,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -2765,6 +3356,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -2790,7 +3391,7 @@
     },
     "market_exposure": 135424.84858710298,
     "risk_reducing_solve": null,
-    "solve_ms": 474.477,
+    "solve_ms": 475.808,
     "value_to_close": -41.82399999999927,
     "market": -39.559999999998354,
     "cost": 2.2640000000009195,
@@ -2798,6 +3399,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 76.20999999999873,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -41.82399999999927,
+      "next_value": 76.20999999999873
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 522.8491310443727,
     "next_close_gap": 127.18362693038176
@@ -2830,8 +3441,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 93.388,
-       "solver_ms": 54.032,
+       "total_ms": 93.786,
+       "solver_ms": 53.64,
        "nodes": 1,
        "mip_gap": 0.0016895466750625541,
        "dual_bound": 1215.4473887357312,
@@ -2841,8 +3452,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 59.099,
-       "solver_ms": 57.723,
+       "total_ms": 59.491,
+       "solver_ms": 58.049,
        "nodes": 1,
        "mip_gap": 3.5539084343452625e-15,
        "dual_bound": 4094.62300371498,
@@ -2851,7 +3462,7 @@
       }
      ]
     },
-    "solve_ms": 232.471,
+    "solve_ms": 238.642,
     "value_to_close": -37.52399999999974,
     "market": -35.01999999999967,
     "cost": 2.50400000000007,
@@ -2859,45 +3470,65 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": -2.639999999999759,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -37.52399999999974,
+      "next_value": -2.639999999999759
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 527.1491310443722,
     "next_close_gap": 48.333626930383275
    },
    "O": {
     "status": "OPTIMAL",
-    "expected_score": 478.20180732080394,
+    "expected_score": 466.0354769066847,
     "current_score": 1235.6368346919758,
-    "uncertainty": 101.4730908986892,
+    "uncertainty": 104.63939233745734,
     "trades": {
-     "RKLB": -274,
-     "SPCX": 135,
-     "SPCX 2026-11-20 145P": 6,
-     "SPY 2026-11-13 770C": -13,
+     "IVV": 31,
+     "RKLB": -258,
+     "SPCX": 370,
+     "SPCX 2026-11-20 145P": 9,
+     "SPY 2026-11-13 770C": -18,
      "SPY 2026-11-13 770P": -4,
-     "SPCX 2026-11-27 145C": 2,
-     "SPY 2026-11-27 770C": 5
+     "SPY 2026-11-27 770C": 9
     },
     "risk_passed": true,
     "risk_reasons": [],
-    "gross": 219589.6200000001,
-    "stress_loss": 7882.814483898379,
-    "beta_delta": -12807.649800752857,
+    "gross": 399005.46499999985,
+    "stress_loss": 16093.169718014076,
+    "beta_delta": -11916.309402137878,
     "residual_delta": {
-     "residual_delta:RKLB": -477.23581388324965,
-     "residual_delta:S&P 500": -8802.521940924773,
-     "residual_delta:SPCX": -639.1989382288339
+     "residual_delta:RKLB": 346.2041861167527,
+     "residual_delta:S&P 500": -7430.602515291481,
+     "residual_delta:SPCX": -1885.7927148778108
     },
-    "market_exposure": 12807.649800752857,
+    "market_exposure": 11916.309402137878,
     "risk_reducing_solve": null,
-    "solve_ms": 2263.964,
+    "solve_ms": 1629.857,
     "value_to_close": null,
     "market": null,
     "cost": null,
-    "improvement": 757.4350273711718,
-    "threshold": 166.92323452834373,
+    "improvement": 769.601357785291,
+    "threshold": 172.13180039511732,
     "eligible": true,
     "next_value": null,
-    "gross_offset_credit": 3767840.5,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -150.83999999999452,
+      "next_value": -364.4199999999993
+     }
+    },
+    "gross_offset_credit": 3738479.5,
     "close_gap": null,
     "next_close_gap": null
    },
@@ -2953,7 +3584,7 @@
     },
     "market_exposure": 147490.0423229161,
     "risk_reducing_solve": null,
-    "solve_ms": 2601.143,
+    "solve_ms": 2583.024,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -2961,6 +3592,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 33.85599999999641,
+      "next_value": -272.4600000000021
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -2990,7 +3631,7 @@
     },
     "market_exposure": 5452.569603576674,
     "risk_reducing_solve": null,
-    "solve_ms": 2084.494,
+    "solve_ms": 2145.453,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -2998,6 +3639,16 @@
     "threshold": 142.1195625402322,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -166.8860000000065,
+      "next_value": -559.2600000000025
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3027,7 +3678,7 @@
     },
     "market_exposure": 13254.416106073477,
     "risk_reducing_solve": null,
-    "solve_ms": 1722.903,
+    "solve_ms": 1693.419,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3035,6 +3686,16 @@
     "threshold": 153.32724277371972,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -274.6439999999949,
+      "next_value": -494.3900000000008
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3071,8 +3732,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 2207.332,
-       "solver_ms": 2068.716,
+       "total_ms": 2149.273,
+       "solver_ms": 1999.656,
        "nodes": 1,
        "mip_gap": 0.007398327866353858,
        "dual_bound": 617.6696973965982,
@@ -3082,8 +3743,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 1004.102,
-       "solver_ms": 1000.592,
+       "total_ms": 1007.152,
+       "solver_ms": 1003.636,
        "nodes": 0,
        "mip_gap": 0.4664926429776012,
        "dual_bound": 23986.862627628376,
@@ -3092,7 +3753,7 @@
       }
      ]
     },
-    "solve_ms": 5797.84,
+    "solve_ms": 5792.61,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3100,6 +3761,16 @@
     "threshold": 142.1195625402322,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -166.8860000000065,
+      "next_value": -559.2600000000025
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3129,7 +3800,7 @@
     },
     "market_exposure": 13254.416106073477,
     "risk_reducing_solve": null,
-    "solve_ms": 1724.754,
+    "solve_ms": 1698.37,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3137,6 +3808,16 @@
     "threshold": 153.32724277371972,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -274.6439999999949,
+      "next_value": -494.3900000000008
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3159,7 +3840,7 @@
     },
     "market_exposure": 107860.9923511931,
     "risk_reducing_solve": null,
-    "solve_ms": 167.358,
+    "solve_ms": 169.193,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -3167,6 +3848,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -3191,7 +3882,7 @@
     },
     "market_exposure": 136909.25485923153,
     "risk_reducing_solve": null,
-    "solve_ms": 249.558,
+    "solve_ms": 255.292,
     "value_to_close": -85.92999999999878,
     "market": -83.78999999999724,
     "cost": 2.140000000001555,
@@ -3199,6 +3890,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 206.72000000000207,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -85.92999999999878,
+      "next_value": 206.72000000000207
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 478.7431310443732,
     "next_close_gap": 257.6936269303851
@@ -3231,8 +3932,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 57.388,
-       "solver_ms": 15.446,
+       "total_ms": 56.689,
+       "solver_ms": 15.845,
        "nodes": 1,
        "mip_gap": 0.0014891933904008308,
        "dual_bound": 1169.8991216033423,
@@ -3242,8 +3943,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 98.811,
-       "solver_ms": 97.451,
+       "total_ms": 99.476,
+       "solver_ms": 98.095,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 6992.479003706001,
@@ -3252,7 +3953,7 @@
       }
      ]
     },
-    "solve_ms": 332.517,
+    "solve_ms": 333.686,
     "value_to_close": -49.34299999999967,
     "market": -47.08499999999979,
     "cost": 2.25799999999988,
@@ -3260,45 +3961,65 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 5.699999999999449,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -49.34299999999967,
+      "next_value": 5.699999999999449
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 515.3301310443724,
     "next_close_gap": 56.67362693038248
    },
    "O": {
     "status": "OPTIMAL",
-    "expected_score": 372.3363365339415,
+    "expected_score": 343.69788973663475,
     "current_score": 1195.2716914415714,
-    "uncertainty": 93.01495292947443,
+    "uncertainty": 94.34539487389237,
     "trades": {
-     "RKLB": -246,
-     "SPCX": 122,
-     "SPCX 2026-11-20 145P": 6,
-     "SPY 2026-11-13 770C": -13,
+     "IVV": 30,
+     "RKLB": -241,
+     "SPCX": 365,
+     "SPCX 2026-11-20 145P": 9,
+     "SPY 2026-11-13 770C": -18,
      "SPY 2026-11-13 770P": -4,
-     "SPCX 2026-11-27 145C": 2,
-     "SPY 2026-11-27 770C": 5
+     "SPY 2026-11-27 770C": 9
     },
     "risk_passed": true,
     "risk_reasons": [],
-    "gross": 219576.41500000004,
-    "stress_loss": 7861.314696821176,
-    "beta_delta": -9140.816118115137,
+    "gross": 399033.03000000026,
+    "stress_loss": 16106.918040114106,
+    "beta_delta": -5827.931667273922,
     "residual_delta": {
-     "residual_delta:RKLB": 818.4079405107332,
-     "residual_delta:S&P 500": -9553.505061130061,
-     "residual_delta:SPCX": -944.5046194233764
+     "residual_delta:RKLB": 1075.5329405107332,
+     "residual_delta:S&P 500": -7573.788227586294,
+     "residual_delta:SPCX": -847.597277575238
     },
-    "market_exposure": 9140.816118115137,
+    "market_exposure": 5827.931667273922,
     "risk_reducing_solve": null,
-    "solve_ms": 2099.453,
+    "solve_ms": 2326.796,
     "value_to_close": null,
     "market": null,
     "cost": null,
-    "improvement": 822.93535490763,
-    "threshold": 153.00959756898544,
+    "improvement": 851.5738017049366,
+    "threshold": 155.19817456755297,
     "eligible": true,
     "next_value": null,
-    "gross_offset_credit": 3763692.5,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -328.28099999999307,
+      "next_value": -346.1699999999994
+     }
+    },
+    "gross_offset_credit": 3734216.5,
     "close_gap": null,
     "next_close_gap": null
    },
@@ -3353,7 +4074,7 @@
     },
     "market_exposure": 71872.77969327732,
     "risk_reducing_solve": null,
-    "solve_ms": 1325.564,
+    "solve_ms": 1331.47,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3361,6 +4082,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 31.987999999993477,
+      "next_value": -446.7300000000023
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3390,7 +4121,7 @@
     },
     "market_exposure": 18435.533989559946,
     "risk_reducing_solve": null,
-    "solve_ms": 2404.417,
+    "solve_ms": 2400.944,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3398,6 +4129,16 @@
     "threshold": 122.12406743309191,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -51.130000000006405,
+      "next_value": -558.4300000000023
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3427,7 +4168,7 @@
     },
     "market_exposure": 22156.84763225577,
     "risk_reducing_solve": null,
-    "solve_ms": 2084.083,
+    "solve_ms": 2058.52,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3435,6 +4176,16 @@
     "threshold": 138.71217672050906,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -772.6679999999856,
+      "next_value": 431.739999999987
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3471,8 +4222,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 883.168,
-       "solver_ms": 744.188,
+       "total_ms": 815.245,
+       "solver_ms": 723.559,
        "nodes": 3,
        "mip_gap": 0.007937996493403184,
        "dual_bound": 614.7314413318974,
@@ -3482,9 +4233,9 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 1006.204,
-       "solver_ms": 1002.693,
-       "nodes": 24,
+       "total_ms": 922.306,
+       "solver_ms": 919.098,
+       "nodes": 32,
        "mip_gap": 0.6046032642821415,
        "dual_bound": 19041.218265979143,
        "incumbent": 48157.247002580996,
@@ -3492,7 +4243,7 @@
       }
      ]
     },
-    "solve_ms": 3234.968,
+    "solve_ms": 3141.357,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3500,6 +4251,16 @@
     "threshold": 121.7822511166464,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -47.6920000000065,
+      "next_value": -563.2400000000025
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3529,7 +4290,7 @@
     },
     "market_exposure": 22156.84763225577,
     "risk_reducing_solve": null,
-    "solve_ms": 2132.288,
+    "solve_ms": 2057.173,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3537,6 +4298,16 @@
     "threshold": 138.71217672050906,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -772.6679999999856,
+      "next_value": 431.739999999987
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3559,7 +4330,7 @@
     },
     "market_exposure": 122955.23493168608,
     "risk_reducing_solve": null,
-    "solve_ms": 76.8,
+    "solve_ms": 76.141,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -3567,6 +4338,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -3592,7 +4373,7 @@
     },
     "market_exposure": 124425.20133255783,
     "risk_reducing_solve": null,
-    "solve_ms": 722.655,
+    "solve_ms": 561.055,
     "value_to_close": -69.46400000000003,
     "market": -66.59999999999954,
     "cost": 2.864000000000493,
@@ -3600,6 +4381,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 21.360000000000696,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -69.46400000000003,
+      "next_value": 21.360000000000696
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 495.20913104437193,
     "next_close_gap": 72.33362693038373
@@ -3632,8 +4423,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 65.974,
-       "solver_ms": 20.498,
+       "total_ms": 59.569,
+       "solver_ms": 18.885,
        "nodes": 1,
        "mip_gap": 0.0002992645768931811,
        "dual_bound": 1120.2310370539099,
@@ -3643,8 +4434,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 65.669,
-       "solver_ms": 64.047,
+       "total_ms": 59.55,
+       "solver_ms": 58.13,
        "nodes": 0,
        "mip_gap": 0.0,
        "dual_bound": 6358.664003700993,
@@ -3653,7 +4444,7 @@
       }
      ]
     },
-    "solve_ms": 223.356,
+    "solve_ms": 203.987,
     "value_to_close": -44.69999999999952,
     "market": -42.279999999999546,
     "cost": 2.419999999999976,
@@ -3661,6 +4452,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": -0.3500000000004775,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -44.69999999999952,
+      "next_value": -0.3500000000004775
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 519.9731310443725,
     "next_close_gap": 50.62362693038256
@@ -3690,7 +4491,7 @@
     },
     "market_exposure": 22156.84763225577,
     "risk_reducing_solve": null,
-    "solve_ms": 2342.7,
+    "solve_ms": 1997.226,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3698,6 +4499,16 @@
     "threshold": 138.71217672050906,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -772.6679999999856,
+      "next_value": 431.739999999987
+     }
+    },
     "gross_offset_credit": 3585771.0000000005,
     "close_gap": null,
     "next_close_gap": null
@@ -3753,7 +4564,7 @@
     },
     "market_exposure": 62588.56844000076,
     "risk_reducing_solve": null,
-    "solve_ms": 2030.376,
+    "solve_ms": 1963.851,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3761,6 +4572,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -14.284000000000084,
+      "next_value": -456.84000000000236
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3788,7 +4609,7 @@
     },
     "market_exposure": 29707.93234043714,
     "risk_reducing_solve": null,
-    "solve_ms": 2630.389,
+    "solve_ms": 2591.114,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3796,6 +4617,16 @@
     "threshold": 115.73401049193568,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -110.3659999999997,
+      "next_value": -483.6600000000018
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3826,7 +4657,7 @@
     },
     "market_exposure": 24829.400009699428,
     "risk_reducing_solve": null,
-    "solve_ms": 2975.701,
+    "solve_ms": 2961.039,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3834,6 +4665,16 @@
     "threshold": 134.05493269520068,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -270.0019999999958,
+      "next_value": -493.06000000000114
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3868,8 +4709,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 602.46,
-       "solver_ms": 509.058,
+       "total_ms": 606.802,
+       "solver_ms": 513.748,
        "nodes": 1,
        "mip_gap": 0.006935812970020003,
        "dual_bound": 605.1950582861921,
@@ -3879,8 +4720,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 789.855,
-       "solver_ms": 786.56,
+       "total_ms": 790.48,
+       "solver_ms": 787.082,
        "nodes": 16,
        "mip_gap": 0.0,
        "dual_bound": 45401.14800268598,
@@ -3889,7 +4730,7 @@
       }
      ]
     },
-    "solve_ms": 3422.265,
+    "solve_ms": 3423.077,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3897,6 +4738,16 @@
     "threshold": 102.21855800041983,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -95.07199999999973,
+      "next_value": -444.72000000000173
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3927,7 +4778,7 @@
     },
     "market_exposure": 24829.400009699428,
     "risk_reducing_solve": null,
-    "solve_ms": 3000.923,
+    "solve_ms": 3002.88,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -3935,6 +4786,16 @@
     "threshold": 134.05493269520068,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -270.0019999999958,
+      "next_value": -493.06000000000114
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -3957,7 +4818,7 @@
     },
     "market_exposure": 107545.25931066624,
     "risk_reducing_solve": null,
-    "solve_ms": 91.123,
+    "solve_ms": 91.74,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -3965,6 +4826,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -3990,7 +4861,7 @@
     },
     "market_exposure": 131851.7694711259,
     "risk_reducing_solve": null,
-    "solve_ms": 390.838,
+    "solve_ms": 396.297,
     "value_to_close": -73.33599999999879,
     "market": -70.63999999999942,
     "cost": 2.695999999999367,
@@ -3998,6 +4869,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 142.16000000000145,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -73.33599999999879,
+      "next_value": 142.16000000000145
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 491.3371310443732,
     "next_close_gap": 193.13362693038448
@@ -4027,8 +4908,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 90.088,
-       "solver_ms": 48.198,
+       "total_ms": 135.241,
+       "solver_ms": 49.41,
        "nodes": 1,
        "mip_gap": 0.00023434315890747632,
        "dual_bound": 1128.7557438361566,
@@ -4038,8 +4919,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 12.236,
-       "solver_ms": 10.908,
+       "total_ms": 12.862,
+       "solver_ms": 11.441,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 0.003003771000294364,
@@ -4048,7 +4929,7 @@
       }
      ]
     },
-    "solve_ms": 239.67,
+    "solve_ms": 251.172,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -4056,44 +4937,64 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
    },
    "O": {
     "status": "OPTIMAL",
-    "expected_score": 416.8816682509268,
+    "expected_score": 410.84364257345794,
     "current_score": 1144.0751612659433,
-    "uncertainty": 81.49236030103384,
+    "uncertainty": 81.61936063796183,
     "trades": {
-     "IVV": -11,
-     "RKLB": -240,
-     "SPCX": 238,
-     "SPCX 2026-11-20 145P": 6,
-     "SPY 2026-11-13 770C": -11,
+     "IVV": 26,
+     "RKLB": -248,
+     "SPCX": 286,
+     "SPCX 2026-11-20 145P": 7,
+     "SPY 2026-11-13 770C": -15,
      "SPY 2026-11-13 770P": -4,
-     "SPY 2026-11-27 770C": 3
+     "SPY 2026-11-27 770C": 6
     },
     "risk_passed": true,
     "risk_reasons": [],
-    "gross": 229289.64500000002,
-    "stress_loss": 6176.004383827569,
-    "beta_delta": -24829.400009699428,
+    "gross": 355325.41500000004,
+    "stress_loss": 15640.226960724802,
+    "beta_delta": -19385.160370759462,
     "residual_delta": {
-     "residual_delta:RKLB": 1158.166360336225,
-     "residual_delta:S&P 500": -22750.753270541045,
-     "residual_delta:SPCX": -2207.9351011780454
+     "residual_delta:RKLB": 744.3263603362284,
+     "residual_delta:S&P 500": -18646.28352154472,
+     "residual_delta:SPCX": -1208.9792129127454
     },
-    "market_exposure": 24829.400009699428,
+    "market_exposure": 19385.160370759462,
     "risk_reducing_solve": null,
-    "solve_ms": 2942.021,
+    "solve_ms": 1969.314,
     "value_to_close": null,
     "market": null,
     "cost": null,
-    "improvement": 727.1934930150164,
-    "threshold": 134.05493269520068,
+    "improvement": 733.2315186924853,
+    "threshold": 134.26384824944722,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -386.54599999999397,
+      "next_value": -329.8599999999993
+     }
+    },
     "gross_offset_credit": 3735735.5,
     "close_gap": null,
     "next_close_gap": null
@@ -4127,36 +5028,46 @@
    "nav_gap": 226.63114469335414,
    "A": {
     "status": "OPTIMAL",
-    "expected_score": 1052.6802197619643,
+    "expected_score": 1064.0510076304615,
     "current_score": 1123.1158000623043,
-    "uncertainty": 37.604555958734025,
+    "uncertainty": 38.8693973898584,
     "trades": {
      "IVV": -51,
-     "RKLB": -160,
-     "SPCX": -71,
+     "RKLB": -177,
+     "SPCX": -65,
      "SPCX 2026-11-20 145P": -1,
-     "SPY 2026-11-27 770P": -1
+     "SPY 2026-11-13 770P": -1
     },
     "risk_passed": true,
     "risk_reasons": [],
-    "gross": 2950793.79,
-    "stress_loss": 8817.725744180607,
-    "beta_delta": 74739.86888988048,
+    "gross": 2950793.8549999995,
+    "stress_loss": 8989.528900680816,
+    "beta_delta": 76188.87219581833,
     "residual_delta": {
-     "residual_delta:RKLB": 6206.5653924820945,
-     "residual_delta:S&P 500": 56671.97413670027,
-     "residual_delta:SPCX": -2462.7904247917613
+     "residual_delta:RKLB": 5321.120392482102,
+     "residual_delta:S&P 500": 59046.00962976423,
+     "residual_delta:SPCX": -1577.280424791752
     },
-    "market_exposure": 74739.86888988048,
+    "market_exposure": 76188.87219581833,
     "risk_reducing_solve": null,
-    "solve_ms": 1606.716,
+    "solve_ms": 1574.356,
     "value_to_close": null,
     "market": null,
     "cost": null,
-    "improvement": 70.43558030034,
+    "improvement": 59.06479243184276,
     "threshold": 100.0,
     "eligible": false,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 32.83499999999421,
+      "next_value": -455.03000000000236
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -4186,7 +5097,7 @@
     },
     "market_exposure": 22996.72744941438,
     "risk_reducing_solve": null,
-    "solve_ms": 2328.311,
+    "solve_ms": 2332.212,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -4194,6 +5105,16 @@
     "threshold": 110.4956203799658,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -12.099000000005496,
+      "next_value": -505.8100000000021
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -4223,7 +5144,7 @@
     },
     "market_exposure": 19636.309764995473,
     "risk_reducing_solve": null,
-    "solve_ms": 1756.29,
+    "solve_ms": 1766.589,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -4231,6 +5152,16 @@
     "threshold": 131.65643647786771,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -307.5480000000002,
+      "next_value": 9.410000000003635
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -4267,8 +5198,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 348.212,
-       "solver_ms": 221.514,
+       "total_ms": 358.135,
+       "solver_ms": 225.166,
        "nodes": 1,
        "mip_gap": 0.006092609013535273,
        "dual_bound": 605.7442800666902,
@@ -4278,8 +5209,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 795.619,
-       "solver_ms": 792.302,
+       "total_ms": 804.77,
+       "solver_ms": 801.498,
        "nodes": 32,
        "mip_gap": 0.5575027733382342,
        "dual_bound": 20282.1803105649,
@@ -4288,7 +5219,7 @@
       }
      ]
     },
-    "solve_ms": 2679.918,
+    "solve_ms": 2714.341,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -4296,6 +5227,16 @@
     "threshold": 110.4956203799658,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -12.099000000005496,
+      "next_value": -505.8100000000021
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -4325,7 +5266,7 @@
     },
     "market_exposure": 19636.309764995473,
     "risk_reducing_solve": null,
-    "solve_ms": 1714.329,
+    "solve_ms": 1718.058,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -4333,6 +5274,16 @@
     "threshold": 131.65643647786771,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -307.5480000000002,
+      "next_value": 9.410000000003635
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -4357,7 +5308,7 @@
     },
     "market_exposure": 115817.06600197579,
     "risk_reducing_solve": null,
-    "solve_ms": 144.204,
+    "solve_ms": 101.279,
     "value_to_close": -0.3769999999999698,
     "market": 0.664999999999992,
     "cost": 1.0419999999999618,
@@ -4365,6 +5316,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 4.130000000000024,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -0.3769999999999698,
+      "next_value": 4.130000000000024
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.296131044372,
     "next_close_gap": 55.10362693038306
@@ -4391,7 +5352,7 @@
     },
     "market_exposure": 120999.78996101569,
     "risk_reducing_solve": null,
-    "solve_ms": 394.889,
+    "solve_ms": 438.952,
     "value_to_close": -106.2350000000001,
     "market": -102.24499999999847,
     "cost": 3.9900000000016234,
@@ -4399,6 +5360,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 87.9400000000017,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -106.2350000000001,
+      "next_value": 87.9400000000017
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 458.43813104437186,
     "next_close_gap": 138.91362693038474
@@ -4432,8 +5403,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 67.127,
-       "solver_ms": 26.192,
+       "total_ms": 65.979,
+       "solver_ms": 25.473,
        "nodes": 1,
        "mip_gap": 0.0006498004284657636,
        "dual_bound": 1077.9703325855223,
@@ -4443,8 +5414,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 82.313,
-       "solver_ms": 80.789,
+       "total_ms": 81.367,
+       "solver_ms": 79.923,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 18754.334003619002,
@@ -4453,7 +5424,7 @@
       }
      ]
     },
-    "solve_ms": 257.666,
+    "solve_ms": 257.437,
     "value_to_close": -65.27799999999958,
     "market": -61.68999999999977,
     "cost": 3.5879999999998065,
@@ -4461,6 +5432,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 58.41999999999865,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -65.27799999999958,
+      "next_value": 58.41999999999865
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 499.3951310443724,
     "next_close_gap": 109.39362693038169
@@ -4490,7 +5471,7 @@
     },
     "market_exposure": 19636.309764995473,
     "risk_reducing_solve": null,
-    "solve_ms": 1743.855,
+    "solve_ms": 1804.834,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -4498,6 +5479,16 @@
     "threshold": 131.65643647786771,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -307.5480000000002,
+      "next_value": 9.410000000003635
+     }
+    },
     "gross_offset_credit": 3659135.9999999995,
     "close_gap": null,
     "next_close_gap": null
@@ -4553,7 +5544,7 @@
     },
     "market_exposure": 70769.37986700772,
     "risk_reducing_solve": null,
-    "solve_ms": 1505.149,
+    "solve_ms": 1517.901,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -4561,6 +5552,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 82.42999999999438,
+      "next_value": -483.60000000000235
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -4590,7 +5591,7 @@
     },
     "market_exposure": 24302.728029744256,
     "risk_reducing_solve": null,
-    "solve_ms": 2050.796,
+    "solve_ms": 2023.352,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -4598,6 +5599,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 78.68599999999442,
+      "next_value": -503.74000000000245
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -4626,7 +5637,7 @@
     },
     "market_exposure": 16675.618660038745,
     "risk_reducing_solve": null,
-    "solve_ms": 1309.738,
+    "solve_ms": 1350.114,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -4634,6 +5645,16 @@
     "threshold": 110.59034812911975,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -247.7099999999987,
+      "next_value": 105.00000000000426
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -4669,8 +5690,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 1328.269,
-       "solver_ms": 1240.059,
+       "total_ms": 1228.796,
+       "solver_ms": 1106.645,
        "nodes": 18,
        "mip_gap": 0.005605717447619117,
        "dual_bound": 826.1881881835369,
@@ -4680,8 +5701,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 719.683,
-       "solver_ms": 716.258,
+       "total_ms": 701.668,
+       "solver_ms": 698.632,
        "nodes": 32,
        "mip_gap": 0.38424137565618377,
        "dual_bound": 28465.23303788995,
@@ -4690,7 +5711,7 @@
       }
      ]
     },
-    "solve_ms": 3655.092,
+    "solve_ms": 3457.185,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -4698,6 +5719,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 63.08599999999508,
+      "next_value": -472.87000000000216
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -4726,7 +5757,7 @@
     },
     "market_exposure": 16675.618660038745,
     "risk_reducing_solve": null,
-    "solve_ms": 1377.964,
+    "solve_ms": 1309.997,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -4734,6 +5765,16 @@
     "threshold": 110.59034812911975,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -247.7099999999987,
+      "next_value": 105.00000000000426
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -4756,7 +5797,7 @@
     },
     "market_exposure": 118604.45995102555,
     "risk_reducing_solve": null,
-    "solve_ms": 135.337,
+    "solve_ms": 175.896,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -4764,6 +5805,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -4788,7 +5839,7 @@
     },
     "market_exposure": 99534.56227643939,
     "risk_reducing_solve": null,
-    "solve_ms": 171.557,
+    "solve_ms": 172.15,
     "value_to_close": -23.175999999999966,
     "market": -21.120000000000175,
     "cost": 2.0559999999997896,
@@ -4796,6 +5847,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": -107.3599999999999,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -23.175999999999966,
+      "next_value": -107.3599999999999
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 541.497131044372,
     "next_close_gap": -56.386373069616866
@@ -4827,8 +5888,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 58.653,
-       "solver_ms": 16.658,
+       "total_ms": 56.289,
+       "solver_ms": 16.432,
        "nodes": 1,
        "mip_gap": 0.00041271936095627033,
        "dual_bound": 1212.4830397851056,
@@ -4838,8 +5899,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 29.568,
-       "solver_ms": 28.016,
+       "total_ms": 29.079,
+       "solver_ms": 27.755,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 1047.203003710979,
@@ -4848,7 +5909,7 @@
       }
      ]
     },
-    "solve_ms": 232.307,
+    "solve_ms": 228.261,
     "value_to_close": -6.039999999999992,
     "market": -4.80000000000004,
     "cost": 1.2399999999999523,
@@ -4856,6 +5917,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": -24.399999999999977,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -6.039999999999992,
+      "next_value": -24.399999999999977
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 558.633131044372,
     "next_close_gap": 26.573626930383057
@@ -4884,7 +5955,7 @@
     },
     "market_exposure": 16675.618660038745,
     "risk_reducing_solve": null,
-    "solve_ms": 1323.997,
+    "solve_ms": 1312.985,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -4892,6 +5963,16 @@
     "threshold": 110.59034812911975,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -247.7099999999987,
+      "next_value": 105.00000000000426
+     }
+    },
     "gross_offset_credit": 3659736.0,
     "close_gap": null,
     "next_close_gap": null
@@ -4947,7 +6028,7 @@
     },
     "market_exposure": 70762.15938288718,
     "risk_reducing_solve": null,
-    "solve_ms": 2284.023,
+    "solve_ms": 2275.471,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -4955,6 +6036,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 34.541000000002285,
+      "next_value": -295.2300000000024
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -4984,7 +6075,7 @@
     },
     "market_exposure": 33015.11714244468,
     "risk_reducing_solve": null,
-    "solve_ms": 1942.419,
+    "solve_ms": 1857.079,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -4992,6 +6083,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -19.30799999999826,
+      "next_value": -353.5700000000013
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5020,7 +6121,7 @@
     },
     "market_exposure": 19907.467080457543,
     "risk_reducing_solve": null,
-    "solve_ms": 1539.778,
+    "solve_ms": 1528.033,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5028,6 +6129,16 @@
     "threshold": 103.18990003035164,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -280.564999999988,
+      "next_value": 727.4399999999866
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5065,8 +6176,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 550.805,
-       "solver_ms": 447.267,
+       "total_ms": 588.434,
+       "solver_ms": 441.732,
        "nodes": 38,
        "mip_gap": 0.0038671605384448804,
        "dual_bound": 808.5524546062425,
@@ -5076,8 +6187,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 680.133,
-       "solver_ms": 676.587,
+       "total_ms": 676.151,
+       "solver_ms": 672.677,
        "nodes": 32,
        "mip_gap": 0.6198746933880099,
        "dual_bound": 11802.387865370081,
@@ -5086,7 +6197,7 @@
       }
      ]
     },
-    "solve_ms": 3567.458,
+    "solve_ms": 3588.369,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5094,6 +6205,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -45.87999999999788,
+      "next_value": -499.8000000000014
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5122,7 +6243,7 @@
     },
     "market_exposure": 19907.467080457543,
     "risk_reducing_solve": null,
-    "solve_ms": 1569.883,
+    "solve_ms": 1529.488,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5130,6 +6251,16 @@
     "threshold": 103.18990003035164,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -280.564999999988,
+      "next_value": 727.4399999999866
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5152,7 +6283,7 @@
     },
     "market_exposure": 84705.63979100541,
     "risk_reducing_solve": null,
-    "solve_ms": 72.079,
+    "solve_ms": 71.973,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -5160,6 +6291,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -5184,7 +6325,7 @@
     },
     "market_exposure": 104957.48200591224,
     "risk_reducing_solve": null,
-    "solve_ms": 213.468,
+    "solve_ms": 211.473,
     "value_to_close": -35.567999999998236,
     "market": -34.21999999999855,
     "cost": 1.3479999999996835,
@@ -5192,6 +6333,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 140.0699999999979,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -35.567999999998236,
+      "next_value": 140.0699999999979
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 529.1051310443737,
     "next_close_gap": 191.04362693038092
@@ -5224,8 +6375,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 52.593,
-       "solver_ms": 11.073,
+       "total_ms": 51.354,
+       "solver_ms": 10.955,
        "nodes": 1,
        "mip_gap": 0.001208348587118355,
        "dual_bound": 1180.206091980922,
@@ -5235,8 +6386,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 81.753,
-       "solver_ms": 80.268,
+       "total_ms": 81.593,
+       "solver_ms": 80.177,
        "nodes": 1,
        "mip_gap": 6.170408065042149e-16,
        "dual_bound": 5895.848003476996,
@@ -5245,7 +6396,7 @@
       }
      ]
     },
-    "solve_ms": 215.48,
+    "solve_ms": 212.021,
     "value_to_close": -17.460999999999764,
     "market": -15.094999999999992,
     "cost": 2.3659999999997736,
@@ -5253,6 +6404,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 2.140000000000356,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -17.460999999999764,
+      "next_value": 2.140000000000356
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 547.2121310443722,
     "next_close_gap": 53.11362693038339
@@ -5281,7 +6442,7 @@
     },
     "market_exposure": 19907.467080457543,
     "risk_reducing_solve": null,
-    "solve_ms": 1570.11,
+    "solve_ms": 1567.396,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5289,6 +6450,16 @@
     "threshold": 103.18990003035164,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -280.564999999988,
+      "next_value": 727.4399999999866
+     }
+    },
     "gross_offset_credit": 3577851.5,
     "close_gap": null,
     "next_close_gap": null
@@ -5344,7 +6515,7 @@
     },
     "market_exposure": 71528.92387748056,
     "risk_reducing_solve": null,
-    "solve_ms": 2138.193,
+    "solve_ms": 2129.761,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5352,6 +6523,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 6.513999999993939,
+      "next_value": -311.1400000000026
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5380,7 +6561,7 @@
     },
     "market_exposure": 30445.67809090679,
     "risk_reducing_solve": null,
-    "solve_ms": 2123.268,
+    "solve_ms": 2107.663,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5388,6 +6569,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -28.988000000002707,
+      "next_value": -331.59000000000106
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5416,7 +6607,7 @@
     },
     "market_exposure": 17080.737431069487,
     "risk_reducing_solve": null,
-    "solve_ms": 1403.487,
+    "solve_ms": 1397.275,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5424,6 +6615,16 @@
     "threshold": 101.24683119440039,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -120.18900000000039,
+      "next_value": 240.6500000000046
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5459,8 +6660,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 1106.914,
-       "solver_ms": 1002.605,
+       "total_ms": 1084.605,
+       "solver_ms": 984.186,
        "nodes": 5,
        "mip_gap": 0.005830802179595068,
        "dual_bound": 726.5658828558587,
@@ -5470,8 +6671,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 855.086,
-       "solver_ms": 851.72,
+       "total_ms": 846.913,
+       "solver_ms": 843.44,
        "nodes": 32,
        "mip_gap": 0.544098396278197,
        "dual_bound": 15137.85122263414,
@@ -5480,7 +6681,7 @@
       }
      ]
     },
-    "solve_ms": 4146.33,
+    "solve_ms": 4110.996,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5488,6 +6689,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -28.988000000002707,
+      "next_value": -331.59000000000106
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5516,7 +6727,7 @@
     },
     "market_exposure": 17080.737431069487,
     "risk_reducing_solve": null,
-    "solve_ms": 1459.836,
+    "solve_ms": 1438.169,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5524,6 +6735,16 @@
     "threshold": 101.24683119440039,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -120.18900000000039,
+      "next_value": 240.6500000000046
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5548,7 +6769,7 @@
     },
     "market_exposure": 76310.84771818313,
     "risk_reducing_solve": null,
-    "solve_ms": 215.878,
+    "solve_ms": 213.711,
     "value_to_close": -2.9559999999999262,
     "market": -1.919999999999959,
     "cost": 1.0359999999999672,
@@ -5556,6 +6777,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 14.489999999999782,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -2.9559999999999262,
+      "next_value": 14.489999999999782
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 561.7171310443721,
     "next_close_gap": 65.46362693038282
@@ -5580,7 +6811,7 @@
     },
     "market_exposure": 110080.08339485049,
     "risk_reducing_solve": null,
-    "solve_ms": 295.356,
+    "solve_ms": 292.799,
     "value_to_close": -39.63400000000013,
     "market": -38.069999999997435,
     "cost": 1.564000000002693,
@@ -5588,6 +6819,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 255.68000000000256,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -39.63400000000013,
+      "next_value": 255.68000000000256
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 525.0391310443719,
     "next_close_gap": 306.6536269303856
@@ -5620,8 +6861,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 97.147,
-       "solver_ms": 11.434,
+       "total_ms": 51.919,
+       "solver_ms": 11.204,
        "nodes": 1,
        "mip_gap": 0.0030189842201879306,
        "dual_bound": 1125.6074718842792,
@@ -5631,8 +6872,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 106.379,
-       "solver_ms": 104.841,
+       "total_ms": 105.117,
+       "solver_ms": 103.675,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 6956.294003483996,
@@ -5641,7 +6882,7 @@
       }
      ]
     },
-    "solve_ms": 428.563,
+    "solve_ms": 379.194,
     "value_to_close": -12.44199999999978,
     "market": -10.189999999999898,
     "cost": 2.2519999999998817,
@@ -5649,6 +6890,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 6.9199999999994475,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -12.44199999999978,
+      "next_value": 6.9199999999994475
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 552.2311310443722,
     "next_close_gap": 57.89362693038248
@@ -5677,7 +6928,7 @@
     },
     "market_exposure": 17080.737431069487,
     "risk_reducing_solve": null,
-    "solve_ms": 1989.95,
+    "solve_ms": 2154.772,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5685,6 +6936,16 @@
     "threshold": 101.24683119440039,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -120.18900000000039,
+      "next_value": 240.6500000000046
+     }
+    },
     "gross_offset_credit": 3651336.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5741,7 +7002,7 @@
     },
     "market_exposure": 116439.61209169147,
     "risk_reducing_solve": null,
-    "solve_ms": 1520.13,
+    "solve_ms": 1503.632,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5749,6 +7010,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -39.91799999999888,
+      "next_value": -456.820000000003
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5778,7 +7049,7 @@
     },
     "market_exposure": 24601.45344993184,
     "risk_reducing_solve": null,
-    "solve_ms": 1587.11,
+    "solve_ms": 1566.772,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5786,6 +7057,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -64.43999999999966,
+      "next_value": -295.0300000000007
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5813,7 +7094,7 @@
     },
     "market_exposure": 17135.72441051033,
     "risk_reducing_solve": null,
-    "solve_ms": 1529.807,
+    "solve_ms": 1516.873,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5821,6 +7102,16 @@
     "threshold": 110.86858327858644,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -36.16399999999985,
+      "next_value": -142.73999999999987
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5858,8 +7149,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 612.737,
-       "solver_ms": 468.396,
+       "total_ms": 612.134,
+       "solver_ms": 468.281,
        "nodes": 33,
        "mip_gap": 0.008296902559292467,
        "dual_bound": 597.5802331946693,
@@ -5869,8 +7160,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 1004.226,
-       "solver_ms": 1000.798,
+       "total_ms": 1005.938,
+       "solver_ms": 1002.324,
        "nodes": 0,
        "mip_gap": 0.5933073724022321,
        "dual_bound": 14607.643956163432,
@@ -5879,7 +7170,7 @@
       }
      ]
     },
-    "solve_ms": 3105.08,
+    "solve_ms": 3087.681,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5887,6 +7178,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -64.21099999999964,
+      "next_value": -296.8400000000007
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5914,7 +7215,7 @@
     },
     "market_exposure": 17135.72441051033,
     "risk_reducing_solve": null,
-    "solve_ms": 1489.187,
+    "solve_ms": 1476.91,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -5922,6 +7223,16 @@
     "threshold": 110.86858327858644,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -36.16399999999985,
+      "next_value": -142.73999999999987
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -5946,7 +7257,7 @@
     },
     "market_exposure": 88406.79317797453,
     "risk_reducing_solve": null,
-    "solve_ms": 364.1,
+    "solve_ms": 304.479,
     "value_to_close": -9.498000000001184,
     "market": -7.910000000000764,
     "cost": 1.5880000000004202,
@@ -5954,6 +7265,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 76.16000000000076,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -9.498000000001184,
+      "next_value": 76.16000000000076
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 555.1751310443708,
     "next_close_gap": 127.1336269303838
@@ -5980,7 +7301,7 @@
     },
     "market_exposure": 105085.03011643363,
     "risk_reducing_solve": null,
-    "solve_ms": 213.322,
+    "solve_ms": 251.075,
     "value_to_close": -60.306000000005184,
     "market": -54.33000000000362,
     "cost": 5.976000000001565,
@@ -5988,6 +7309,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 300.33000000000334,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -60.306000000005184,
+      "next_value": 300.33000000000334
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 504.36713104436683,
     "next_close_gap": 351.3036269303864
@@ -6021,8 +7352,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 66.106,
-       "solver_ms": 25.39,
+       "total_ms": 64.676,
+       "solver_ms": 25.352,
        "nodes": 1,
        "mip_gap": 0.001522871373343142,
        "dual_bound": 1024.7417638924203,
@@ -6032,8 +7363,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 83.956,
-       "solver_ms": 82.473,
+       "total_ms": 82.696,
+       "solver_ms": 81.109,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 13490.549003477001,
@@ -6042,7 +7373,7 @@
       }
      ]
     },
-    "solve_ms": 463.381,
+    "solve_ms": 461.806,
     "value_to_close": -21.89700000000018,
     "market": -18.495000000000203,
     "cost": 3.4019999999999753,
@@ -6050,42 +7381,63 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 84.2399999999997,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -21.89700000000018,
+      "next_value": 84.2399999999997
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 542.7761310443718,
     "next_close_gap": 135.21362693038273
    },
    "O": {
     "status": "OPTIMAL",
-    "expected_score": 495.29265528707083,
+    "expected_score": 492.8739983804941,
     "current_score": 1061.8600366998503,
-    "uncertainty": 64.83028596532382,
+    "uncertainty": 63.511203760177175,
     "trades": {
-     "RKLB": -183,
+     "IVV": -28,
+     "RKLB": -186,
      "SPCX 2026-11-20 145P": 1,
-     "SPY 2026-11-13 770C": -8,
+     "SPY 2026-11-13 770C": -7,
      "SPY 2026-11-13 770P": -4
     },
     "risk_passed": true,
     "risk_reasons": [],
-    "gross": 127835.37999999989,
-    "stress_loss": 7774.632329983922,
-    "beta_delta": -31427.22144547518,
+    "gross": 106291.6000000001,
+    "stress_loss": 6839.831738138542,
+    "beta_delta": -23633.44305204571,
     "residual_delta": {
-     "residual_delta:RKLB": 1417.224950580814,
-     "residual_delta:S&P 500": -26149.942583061405,
+     "residual_delta:RKLB": 1260.2649505808222,
+     "residual_delta:S&P 500": -17735.24617482168,
      "residual_delta:SPCX": -3584.7715579555606
     },
-    "market_exposure": 31427.22144547518,
+    "market_exposure": 23633.44305204571,
     "risk_reducing_solve": null,
-    "solve_ms": 2046.201,
+    "solve_ms": 2005.302,
     "value_to_close": null,
     "market": null,
     "cost": null,
-    "improvement": 566.5673814127795,
-    "threshold": 106.64582041295769,
+    "improvement": 568.9860383193562,
+    "threshold": 104.47593018549145,
     "eligible": true,
     "next_value": null,
-    "gross_offset_credit": 3726131.5,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -42.66799999999908,
+      "next_value": -379.2400000000013
+     }
+    },
+    "gross_offset_credit": 3650088.0,
     "close_gap": null,
     "next_close_gap": null
    },
@@ -6140,7 +7492,7 @@
     },
     "market_exposure": 72795.62211479864,
     "risk_reducing_solve": null,
-    "solve_ms": 2362.548,
+    "solve_ms": 2365.905,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -6148,6 +7500,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 1.7330000000001125,
+      "next_value": -302.9700000000024
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -6176,7 +7538,7 @@
     },
     "market_exposure": 55833.80053909258,
     "risk_reducing_solve": null,
-    "solve_ms": 2326.699,
+    "solve_ms": 2302.137,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -6184,6 +7546,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -73.0230000000023,
+      "next_value": -158.0299999999996
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -6212,7 +7584,7 @@
     },
     "market_exposure": 17943.78424586785,
     "risk_reducing_solve": null,
-    "solve_ms": 1513.533,
+    "solve_ms": 1509.077,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -6220,6 +7592,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -214.21099999998663,
+      "next_value": 700.7499999999866
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -6256,8 +7638,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 470.219,
-       "solver_ms": 367.064,
+       "total_ms": 460.587,
+       "solver_ms": 360.044,
        "nodes": 5,
        "mip_gap": 0.0059190199897562554,
        "dual_bound": 802.2373166053861,
@@ -6267,8 +7649,8 @@
       {
        "stage": "turnover",
        "status": "user_limit",
-       "total_ms": 1006.21,
-       "solver_ms": 1002.632,
+       "total_ms": 1006.023,
+       "solver_ms": 1002.45,
        "nodes": 1,
        "mip_gap": 0.7581299760428939,
        "dual_bound": 8083.803644526401,
@@ -6277,7 +7659,7 @@
       }
      ]
     },
-    "solve_ms": 3861.645,
+    "solve_ms": 3887.922,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -6285,6 +7667,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -17.98800000000052,
+      "next_value": -329.63000000000216
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -6313,7 +7705,7 @@
     },
     "market_exposure": 17943.78424586785,
     "risk_reducing_solve": null,
-    "solve_ms": 1556.117,
+    "solve_ms": 1548.852,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -6321,6 +7713,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -214.21099999998663,
+      "next_value": 700.7499999999866
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -6345,7 +7747,7 @@
     },
     "market_exposure": 82967.62506611283,
     "risk_reducing_solve": null,
-    "solve_ms": 177.915,
+    "solve_ms": 176.524,
     "value_to_close": -3.4989999999997736,
     "market": -2.4449999999998226,
     "cost": 1.053999999999951,
@@ -6353,6 +7755,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 14.489999999999782,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -3.4989999999997736,
+      "next_value": 14.489999999999782
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 561.1741310443722,
     "next_close_gap": 65.46362693038282
@@ -6378,7 +7790,7 @@
     },
     "market_exposure": 89580.54498324284,
     "risk_reducing_solve": null,
-    "solve_ms": 202.713,
+    "solve_ms": 203.885,
     "value_to_close": -22.047999999998545,
     "market": -19.579999999998883,
     "cost": 2.4679999999996642,
@@ -6386,6 +7798,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 66.14999999999864,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -22.047999999998545,
+      "next_value": 66.14999999999864
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 542.6251310443735,
     "next_close_gap": 117.12362693038168
@@ -6417,8 +7839,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 53.755,
-       "solver_ms": 12.026,
+       "total_ms": 53.988,
+       "solver_ms": 12.29,
        "nodes": 1,
        "mip_gap": 0.001993208012083768,
        "dual_bound": 1126.913377962945,
@@ -6428,8 +7850,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 11.325,
-       "solver_ms": 9.997,
+       "total_ms": 11.227,
+       "solver_ms": 9.911,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 0.0030035460004000925,
@@ -6438,7 +7860,7 @@
       }
      ]
     },
-    "solve_ms": 290.561,
+    "solve_ms": 292.737,
     "value_to_close": -3.4989999999997736,
     "market": -2.4449999999998226,
     "cost": 1.053999999999951,
@@ -6446,6 +7868,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 14.489999999999782,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -3.4989999999997736,
+      "next_value": 14.489999999999782
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 561.1741310443722,
     "next_close_gap": 65.46362693038282
@@ -6474,7 +7906,7 @@
     },
     "market_exposure": 17943.78424586785,
     "risk_reducing_solve": null,
-    "solve_ms": 1382.858,
+    "solve_ms": 1381.296,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -6482,6 +7914,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": -214.21099999998663,
+      "next_value": 700.7499999999866
+     }
+    },
     "gross_offset_credit": 3576065.5,
     "close_gap": null,
     "next_close_gap": null
@@ -6536,7 +7978,7 @@
     },
     "market_exposure": 68390.17391906657,
     "risk_reducing_solve": null,
-    "solve_ms": 1306.193,
+    "solve_ms": 1300.818,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -6544,6 +7986,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 86.44500000000193,
+      "next_value": -225.26000000000244
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -6570,7 +8022,7 @@
     },
     "market_exposure": 47248.80182240537,
     "risk_reducing_solve": null,
-    "solve_ms": 1148.994,
+    "solve_ms": 1135.09,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -6578,6 +8030,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 54.970000000001846,
+      "next_value": -315.52000000000317
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -6603,7 +8065,7 @@
     },
     "market_exposure": 31059.69984254433,
     "risk_reducing_solve": null,
-    "solve_ms": 435.459,
+    "solve_ms": 429.046,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -6611,6 +8073,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -6645,8 +8117,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 804.086,
-       "solver_ms": 737.145,
+       "total_ms": 782.372,
+       "solver_ms": 717.944,
        "nodes": 1,
        "mip_gap": 0.005735893547896888,
        "dual_bound": 775.5519196269839,
@@ -6656,8 +8128,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 874.485,
-       "solver_ms": 871.65,
+       "total_ms": 760.946,
+       "solver_ms": 758.478,
        "nodes": 21,
        "mip_gap": 0.0,
        "dual_bound": 34437.17199991603,
@@ -6666,7 +8138,7 @@
       }
      ]
     },
-    "solve_ms": 2976.407,
+    "solve_ms": 2811.421,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -6674,6 +8146,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 41.43900000000111,
+      "next_value": -155.0700000000016
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -6699,7 +8181,7 @@
     },
     "market_exposure": 31059.69984254433,
     "risk_reducing_solve": null,
-    "solve_ms": 399.592,
+    "solve_ms": 427.023,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -6707,6 +8189,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": null,
     "next_close_gap": null
@@ -6729,7 +8221,7 @@
     },
     "market_exposure": 72580.79231149133,
     "risk_reducing_solve": null,
-    "solve_ms": 100.909,
+    "solve_ms": 60.06,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -6737,6 +8229,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -6762,7 +8264,7 @@
     },
     "market_exposure": 89486.19775129137,
     "risk_reducing_solve": null,
-    "solve_ms": 181.916,
+    "solve_ms": 181.592,
     "value_to_close": -23.079999999998364,
     "market": -20.539999999998855,
     "cost": 2.539999999999509,
@@ -6770,6 +8272,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 75.61999999999873,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": -23.079999999998364,
+      "next_value": 75.61999999999873
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 541.5931310443736,
     "next_close_gap": 126.59362693038176
@@ -6799,8 +8311,8 @@
       {
        "stage": "primary",
        "status": "optimal",
-       "total_ms": 42.91,
-       "solver_ms": 7.385,
+       "total_ms": 43.469,
+       "solver_ms": 7.513,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 1103.425192310247,
@@ -6810,8 +8322,8 @@
       {
        "stage": "turnover",
        "status": "optimal",
-       "total_ms": 7.265,
-       "solver_ms": 6.084,
+       "total_ms": 7.187,
+       "solver_ms": 5.994,
        "nodes": 1,
        "mip_gap": 0.0,
        "dual_bound": 0.002000366061110981,
@@ -6820,7 +8332,7 @@
       }
      ]
     },
-    "solve_ms": 116.529,
+    "solve_ms": 117.739,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -6828,6 +8340,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -6853,7 +8375,7 @@
     },
     "market_exposure": 31059.69984254433,
     "risk_reducing_solve": null,
-    "solve_ms": 471.819,
+    "solve_ms": 513.249,
     "value_to_close": null,
     "market": null,
     "cost": null,
@@ -6861,6 +8383,16 @@
     "threshold": 100.0,
     "eligible": true,
     "next_value": null,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": null,
+      "next_value": null
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 3500002.0,
     "close_gap": null,
     "next_close_gap": null
@@ -6910,7 +8442,7 @@
     },
     "market_exposure": 64031.30744967051,
     "risk_reducing_solve": null,
-    "solve_ms": 1.075,
+    "solve_ms": 0.883,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -6918,6 +8450,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -6940,7 +8482,7 @@
     },
     "market_exposure": 64031.30744967051,
     "risk_reducing_solve": null,
-    "solve_ms": 0.92,
+    "solve_ms": 0.808,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -6948,6 +8490,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -6970,7 +8522,7 @@
     },
     "market_exposure": 64031.30744967051,
     "risk_reducing_solve": null,
-    "solve_ms": 0.837,
+    "solve_ms": 0.807,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -6978,6 +8530,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -7005,7 +8567,7 @@
      "chosen": false,
      "stages": []
     },
-    "solve_ms": 1.55,
+    "solve_ms": 1.566,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -7013,6 +8575,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -7040,7 +8612,7 @@
      "chosen": false,
      "stages": []
     },
-    "solve_ms": 1.529,
+    "solve_ms": 1.551,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -7048,6 +8620,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -7070,7 +8652,7 @@
     },
     "market_exposure": 64031.30744967051,
     "risk_reducing_solve": null,
-    "solve_ms": 0.357,
+    "solve_ms": 0.362,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -7078,6 +8660,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -7100,7 +8692,7 @@
     },
     "market_exposure": 64031.30744967051,
     "risk_reducing_solve": null,
-    "solve_ms": 0.378,
+    "solve_ms": 0.381,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -7108,6 +8700,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -7135,7 +8737,7 @@
      "chosen": false,
      "stages": []
     },
-    "solve_ms": 0.712,
+    "solve_ms": 0.721,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -7143,6 +8745,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 0.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
@@ -7165,7 +8777,7 @@
     },
     "market_exposure": 64031.30744967051,
     "risk_reducing_solve": null,
-    "solve_ms": 0.773,
+    "solve_ms": 0.786,
     "value_to_close": 0.0,
     "market": 0,
     "cost": 0.0,
@@ -7173,6 +8785,16 @@
     "threshold": 100.0,
     "eligible": false,
     "next_value": 0.0,
+    "by_kind": {
+     "OPT": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     },
+     "STK": {
+      "value_to_close": 0.0,
+      "next_value": 0.0
+     }
+    },
     "gross_offset_credit": 2811593.0,
     "close_gap": 564.673131044372,
     "next_close_gap": 50.973626930383034
