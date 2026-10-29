@@ -102,6 +102,7 @@ def replay_point(manifests, snapshot, quotes, scenarios, target_nav, estimate, s
             "residual_delta": {k: v for k, v in risk.metrics.items() if k.startswith("residual_delta:")},
             "market_exposure": risk.metrics.get("market_exposure"),
             "risk_reducing_solve": target.solver_metrics.get("risk_reducing"),
+            "solve_ms": target.solver_metrics.get("total_ms"),
             "value_to_close": trade_value(m, quotes, closes, trades),
         }
     results["current"] = {
@@ -292,6 +293,8 @@ def main(argv=None):
             "points": len(done),
             "mean_expected_score": sum(r["expected_score"] for r in done) / len(done) if done else None,
             "mean_abs_close_gap": sum(gaps) / len(gaps) if gaps else None,
+            "max_solve_ms": max((r["solve_ms"] or 0 for r in done), default=None),
+            "risk_reducing_chosen": sum(1 for r in done if (r["risk_reducing_solve"] or {}).get("chosen")),
         }
     report = {
         "day": str(day),

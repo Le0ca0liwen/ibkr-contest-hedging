@@ -22,7 +22,7 @@ def test_every_gross_variant_is_solved_valued_and_risk_checked(manifest, snapsho
     results = replay_point(manifests, snap, quotes, sc, target, float(target), "dynamic_l1", closes)
     for name in manifests:
         assert results[name]["status"] == "OPTIMAL" and results[name]["risk_passed"]
-        assert results[name]["value_to_close"] is not None
+        assert results[name]["value_to_close"] is not None and results[name]["solve_ms"] > 0
     # Far below 3x gross, D's second solve never runs and its target is A's.
     assert results["D"]["risk_reducing_solve"] is None and results["D"]["trades"] == results["A"]["trades"]
     assert results["current"]["gross"] < 3 * manifest.initial_nav
