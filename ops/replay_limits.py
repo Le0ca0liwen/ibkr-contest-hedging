@@ -142,6 +142,15 @@ def replay_point(
             "threshold": threshold,
             "eligible": target.status == "OPTIMAL" and risk.passed and improvement > threshold,
             "next_value": None if closes_next is None else next_value(m, closes, closes_next, trades),
+            # Options and shares apart: the app re-hedges shares from 04:00, an option hedge stays on.
+            "by_kind": {
+                kind: {
+                    "value_to_close": trade_value(m, quotes, closes, part),
+                    "next_value": None if closes_next is None else next_value(m, closes, closes_next, part),
+                }
+                for kind in ("OPT", "STK")
+                for part in [{i: q for i, q in trades.items() if m.contract_map[i].kind == kind}]
+            },
             "gross_offset_credit": risk.metrics.get("gross_offset_credit"),
         }
     results["current"] = {
@@ -201,13 +210,13 @@ def _session_closes(connection, m, archives, day):
         for _, p in _rows(connection, "closing_capture", closed, closed + timedelta(hours=8))
         if p.get("date") == str(day) and p.get("phase") == "end_of_day" and p.get("status") == "RECORDED"
     ]
-    opened = datetime.combine(day, time(4), NY)
+    opened = datetime.combine(day, time(9, 30), NY)  # pre-market targets can predate the statement
     targets = [
         p["closing_target"]
         for _, p in _rows(connection, "decision", opened, closed)
         if p.get("closing_target") is not None
     ]
-    target = targets[0] if targets else None
+    target = targets[-1] if targets else None
     nav = float(statements[-1]["total"]) if statements else float(captures[-1]["nav"]) if captures else None
     gap = None if nav is None or target is None else nav - float(target)
     return closes, gap, target, "statement" if statements else "end_of_day capture" if captures else None

@@ -10,7 +10,15 @@ from .cashflows import cash_carry
 from .config import NY, exposure_group
 from .models import Target
 from .order_policy import spread_error
-from .risk import gross_weight, leg_gross, offset_credit, offset_legs
+from .risk import (
+    covered_offsets,
+    gross_weight,
+    leg_gross,
+    naked_margin,
+    offset_credit,
+    offset_legs,
+    spread_margin,
+)
 
 DELTA_HEADROOM = 0.9  # target share of the residual-delta cap for symbols without tradable shares
 LIQUIDITY_CUSHION = 0.0002  # of budget, on top of risk.liquidity_buffer
@@ -672,18 +680,49 @@ class HedgeOptimizer:
         constraints += [spots @ absolute_h - credited <= gross_cap]
         increment = cp.Variable(n, nonneg=True)
         constraints += [increment >= ah - np.abs(current)]
+        covered = covered_offsets(m, legs)
         margin_rates = np.array(
             [
-                (quotes[i].mid + 0.2 * quotes[i].spot) * m.contract_map[i].multiplier
+                0.0
+                if i in covered
+                else naked_margin(m, i, quotes)
                 if m.contract_map[i].kind == "OPT"
                 else 0.5 * quotes[i].spot
                 for i in candidates
             ]
         )
+        # Short offsets of a mandated long leg (RiskEngine's covered_margin): covered contract for
+        # contract up to the leg's quantity at the strike gap, naked beyond it; their long side naked.
+        covered_terms = []
+        for leg in sorted(set(covered.values())):
+            members = [i for i, x in covered.items() if x == leg and i in ids]
+            if not members:
+                continue
+            held_shorts = sum(max(0, -actual.get(i, 0)) for i in members)
+            new_shorts = 0
+            for i in members:
+                if i in candidates:
+                    j = candidates.index(i)
+                    grow_long, grow_short = cp.Variable(nonneg=True), cp.Variable(nonneg=True)
+                    constraints += [
+                        grow_long >= hpos[j] - max(0, current[j]),
+                        grow_short >= hneg[j] - max(0, -current[j]),
+                    ]
+                    covered_terms += [
+                        naked_margin(m, i, quotes) * grow_long,
+                        spread_margin(m, i, leg) * grow_short,
+                    ]
+                    new_shorts = new_shorts + hneg[j]
+                else:
+                    new_shorts = new_shorts + max(0, -actual.get(i, 0))
+            cover = m.mandatory[leg]
+            naked = cp.Variable(nonneg=True)
+            constraints += [naked >= new_shorts - cover - max(0, held_shorts - cover)]
+            covered_terms.append(max(naked_margin(m, i, quotes) for i in members) * naked)
         constraints += [
             # The same 2x cost reserve the RiskGate charges, or every target on this boundary fails it,
             # plus a small cushion for the newer snapshot the gate re-checks on.
-            margin_rates @ increment + 2 * costs
+            margin_rates @ increment + sum(covered_terms) + 2 * costs
             <= float(snapshot.excess_liquidity) - (m.risk.liquidity_buffer + LIQUIDITY_CUSHION) * budget
         ]
         symbols = sorted({m.contract_map[i].symbol for i in ids})

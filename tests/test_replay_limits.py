@@ -29,6 +29,11 @@ def test_every_gross_variant_is_solved_valued_and_risk_checked(manifest, snapsho
     a = results["A"]
     traded = sum(q * (1 if " " not in k else 100) for k, q in a["trades"].items())
     assert a["next_value"] == pytest.approx(traded)  # every close one dollar higher the next session
+    kinds = a["by_kind"]
+    assert kinds["OPT"]["next_value"] + kinds["STK"]["next_value"] == pytest.approx(a["next_value"])
+    assert kinds["OPT"]["value_to_close"] + kinds["STK"]["value_to_close"] == pytest.approx(
+        a["value_to_close"], abs=5
+    )
     assert a["value_to_close"] == pytest.approx(a["market"] - a["cost"]) and a["cost"] >= 0
     assert a["eligible"] == (a["improvement"] > a["threshold"] and a["risk_passed"])
     # Far below 3x gross, D's second solve never runs and its target is A's.

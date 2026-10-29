@@ -62,6 +62,49 @@ def offset_credit(manifest, quotes, quantities, legs=None):
     )
 
 
+def covered_offsets(manifest, legs):
+    """{offset conId: mandated long leg} for the offsets that leg covers for margin: short options on
+    the same underlying (a different fund's options are never cover at the broker)."""
+    c_map = manifest.contract_map
+    return {
+        i: leg
+        for i, leg in legs.items()
+        if manifest.mandatory[leg] > 0 and c_map[i].symbol == c_map[leg].symbol
+    }
+
+
+def naked_margin(manifest, con_id, quotes):
+    """Conservative margin per uncovered option contract: premium plus 20% of the underlying."""
+    c, q = manifest.contract_map[con_id], quotes[con_id]
+    return c.multiplier * (q.mid + 0.2 * q.spot)
+
+
+def spread_margin(manifest, con_id, leg):
+    """Margin per short contract covered by the long leg: the strike gap the spread can lose."""
+    short, long = manifest.contract_map[con_id], manifest.contract_map[leg]
+    gap = long.strike - short.strike if short.right == "C" else short.strike - long.strike
+    return short.multiplier * max(0.0, gap)
+
+
+def covered_margin(manifest, quotes, quantities, actual, covered):
+    """Added margin of short offsets of mandated long legs (operator, Oct 29: count the long
+    straddle as cover). Up to the leg's quantity they are covered contract for contract and need
+    only the strike gap; shorts beyond it are naked. Long positions in them are margined elsewhere."""
+    total = 0.0
+    for leg in sorted(set(covered.values())):
+        ids = [i for i, x in covered.items() if x == leg]
+        new, held = (sum(max(0, -book.get(i, 0)) for i in ids) for book in (quantities, actual))
+        cover = manifest.mandatory[leg]
+        naked = max(0, new - cover) - max(0, held - cover)
+        total += max(0, naked) * max(naked_margin(manifest, i, quotes) for i in ids)
+        total += sum(
+            max(0, max(0, -quantities.get(i, 0)) - max(0, -actual.get(i, 0)))
+            * spread_margin(manifest, i, leg)
+            for i in ids
+        )
+    return total
+
+
 class MandateRegistry:
     def __init__(self, manifest):
         self.manifest = manifest
@@ -102,6 +145,8 @@ class RiskEngine:
         rho, beta_delta, rho_missing = {}, 0.0, set()
         actual = snapshot.quantities()
         margin_increment, assignment_cash = 0.0, 0.0
+        legs = offset_legs(self.manifest, quotes)
+        covered = covered_offsets(self.manifest, legs)
         for i, quantity in active.items():
             c, q = c_map[i], quotes[i]
             if i in self.manifest.mandatory:
@@ -127,11 +172,15 @@ class RiskEngine:
                     names[c.symbol] = names.get(c.symbol, 0) + 1
                     if abs(quantity) > self.manifest.risk.contracts_per_option:
                         reasons.append(f"Option quantity cap: {c.label}")
-                increment = max(0, abs(quantity) - abs(actual.get(i, 0)))
-                margin_increment += increment * c.multiplier * (q.mid + 0.2 * q.spot)
+                if i in covered:  # the short side is margined against its leg (covered_margin)
+                    increment = max(0, max(0, quantity) - max(0, actual.get(i, 0)))
+                else:
+                    increment = max(0, abs(quantity) - abs(actual.get(i, 0)))
+                margin_increment += increment * naked_margin(self.manifest, i, quotes)
                 if quantity < 0:
                     assignment_cash += abs(quantity) * c.multiplier * c.strike
-        credit = offset_credit(self.manifest, quotes, active)
+        margin_increment += covered_margin(self.manifest, quotes, active, actual, covered)
+        credit = offset_credit(self.manifest, quotes, active, legs)
         gross -= credit
         values = np.array([quantities.get(i, 0) for i in scenarios.ids])
         position_stress = max(0.0, float(-np.min(scenarios.stress @ values)))

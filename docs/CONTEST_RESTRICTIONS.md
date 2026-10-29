@@ -172,7 +172,14 @@ other trades for room.
   strike/spot within `offset_moneyness` (3%) of the leg's. Each option is matched to its nearest leg.
 - **Where it shows:** `gross_offset_credit` (already taken out of `gross_notional`). The optimizer and
   the risk gate use the same credit, and every other limit (stress loss, residual delta, contracts per
-  option, option names, liquidity) is unchanged.
+  option, option names) is unchanged.
+- **Margin:** with the same setting, the liquidity estimate counts a mandated long leg as cover for
+  short offsets on the same underlying, contract for contract up to the leg's quantity. A covered short
+  needs only the strike gap a spread can lose (none for the 770s against the 770 straddle); shorts
+  beyond the leg's quantity, long options and other funds' options stay at premium + 20% of spot. On
+  Oct 29 the naked estimate (~$16.5k per SPY option) left room for only ~21 more shorts above the 25%
+  buffer, while IBKR's own initial margin was about half of a naked charge on the held shorts. IBKR's
+  margin check on each order is unchanged.
 - **Why (Oct 29):** the 18 short Nov 27 calls and 19 puts against the mandated 25 Nov 20 straddles used
   $2.85M of the $2.95M cap. The 6.5 straddles left over lost about $440 a day to time decay and moved
   about $575 per volatility point; Oct 29 lost $1,264 on SPY options.

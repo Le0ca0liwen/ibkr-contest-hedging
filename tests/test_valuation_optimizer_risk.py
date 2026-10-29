@@ -388,3 +388,42 @@ def test_the_optimizer_offsets_the_mandated_straddle_beyond_the_cap(manifest, sn
     checked = RiskGate(on).validate(snapshot, quotes, sc, offset.quantities, now)
     assert checked.passed, checked.reasons
     assert checked.metrics["gross_notional"] <= 0.1 * checked.metrics["budget"] + 0.01
+
+
+def test_the_long_straddle_covers_its_short_offsets_for_margin(manifest, snapshot, quotes, now):
+    """Oct 29: the margin estimate charged every short SPY option as naked (premium + 20% of spot,
+    about $16.5k), although the 25 long Nov 20 straddles cover them contract for contract."""
+    from hedge.risk import RiskEngine, naked_margin
+
+    on = _offsets(manifest)
+    sc = ScenarioEngine(manifest).build(snapshot, quotes, now)
+
+    def added(m, held):
+        return (
+            RiskEngine(m)
+            .evaluate(snapshot, quotes, sc, {**snapshot.quantities(), **held})
+            .metrics["estimated_added_margin"]
+        )
+
+    assert added(manifest, {104: -20}) == pytest.approx(20 * naked_margin(manifest, 104, quotes))
+    assert added(on, {104: -20}) == 0  # a 200 call short against the long 195 call: no spread loss
+    assert added(on, {103: -20}) == pytest.approx(20 * 5 * 100)  # a 190 call short: the $5 strike gap
+    beyond = added(on, {104: -30})  # 25 covered, 5 naked at the leg's dearest offset (the 190 call)
+    assert beyond == pytest.approx(5 * max(naked_margin(on, i, quotes) for i in (103, 104)))
+    assert added(on, {104: 10}) == pytest.approx(10 * naked_margin(on, 104, quotes))  # longs as before
+
+
+def test_the_optimizer_shorts_covered_offsets_when_naked_margin_would_not_fit(
+    manifest, snapshot, quotes, now
+):
+    tight = snapshot.model_copy(update={"excess_liquidity": "280000"})  # $30k above the 25% buffer
+    sc = ScenarioEngine(manifest).build(tight, quotes, now)
+    naked = HedgeOptimizer(manifest).solve(tight, quotes, sc, manifest.initial_nav)
+    on = _offsets(manifest)
+    covered = HedgeOptimizer(on).solve(tight, quotes, sc, on.initial_nav)
+    shorts = lambda r: sum(max(0, -r.quantities.get(i, 0)) for i in (103, 104, 105, 106))  # noqa: E731
+    assert naked.status == covered.status == "OPTIMAL"
+    assert shorts(naked) <= 30_000 / 4_000
+    assert shorts(covered) > shorts(naked)
+    checked = RiskGate(on).validate(tight, quotes, sc, covered.quantities, now)
+    assert checked.passed, checked.reasons
